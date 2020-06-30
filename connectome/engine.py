@@ -143,20 +143,27 @@ class Graph:
 
 class Layer:
     def __init__(self, *args, **kwargs):
-        self.graph = Graph(*self.create_nodes_edges(*args, **kwargs))
+        self.graph = self.create_graph(*args, **kwargs)
 
     def __call__(self, *args, **kwargs):
+        if len(self.inputs) == 0:
+            raise RuntimeError('Layer must contain at least 1 input node')
+
         return self.graph.run(*args, **kwargs)
 
-    def add_layer(self, layer):
-        new_outputs, new_edges = layer.get_new_edges(self.outputs)
-        self.graph.update(new_outputs, new_edges)
-
-    def get_new_edges(self, other_outputs: Sequence[Node]):
+    def get_connection_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
-    def create_nodes_edges(self, *args, **kwargs):
-        return [], [], []
+    def create_graph(self, *args, **kwargs):
+        return Graph([], [], [])
+
+    @property
+    def inputs(self):
+        return self.graph.inputs
+
+    @inputs.setter
+    def inputs(self, value):
+        self.graph.inputs = value
 
     @property
     def outputs(self):
@@ -166,24 +173,20 @@ class Layer:
     def edges(self):
         return self.graph.edges
 
-    @property
-    def inputs(self):
-        return self.graph.inputs
 
-
+# TODO remove dependencies
 class IdentityLayer(Layer):
     def __init__(self, size):
-        self.size = size
         super().__init__(size)
 
-    def get_new_edges(self, other_outputs: Sequence[Node]):
-        return self.outputs, self.edges
-
-    def create_nodes_edges(self, size):
-        inputs = [Node(f'input_{i}') for i in range(size)]
-        outputs = [Node(f'output_{i}') for i in range(size)]
+    def create_graph(self, size):
+        inputs = [Node(f'identity_input_{i}') for i in range(size)]
+        outputs = [Node(f'identity_output_{i}') for i in range(size)]
         edges = [IdentityEdge(i, o) for i, o in zip(inputs, outputs)]
-        return inputs, outputs, edges
+        return Graph(inputs, outputs, edges)
+
+    def get_connection_params(self, other_outputs: Sequence[Node]):
+        return self.outputs, self.edges
 
 
 class Lambda(Layer):
@@ -191,7 +194,7 @@ class Lambda(Layer):
         self.func = func
         super().__init__(func)
 
-    def get_new_edges(self, other_outputs: Sequence[Node]):
+    def get_connection_params(self, other_outputs: Sequence[Node]):
         this_outputs = [Node(f'lambda_output{i}') for i in range(len(other_outputs))]
         edges = [
             FunctionEdge(self.func, [other_output], this_output)
@@ -205,7 +208,7 @@ class Reducer(Layer):
         self.func = func
         super().__init__(func)
 
-    def get_new_edges(self, other_outputs: Sequence[Node]):
+    def get_connection_params(self, other_outputs: Sequence[Node]):
         output = Node(f'reduce_output')
 
         def reduce_decorator(func):
@@ -220,21 +223,33 @@ class Reducer(Layer):
         return [output], [edge]
 
 
-# TODO looks bad
+class Repeater(Layer):
+    pass
+
+
 class Pipeline(Layer):
     def __init__(self, *layers):
-        super().__init__(layers)
-        for l in layers[1:]:
-            self.add_layer(l)
+        assert len(layers) > 0
+        super().__init__(layers[0])
 
-    def get_new_edges(self, other_outputs: Sequence[Node]):
-        return self.outputs, self.edges
+        self.layers = layers
+        for layer in layers[1:]:
+            self.add_layer(layer)
 
-    def create_nodes_edges(self, layers):
-        inputs = layers[0].inputs
-        outputs = layers[0].outputs
-        edges = layers[0].edges
-        return inputs, outputs, edges
+    def add_layer(self, layer):
+        new_outputs, new_edges = layer.get_connection_params(self.outputs)
+        self.graph.update(new_outputs, new_edges)
+
+    def create_graph(self, first_layer):
+        return Graph(first_layer.inputs, first_layer.outputs, first_layer.edges)
+
+    def get_connection_params(self, outputs: Sequence[Node]):
+        all_edges = []
+        for layer in self.layers:
+            outputs, edges = layer.get_connection_params(outputs)
+            all_edges.extend(edges)
+
+        return outputs, all_edges
 
 
 class FunctionEdge(Edge):
