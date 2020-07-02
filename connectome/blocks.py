@@ -1,40 +1,69 @@
-from engine import Graph, Node, FunctionEdge, IdentityEdge, MemoryCacheEdge
-
 from functools import reduce
-from typing import Sequence
+from typing import Sequence, Tuple, Any
+
+from engine import Graph, GraphParameter, Layer, Node, Edge, MemoryStorage, CacheStorage
 
 
-class Layer:
-    def __init__(self, *args, **kwargs):
-        self.graph = self.create_graph(*args, **kwargs)
+class CacheEdge(Edge):
+    def __init__(self, incoming: Node, output: Node, *, storage: CacheStorage = None):
+        super().__init__([incoming], output)
 
-    def __call__(self, *args, **kwargs):
-        if len(self.inputs) == 0:
-            raise RuntimeError('Layer must contain at least 1 input node')
+        if storage is None:
+            self.storage = MemoryStorage()
+        else:
+            self.storage = storage
 
-        return self.graph.run(*args, **kwargs)
+    def process_parameters(self, parameters: Sequence[GraphParameter]):
+        parameter = self._merge_parameters(parameters)
+        if self.storage.contains(parameter):
+            inputs = []
+        else:
+            inputs = self.inputs
 
-    def get_connection_params(self, other_outputs: Sequence[Node]):
-        raise NotImplementedError
+        return inputs, parameter
 
-    def create_graph(self, *args, **kwargs):
-        return Graph([], [], [])
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
+        if len(arguments) == 0:
+            return self.storage.get(parameter)
+        else:
+            self.storage.set(parameter, arguments[0])
+            return arguments[0]
 
-    @property
-    def inputs(self):
-        return self.graph.inputs
 
-    @inputs.setter
-    def inputs(self, value):
-        self.graph.inputs = value
+class FunctionEdge(Edge):
+    def __init__(self, function, inputs: Sequence[Node], output: Node):
+        super().__init__(inputs, output)
+        self.function = function
 
-    @property
-    def outputs(self):
-        return self.graph.outputs
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
+        # TODO: pickle the function
+        return self.function(*arguments)
 
-    @property
-    def edges(self):
-        return self.graph.edges
+
+class IdentityEdge(Edge):
+    def __init__(self, incoming: Node, output: Node):
+        super().__init__([incoming], output)
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
+        return arguments[0]
+
+
+class ValueEdge(Edge):
+    def __init__(self, target: Node, value):
+        super().__init__([], target)
+        self.value = value
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
+        return self.value
+
+
+class CacheToDisk(Edge):
+    # TODO: path
+    def __init__(self, incoming: Node, output: Node):
+        super().__init__([incoming], output)
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
+        return arguments[0]
 
 
 class MemoryCacheLayer(Layer):
@@ -44,7 +73,7 @@ class MemoryCacheLayer(Layer):
     def get_connection_params(self, other_outputs: Sequence[Node]):
         this_outputs = [Node(f'cache_output{i}') for i in range(len(other_outputs))]
         edges = [
-            MemoryCacheEdge(other_output, this_output)
+            CacheEdge(other_output, this_output, storage=MemoryStorage())
             for other_output, this_output in zip(other_outputs, this_outputs)
         ]
         return this_outputs, edges

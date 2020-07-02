@@ -1,6 +1,9 @@
 import inspect
+from threading import Lock
 from collections import defaultdict
 from typing import Sequence, Any, Tuple
+
+from utils import atomize
 
 
 class GraphParameter:
@@ -173,59 +176,81 @@ class Graph:
             self._find_parents_rec(edge.inputs, edges, parents)
 
 
-class MemoryCacheEdge(Edge):
-    def __init__(self, incoming: Node, output: Node):
-        super().__init__([incoming], output)
-        self.cache = {}
+class Layer:
+    def __init__(self, *args, **kwargs):
+        self.graph = self.create_graph(*args, **kwargs)
 
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
-        parameter = self._merge_parameters(parameters)
-        if parameter in self.cache:
-            inputs = []
+    def __call__(self, *args, **kwargs):
+        if len(self.inputs) == 0:
+            raise RuntimeError('Layer must contain at least 1 input node')
+
+        return self.graph.run(*args, **kwargs)
+
+    def get_connection_params(self, other_outputs: Sequence[Node]):
+        raise NotImplementedError
+
+    def create_graph(self, *args, **kwargs):
+        return Graph([], [], [])
+
+    @property
+    def inputs(self):
+        return self.graph.inputs
+
+    @inputs.setter
+    def inputs(self, value):
+        self.graph.inputs = value
+
+    @property
+    def outputs(self):
+        return self.graph.outputs
+
+    @property
+    def edges(self):
+        return self.graph.edges
+
+
+# TODO redefine operators
+class CacheStorage(object):
+    def __init__(self, atomized=True):
+        self._atomized = atomized
+        self.mutex = Lock()
+
+    def contains(self, param: GraphParameter) -> bool:
+        raise NotImplementedError
+
+    def set(self, param: GraphParameter, value):
+        raise NotImplementedError
+
+    def get(self, param: GraphParameter) -> Any:
+        raise NotImplementedError
+
+    def __getattribute__(self, name):
+        attr = object.__getattribute__(self, name)
+        if callable(attr):
+            if self.atomized:
+                return atomize(self.mutex)(attr)
         else:
-            inputs = self.inputs
+            return attr
 
-        return inputs, parameter
+    @property
+    def atomized(self):
+        return self._atomized
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
-        if len(arguments) == 0:
-            return self.cache[parameter]
-        else:
-            self.cache[parameter] = arguments[0]
-            return arguments[0]
-
-
-class FunctionEdge(Edge):
-    def __init__(self, function, inputs: Sequence[Node], output: Node):
-        super().__init__(inputs, output)
-        self.function = function
-
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        # TODO: pickle the function
-        return self.function(*arguments)
+    @atomized.setter
+    def atomized(self, value: bool):
+        self._atomized = value
 
 
-class IdentityEdge(Edge):
-    def __init__(self, incoming: Node, output: Node):
-        super().__init__([incoming], output)
+class MemoryStorage(CacheStorage):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cache = {}
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        return arguments[0]
+    def contains(self, param: GraphParameter) -> bool:
+        return param in self._cache
 
+    def set(self, param: GraphParameter, value):
+        self._cache[param] = value
 
-class ValueEdge(Edge):
-    def __init__(self, target: Node, value):
-        super().__init__([], target)
-        self.value = value
-
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        return self.value
-
-
-class CacheToDisk(Edge):
-    # TODO: path
-    def __init__(self, incoming: Node, output: Node):
-        super().__init__([incoming], output)
-
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        return arguments[0]
+    def get(self, param: GraphParameter) -> Any:
+        return self._cache[param]

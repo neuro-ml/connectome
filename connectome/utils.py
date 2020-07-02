@@ -15,7 +15,7 @@ def extract_signature(func):
     return res
 
 
-def atomized(mutex: Lock):
+def atomize(mutex: Lock):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
