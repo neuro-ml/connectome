@@ -4,8 +4,10 @@ from typing import Sequence, Any, Tuple
 
 
 class GraphParameter:
-    def __init__(self, data):
-        self.data = data
+    def __init__(self, parameters, prev_edge=None, root=False):
+        self.prev_edge = prev_edge
+        self.data = parameters
+        self.is_root = root
 
     def __hash__(self):
         return hash(self.data)
@@ -32,15 +34,18 @@ class Edge:
         assert len(arguments) == len(essential_inputs)
         return self._evaluate(arguments, essential_inputs, parameter)
 
-    @staticmethod
-    def combine_parameters(args: Sequence[GraphParameter]):
-        return args
-
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
-        return self.inputs, self.combine_parameters(parameters)
-
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter) -> Tuple[Any]:
         raise NotImplementedError
+
+    def process_parameters(self, parameters: Sequence[GraphParameter]):
+        return self.inputs, self._merge_parameters(parameters)
+
+    def _merge_parameters(self, parameters: Sequence):
+        for param in parameters:
+            assert isinstance(param, GraphParameter)
+
+        merged = (*parameters,)
+        return GraphParameter(merged, prev_edge=self)
 
     @property
     def inputs(self):
@@ -128,11 +133,10 @@ class Graph:
                 parent_edge: Edge = state.parents[node]
                 param = self._set_parameters_rec(parent_edge, state)
             else:
-                param = state.cache[node]
+                param = GraphParameter(state.cache[node], root=True)
 
             parameters.append(param)
 
-        parameters = (*parameters,)
         inputs, param = edge.process_parameters(parameters)
         state.edge_inputs[edge] = inputs
         state.edge_parameters[edge] = param
@@ -174,12 +178,8 @@ class MemoryCacheEdge(Edge):
         super().__init__([incoming], output)
         self.cache = {}
 
-    @staticmethod
-    def combine_parameters(args: Sequence[GraphParameter]):
-        return args
-
     def process_parameters(self, parameters: Sequence[GraphParameter]):
-        parameter = self.combine_parameters(parameters)
+        parameter = self._merge_parameters(parameters)
         if parameter in self.cache:
             inputs = []
         else:
