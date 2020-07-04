@@ -1,7 +1,16 @@
 from functools import reduce
 from typing import Sequence, Tuple, Any
 
+from utils import count_duplicates
 from engine import Graph, GraphParameter, Layer, Node, Edge, MemoryStorage, CacheStorage
+
+
+class IdentityEdge(Edge):
+    def __init__(self, incoming: Node, output: Node):
+        super().__init__([incoming], output)
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
+        return arguments[0]
 
 
 class CacheEdge(Edge):
@@ -36,16 +45,7 @@ class FunctionEdge(Edge):
         self.function = function
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        # TODO: pickle the function
         return self.function(*arguments)
-
-
-class IdentityEdge(Edge):
-    def __init__(self, incoming: Node, output: Node):
-        super().__init__([incoming], output)
-
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        return arguments[0]
 
 
 class ValueEdge(Edge):
@@ -138,6 +138,40 @@ class Reducer(Layer):
         wrapped = reduce_decorator(self.func)
         edge = FunctionEdge(wrapped, other_outputs, output)
         return [output], [edge]
+
+
+class CustomLayer(Layer):
+    def __init__(self, edges: Sequence[Edge]):
+        # TODO is it necessary? move it to pipeline?
+        inputs = self.get_all_inputs(edges)
+        counts: dict = count_duplicates([x.name for x in inputs])
+
+        if any(v > 1 for k, v in counts.items()):
+            raise RuntimeError('Input nodes must have different names')
+
+        super().__init__()
+        # TODO match with graph edges
+        self._edges = edges
+
+    def get_connection_params(self, other_outputs: Sequence[Node]):
+
+        inputs = self.get_all_inputs(self._edges)
+        assert len(inputs) == len(other_outputs)
+
+        other_outputs = iter(other_outputs)
+        for e in self._edges:
+            new_inputs = [next(other_outputs) for i in range(len(e.inputs))]
+            e.inputs = new_inputs
+
+        outputs = [e.output for e in self._edges]
+        return outputs, self._edges
+
+    @staticmethod
+    def get_all_inputs(edges: Sequence[Edge]):
+        inputs = []
+        for e in edges:
+            inputs.extend(e.inputs)
+        return inputs
 
 
 class Pipeline(Layer):

@@ -7,18 +7,17 @@ from utils import atomize
 
 
 class GraphParameter:
-    def __init__(self, parameters, prev_edge=None, root=False):
+    def __init__(self, parameters, prev_edge=None, is_root: bool = False):
         self.prev_edge = prev_edge
         self.data = parameters
-        self.is_root = root
+        self.is_root = is_root
 
     def __hash__(self):
         return hash(self.data)
 
 
 class Node:
-    def __init__(self, name: str, count: int = 0):
-        self._entry_count = count
+    def __init__(self, name: str):
         self.name = name
 
     def __str__(self):
@@ -47,23 +46,28 @@ class Edge:
         for param in parameters:
             assert isinstance(param, GraphParameter)
 
-        merged = (*parameters,)
+        merged = (*[p.data for p in parameters],)
         return GraphParameter(merged, prev_edge=self)
 
     @property
     def inputs(self):
         return self._inputs
 
+    @inputs.setter
+    def inputs(self, value):
+        assert len(value) == len(self._inputs)
+        self._inputs = value
+
 
 class StateHolder:
     def __init__(self, *, parents: dict = None):
         self.parents = parents
-        self.cache = {}
         self.essential_inputs = None
 
         self.entry_counts = defaultdict(int)
         self.edge_inputs = defaultdict(tuple)
         self.edge_parameters = {}
+        self.cache = {}
 
 
 class Graph:
@@ -136,7 +140,7 @@ class Graph:
                 parent_edge: Edge = state.parents[node]
                 param = self._set_parameters_rec(parent_edge, state)
             else:
-                param = GraphParameter(state.cache[node], root=True)
+                param = GraphParameter(state.cache[node], is_root=True)
 
             parameters.append(param)
 
@@ -247,10 +251,10 @@ class MemoryStorage(CacheStorage):
         self._cache = {}
 
     def contains(self, param: GraphParameter) -> bool:
-        return param in self._cache
+        return param.data in self._cache
 
     def set(self, param: GraphParameter, value):
-        self._cache[param] = value
+        self._cache[param.data] = value
 
     def get(self, param: GraphParameter) -> Any:
-        return self._cache[param]
+        return self._cache[param.data]

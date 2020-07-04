@@ -1,5 +1,7 @@
 import inspect
 from functools import wraps
+from collections import defaultdict
+
 from threading import Lock
 
 
@@ -26,3 +28,11 @@ def atomize(mutex: Lock):
         return wrapper
 
     return decorator
+
+
+def count_duplicates(sequence):
+    counts = defaultdict(int)
+    for x in sequence:
+        counts[x] += 1
+
+    return counts
