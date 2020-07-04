@@ -181,6 +181,15 @@ class Graph:
 
 
 class Layer:
+    def get_connection_params(self, other_outputs: Sequence[Node]):
+        raise NotImplementedError
+
+
+class FreeLayer(Layer):
+    """
+    Layer that supports 'run' method
+    """
+
     def __init__(self, *args, **kwargs):
         self.graph = self.create_graph(*args, **kwargs)
 
@@ -194,7 +203,7 @@ class Layer:
         raise NotImplementedError
 
     def create_graph(self, *args, **kwargs):
-        return Graph([], [], [])
+        raise NotImplementedError
 
     @property
     def inputs(self):
@@ -211,6 +220,11 @@ class Layer:
     @property
     def edges(self):
         return self.graph.edges
+
+
+class AttachableLayer(Layer):
+    def get_connection_params(self, *args, **kwargs):
+        raise NotImplementedError
 
 
 # TODO redefine operators

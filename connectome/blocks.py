@@ -1,8 +1,9 @@
+from abc import ABC
 from functools import reduce
 from typing import Sequence, Tuple, Any
 
 from utils import count_duplicates
-from engine import Graph, GraphParameter, Layer, Node, Edge, MemoryStorage, CacheStorage
+from engine import Graph, GraphParameter, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage
 
 
 class IdentityEdge(Edge):
@@ -66,12 +67,9 @@ class CacheToDisk(Edge):
         return arguments[0]
 
 
-class MemoryCacheLayer(Layer):
-    def __init__(self):
-        super().__init__()
-
+class MemoryCacheLayer(AttachableLayer):
     def get_connection_params(self, other_outputs: Sequence[Node]):
-        this_outputs = [Node(f'cache_output{i}') for i in range(len(other_outputs))]
+        this_outputs = [Node(o.name) for o in other_outputs]
         edges = [
             CacheEdge(other_output, this_output, storage=MemoryStorage())
             for other_output, this_output in zip(other_outputs, this_outputs)
@@ -79,26 +77,9 @@ class MemoryCacheLayer(Layer):
         return this_outputs, edges
 
 
-class InputLayer(Layer):
-    def __init__(self, size):
-        super().__init__(size)
-
-    def create_graph(self, size):
-        inputs = [Node(f'input_input_{i}') for i in range(size)]
-        outputs = [Node(f'input_output_{i}') for i in range(size)]
-        edges = [IdentityEdge(i, o) for i, o in zip(inputs, outputs)]
-        return Graph(inputs, outputs, edges)
-
+class IdentityLayer(AttachableLayer):
     def get_connection_params(self, other_outputs: Sequence[Node]):
-        return self.outputs, self.edges
-
-
-class IdentityLayer(Layer):
-    def __init__(self):
-        super().__init__()
-
-    def get_connection_params(self, other_outputs: Sequence[Node]):
-        this_outputs = [Node(f'lambda_output{i}') for i in range(len(other_outputs))]
+        this_outputs = [Node(o.name) for o in other_outputs]
         edges = [
             IdentityEdge(other_output, this_output)
             for other_output, this_output in zip(other_outputs, this_outputs)
@@ -106,27 +87,37 @@ class IdentityLayer(Layer):
         return this_outputs, edges
 
 
-class Lambda(Layer):
-    def __init__(self, func):
+class Lambda(AttachableLayer):
+    def __init__(self, func, required_node_names: Sequence = None):
+        self.required_node_names = required_node_names
         self.func = func
-        super().__init__(func)
 
     def get_connection_params(self, other_outputs: Sequence[Node]):
-        this_outputs = [Node(f'lambda_output{i}') for i in range(len(other_outputs))]
-        edges = [
-            FunctionEdge(self.func, [other_output], this_output)
-            for other_output, this_output in zip(other_outputs, this_outputs)
-        ]
+        if self.required_node_names is None:
+            required_node_names = [o.name for o in other_outputs]
+        else:
+            required_node_names = self.required_node_names
+
+        edges = []
+        this_outputs = [Node(o.name) for o in other_outputs]
+
+        for other_output, this_output in zip(other_outputs, this_outputs):
+            if this_output.name in required_node_names:
+                new_edge = FunctionEdge(self.func, [other_output], this_output)
+            else:
+                new_edge = IdentityEdge(other_output, this_output)
+            edges.append(new_edge)
+
         return this_outputs, edges
 
 
-class Reducer(Layer):
-    def __init__(self, func):
+class Reducer(AttachableLayer):
+    def __init__(self, func, output_name: str):
+        self.output_name = output_name
         self.func = func
-        super().__init__(func)
 
     def get_connection_params(self, other_outputs: Sequence[Node]):
-        output = Node(f'reduce_output')
+        output = Node(self.output_name)
 
         def reduce_decorator(func):
             def wrapper(*sequence):
@@ -140,41 +131,27 @@ class Reducer(Layer):
         return [output], [edge]
 
 
-class CustomLayer(Layer):
-    def __init__(self, edges: Sequence[Edge]):
-        # TODO is it necessary? move it to pipeline?
-        inputs = self.get_all_inputs(edges)
-        counts: dict = count_duplicates([x.name for x in inputs])
+class InputLayer(FreeLayer):
+    def __init__(self, output_names: Sequence[str]):
+        super().__init__(output_names)
 
-        if any(v > 1 for k, v in counts.items()):
-            raise RuntimeError('Input nodes must have different names')
+    def create_graph(self, output_names: Sequence[str], input_names: Sequence[str] = None):
+        if input_names is not None:
+            assert len(output_names) == len(input_names)
+        else:
+            input_names = [f'input_{i}' for i in range(len(output_names))]
 
-        super().__init__()
-        # TODO match with graph edges
-        self._edges = edges
+        inputs = [Node(name) for name in input_names]
+        outputs = [Node(name) for name in output_names]
+
+        edges = [IdentityEdge(i, o) for i, o in zip(inputs, outputs)]
+        return Graph(inputs, outputs, edges)
 
     def get_connection_params(self, other_outputs: Sequence[Node]):
-
-        inputs = self.get_all_inputs(self._edges)
-        assert len(inputs) == len(other_outputs)
-
-        other_outputs = iter(other_outputs)
-        for e in self._edges:
-            new_inputs = [next(other_outputs) for i in range(len(e.inputs))]
-            e.inputs = new_inputs
-
-        outputs = [e.output for e in self._edges]
-        return outputs, self._edges
-
-    @staticmethod
-    def get_all_inputs(edges: Sequence[Edge]):
-        inputs = []
-        for e in edges:
-            inputs.extend(e.inputs)
-        return inputs
+        return self.outputs, self.edges
 
 
-class Pipeline(Layer):
+class Pipeline(FreeLayer):
     def __init__(self, *layers):
         assert len(layers) > 0
         super().__init__(layers[0])
@@ -197,3 +174,47 @@ class Pipeline(Layer):
             all_edges.extend(edges)
 
         return outputs, all_edges
+
+
+class CustomLayer(FreeLayer):
+    def __init__(self, edges: Sequence[Edge]):
+        inputs = self.get_all_inputs(edges)
+        # self.check_for_duplicates([x.name for x in inputs])
+
+        super().__init__(inputs, edges)
+
+    def create_graph(self, inputs, edges: Sequence[Edge]):
+        outputs = [e.output for e in edges]
+        return Graph(inputs, outputs, edges)
+
+    def get_connection_params(self, other_outputs: Sequence[Node]):
+        self.check_for_duplicates([x.name for x in other_outputs])
+        inputs = self.get_all_inputs(self.edges)
+
+        # TODO is it necessary?
+        assert len(inputs) == len(other_outputs)
+
+        outputs = {}
+        for o in other_outputs:
+            outputs[o.name] = o
+
+        for e in self.edges:
+            inputs = []
+            for i in e.inputs:
+                inputs.append(outputs[i.name])
+            e.inputs = inputs
+
+        return self.outputs, self.edges
+
+    @staticmethod
+    def check_for_duplicates(collection):
+        counts: dict = count_duplicates([x for x in collection])
+        if any(v > 1 for k, v in counts.items()):
+            raise RuntimeError('Input nodes must have different names')
+
+    @staticmethod
+    def get_all_inputs(edges: Sequence[Edge]):
+        inputs = []
+        for e in edges:
+            inputs.extend(e.inputs)
+        return inputs
