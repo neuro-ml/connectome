@@ -266,7 +266,7 @@ class CacheStorage(object):
         raise NotImplementedError
 
     def __getattribute__(self, name):
-        attr = object.__getattribute__(self, name)
+        attr = super().__getattribute__(name)
         if callable(attr):
             if self.atomized:
                 return atomize(self.mutex)(attr)

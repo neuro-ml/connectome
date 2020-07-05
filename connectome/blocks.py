@@ -188,10 +188,10 @@ class CustomLayer(FreeLayer):
 
     def get_connection_params(self, other_outputs: Sequence[Node]):
         self.check_for_duplicates([x.name for x in other_outputs])
-        inputs = self.get_all_inputs(self.edges)
 
-        # TODO is it necessary?
-        assert len(inputs) == len(other_outputs)
+        # inputs = self.get_all_inputs(self.edges)
+        # TODO is it necessary? no (:
+        # assert len(inputs) == len(other_outputs), (inputs, other_outputs)
 
         outputs = {}
         for o in other_outputs:
