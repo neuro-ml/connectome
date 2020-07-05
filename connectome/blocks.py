@@ -138,7 +138,7 @@ class InputLayer(FreeLayer):
         if input_names is not None:
             assert len(output_names) == len(input_names)
         else:
-            input_names = [f'input_{i}' for i in range(len(output_names))]
+            input_names = output_names
 
         inputs = [Node(name) for name in input_names]
         outputs = [Node(name) for name in output_names]

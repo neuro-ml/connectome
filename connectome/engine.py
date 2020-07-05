@@ -1,5 +1,7 @@
 import inspect
-from threading import Lock
+
+from threading import RLock
+from functools import partial
 from collections import defaultdict
 from typing import Sequence, Any, Tuple
 
@@ -61,8 +63,9 @@ class Edge:
 
 class StateHolder:
     def __init__(self, *, parents: dict = None):
-        self.parents = parents
         self.essential_inputs = None
+        self.required_outputs = None
+        self.parents = parents
 
         self.entry_counts = defaultdict(int)
         self.edge_inputs = defaultdict(tuple)
@@ -78,26 +81,39 @@ class Graph:
 
         self.update(outputs, edges)
 
-    def __call__(self, *args, **kwargs):
-        return self.run(*args, **kwargs)
+    def __call__(self, *args, node_names=None, **kwargs):
+        name_node_dict = {}
+        for o in self.outputs:
+            name_node_dict[o.name] = o
 
-    def run(self, *args, **kwargs):
-        parents = self.find_parents(self.outputs, self.edges)
+        if node_names is None:
+            required_outputs = self.outputs
+        else:
+            required_outputs = []
+            for name in node_names:
+                # TODO replace by exception
+                assert name in name_node_dict
+                required_outputs.append(name_node_dict[name])
 
+        parents = self.find_parents(required_outputs, self.edges)
         state = StateHolder(parents=parents)
-        self.count_entries(self.outputs, state)
+        state.required_outputs = required_outputs
 
+        self.count_entries(state)
         signature = inspect.Signature([
             inspect.Parameter(node.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             for node in state.essential_inputs
         ])
 
         scope = signature.bind(*args, **kwargs)
+        return self._run(scope=scope, state=state)
+
+    def _run(self, *, scope, state):
         for x in state.essential_inputs:
             state.cache[x] = scope.arguments[x.name]
 
         self.set_parameters(state)
-        result = tuple(self.render(node, state) for node in self.outputs)
+        result = tuple(self.render(node, state) for node in state.required_outputs)
         # TODO: is this bad?
         if len(result) == 1:
             result = result[0]
@@ -130,7 +146,7 @@ class Graph:
         self.edges.extend(new_edges)
 
     def set_parameters(self, state: StateHolder):
-        for node in self.outputs:
+        for node in state.required_outputs:
             self._set_parameters_rec(state.parents[node], state)
 
     def _set_parameters_rec(self, edge: Edge, state: StateHolder):
@@ -149,8 +165,8 @@ class Graph:
         state.edge_parameters[edge] = param
         return param
 
-    def count_entries(self, nodes: Sequence[Node], state: StateHolder):
-        self._count_entries_rec(nodes, state)
+    def count_entries(self, state: StateHolder):
+        self._count_entries_rec(state.required_outputs, state)
         state.essential_inputs = [x for x in self.inputs if state.entry_counts[x] > 0]
 
     def _count_entries_rec(self, nodes: Sequence[Node], state: StateHolder):
@@ -180,7 +196,7 @@ class Graph:
             self._find_parents_rec(edge.inputs, edges, parents)
 
 
-class Layer:
+class Layer(object):
     def get_connection_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
@@ -193,11 +209,18 @@ class FreeLayer(Layer):
     def __init__(self, *args, **kwargs):
         self.graph = self.create_graph(*args, **kwargs)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, node_names=None, **kwargs):
         if len(self.inputs) == 0:
             raise RuntimeError('Layer must contain at least 1 input node')
+        return self.graph(*args, node_names=node_names, **kwargs)
 
-        return self.graph.run(*args, **kwargs)
+    def __getattr__(self, item):
+        for o in self.outputs:
+            if o.name == item:
+                return partial(self.__call__, node_names=[item])
+
+        # TODO add more details
+        raise AttributeError
 
     def get_connection_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
@@ -231,7 +254,7 @@ class AttachableLayer(Layer):
 class CacheStorage(object):
     def __init__(self, atomized=True):
         self._atomized = atomized
-        self.mutex = Lock()
+        self.mutex = RLock()
 
     def contains(self, param: GraphParameter) -> bool:
         raise NotImplementedError
