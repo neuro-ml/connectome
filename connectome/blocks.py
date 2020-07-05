@@ -1,9 +1,8 @@
-from abc import ABC
 from functools import reduce
 from typing import Sequence, Tuple, Any
 
-from utils import count_duplicates
-from engine import Graph, GraphParameter, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage
+from .utils import count_duplicates
+from .engine import Graph, GraphParameter, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage
 
 
 class IdentityEdge(Edge):
@@ -33,7 +32,7 @@ class CacheEdge(Edge):
         return inputs, parameter
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
-        if len(arguments) == 0:
+        if self.storage.contains(parameter):
             return self.storage.get(parameter)
         else:
             self.storage.set(parameter, arguments[0])
@@ -214,7 +213,7 @@ class CustomLayer(FreeLayer):
 
     @staticmethod
     def get_all_inputs(edges: Sequence[Edge]):
-        inputs = []
+        inputs = set()
         for e in edges:
-            inputs.extend(e.inputs)
-        return inputs
+            inputs.update(e.inputs)
+        return sorted(inputs, key=lambda n: n.name)

@@ -22,8 +22,7 @@ def atomize(mutex: Lock):
         @wraps(func)
         def wrapper(*args, **kwargs):
             with mutex:
-                result = func(*args, **kwargs)
-            return result
+                return func(*args, **kwargs)
 
         return wrapper
 

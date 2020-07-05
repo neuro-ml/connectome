@@ -3,7 +3,7 @@ from threading import Lock
 from collections import defaultdict
 from typing import Sequence, Any, Tuple
 
-from utils import atomize
+from .utils import atomize
 
 
 class GraphParameter:
@@ -97,7 +97,7 @@ class Graph:
             state.cache[x] = scope.arguments[x.name]
 
         self.set_parameters(state)
-        result = [self.render(node, state) for node in self.outputs]
+        result = tuple(self.render(node, state) for node in self.outputs)
         # TODO: is this bad?
         if len(result) == 1:
             result = result[0]
@@ -268,6 +268,7 @@ class MemoryStorage(CacheStorage):
         return param.data in self._cache
 
     def set(self, param: GraphParameter, value):
+        assert not self.contains(param)
         self._cache[param.data] = value
 
     def get(self, param: GraphParameter) -> Any:
