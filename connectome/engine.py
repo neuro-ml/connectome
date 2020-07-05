@@ -208,6 +208,7 @@ class FreeLayer(Layer):
 
     def __init__(self, *args, **kwargs):
         self.graph = self.create_graph(*args, **kwargs)
+        self._methods = self.get_output_node_methods(self.outputs)
 
     def __call__(self, *args, node_names=None, **kwargs):
         if len(self.inputs) == 0:
@@ -215,9 +216,9 @@ class FreeLayer(Layer):
         return self.graph(*args, node_names=node_names, **kwargs)
 
     def __getattr__(self, item):
-        for o in self.outputs:
-            if o.name == item:
-                return partial(self.__call__, node_names=[item])
+        # to stop recursion in bad cases
+        if '_methods' in self.__dict__ and item in self._methods:
+            return self._methods[item]
 
         # TODO add more details
         raise AttributeError
@@ -227,6 +228,12 @@ class FreeLayer(Layer):
 
     def create_graph(self, *args, **kwargs):
         raise NotImplementedError
+
+    def get_output_node_methods(self, nodes):
+        methods = {}
+        for node in nodes:
+            methods[node.name] = partial(self.__call__, node_names=[node.name])
+        return methods
 
     @property
     def inputs(self):

@@ -41,4 +41,4 @@ def test_chain():
         SomeDS(_some_constant=2),
         Crop(),
     )
-    assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 5'
+    assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 16'

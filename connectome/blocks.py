@@ -2,7 +2,7 @@ from functools import reduce
 from typing import Sequence, Tuple, Any
 
 from .utils import count_duplicates
-from .engine import Graph, GraphParameter, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage
+from .engine import Graph, GraphParameter, Layer, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage
 
 
 class IdentityEdge(Edge):
@@ -151,7 +151,7 @@ class InputLayer(FreeLayer):
 
 
 class Pipeline(FreeLayer):
-    def __init__(self, *layers):
+    def __init__(self, *layers: Layer):
         assert len(layers) > 0
         super().__init__(layers[0])
 
@@ -161,7 +161,9 @@ class Pipeline(FreeLayer):
 
     def add_layer(self, layer):
         new_outputs, new_edges = layer.get_connection_params(self.outputs)
+
         self.graph.update(new_outputs, new_edges)
+        self._methods = self.get_output_node_methods(self.outputs)
 
     def create_graph(self, first_layer):
         return Graph(first_layer.inputs, first_layer.outputs, first_layer.edges)
@@ -174,6 +176,18 @@ class Pipeline(FreeLayer):
 
         return outputs, all_edges
 
+    # TODO add operators?
+    def index(self, index):
+        return self.slice(index, index + 1)
+
+    def slice(self, start, stop):
+        assert start >= 0, start > stop
+
+        if issubclass(type(self.layers[start]), FreeLayer):
+            return Pipeline(*self.layers[start:stop])
+        else:
+            raise IndexError('First layer must be a Free layer')
+
 
 class CustomLayer(FreeLayer):
     def __init__(self, inputs, outputs, edges: Sequence[Edge]):
@@ -185,19 +199,19 @@ class CustomLayer(FreeLayer):
     def get_connection_params(self, other_outputs: Sequence[Node]):
         self.check_for_duplicates([x.name for x in other_outputs])
 
-        # inputs = self.get_all_inputs(self.edges)
-        # TODO is it necessary? no (:
-        # assert len(inputs) == len(other_outputs), (inputs, other_outputs)
-
         outputs = {}
         for o in other_outputs:
             outputs[o.name] = o
 
         for e in self.edges:
-            inputs = []
-            for i in e.inputs:
-                inputs.append(outputs[i.name])
-            e.inputs = inputs
+            new_edge_inputs = []
+            for cur_input in e.inputs:
+                if cur_input.name in outputs:
+                    new_edge_inputs.append(outputs[cur_input.name])
+                else:
+                    new_edge_inputs.append(cur_input)
+
+            e.inputs = new_edge_inputs
 
         return self.outputs, self.edges
 
