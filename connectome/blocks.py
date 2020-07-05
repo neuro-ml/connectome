@@ -176,14 +176,10 @@ class Pipeline(FreeLayer):
 
 
 class CustomLayer(FreeLayer):
-    def __init__(self, edges: Sequence[Edge]):
-        inputs = self.get_all_inputs(edges)
-        # self.check_for_duplicates([x.name for x in inputs])
+    def __init__(self, inputs, outputs, edges: Sequence[Edge]):
+        super().__init__(inputs, outputs, edges)
 
-        super().__init__(inputs, edges)
-
-    def create_graph(self, inputs, edges: Sequence[Edge]):
-        outputs = [e.output for e in edges]
+    def create_graph(self, inputs, outputs, edges: Sequence[Edge]):
         return Graph(inputs, outputs, edges)
 
     def get_connection_params(self, other_outputs: Sequence[Node]):

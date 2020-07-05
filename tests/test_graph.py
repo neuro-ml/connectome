@@ -4,16 +4,22 @@ from connectome.utils import extract_signature
 
 
 def funcs_layer(**kwargs):
-    def get_node(n):
-        if n not in scope:
-            scope[n] = Node(n)
-        return scope[n]
+    def get_input(n):
+        if n not in inputs:
+            inputs[n] = Node(n)
+        return inputs[n]
 
-    scope = {}
-    return CustomLayer([
-        FunctionEdge(func, list(map(get_node, extract_signature(func))), Node(name))
+    def get_output(n):
+        outputs[n] = Node(n)
+        return outputs[n]
+
+    inputs = {}
+    outputs = {}
+    edges = [
+        FunctionEdge(func, list(map(get_input, extract_signature(func))), get_output(name))
         for name, func in kwargs.items()
-    ])
+    ]
+    return CustomLayer(list(inputs.values()), list(outputs.values()), edges)
 
 
 def test_single():
