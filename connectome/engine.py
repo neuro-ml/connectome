@@ -196,7 +196,7 @@ class Graph:
             self._find_parents_rec(edge.inputs, edges, parents)
 
 
-class Layer(object):
+class Layer:
     def get_connection_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 

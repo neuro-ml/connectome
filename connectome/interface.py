@@ -1,5 +1,5 @@
 from connectome.blocks import ValueEdge, FunctionEdge, CustomLayer, Pipeline
-from connectome.engine import Node, Layer, Edge
+from connectome.engine import Node, Layer
 from connectome.utils import extract_signature
 
 
@@ -19,7 +19,7 @@ class Chain(BaseBlock):
     def __init__(self, *layers: BaseBlock):
         super().__init__()
         self._layer = Pipeline(*(layer._layer for layer in layers))
-        self._methods = {k.name: getattr(self._layer, k.name) for k in self._layer.outputs}
+        self._methods = self._layer._methods
 
 
 def collect_nodes(scope):
@@ -50,10 +50,12 @@ def collect_nodes(scope):
 def make_init(inputs, outputs, edges, arguments):
     # TODO: signature
     def __init__(self, **kwargs):
+        kwargs = {k if k.startswith('_') else f'_{k}': v for k, v in kwargs.items()}
         _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
         _layer = CustomLayer(inputs, list(outputs.values()), _edges)
         self._layer = _layer
-        self._methods = {k: getattr(_layer, k) for k in outputs}
+        # FIXME
+        self._methods = _layer._methods
 
     return __init__
 

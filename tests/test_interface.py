@@ -38,7 +38,7 @@ def test_single():
 
 def test_chain():
     pipeline = Chain(
-        SomeDS(_some_constant=2),
+        SomeDS(some_constant=2),
         Crop(),
     )
     assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 16'
