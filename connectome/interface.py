@@ -69,7 +69,7 @@ def collect_nodes(scope):
     return outputs, parameters, arguments
 
 
-def make_init(inputs, outputs, edges, arguments, parameters):
+def make_init(inputs, outputs, edges, arguments):
     # TODO: signature
     def __init__(self, **kwargs):
         kwargs = {k if k.startswith('_') else f'_{k}': v for k, v in kwargs.items()}
@@ -123,7 +123,7 @@ class SourceBase(type):
 
             edges.append(FunctionEdge(attr_func, input_nodes, out_node))
 
-        scope = {'__init__': make_init([identifier], outputs, edges, arguments, parameters)}
+        scope = {'__init__': make_init([identifier], outputs, edges, arguments)}
         return super().__new__(mcs, class_name, bases, scope)
 
 
@@ -164,7 +164,7 @@ class TransformBase(type):
 
             edges.append(FunctionEdge(value, in_, out))
 
-        scope = {'__init__': make_init(list(inputs.values()), outputs, edges, arguments, parameters)}
+        scope = {'__init__': make_init(list(inputs.values()), outputs, edges, arguments)}
         return super().__new__(mcs, class_name, bases, scope)
 
 

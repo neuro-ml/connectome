@@ -203,17 +203,10 @@ class CustomLayer(FreeLayer):
         for o in other_outputs:
             outputs[o.name] = o
 
-        for e in self.edges:
-            new_edge_inputs = []
-            for cur_input in e.inputs:
-                if cur_input.name in outputs:
-                    new_edge_inputs.append(outputs[cur_input.name])
-                else:
-                    new_edge_inputs.append(cur_input)
-
-            e.inputs = new_edge_inputs
-
-        return self.outputs, self.edges
+        new_edges = []
+        for i in self.inputs:
+            new_edges.append(IdentityEdge(outputs[i.name], i))
+        return self.outputs, self.edges + new_edges
 
     @staticmethod
     def check_for_duplicates(collection):
