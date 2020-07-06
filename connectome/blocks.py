@@ -163,7 +163,7 @@ class Pipeline(FreeLayer):
         new_outputs, new_edges = layer.get_connection_params(self.outputs)
 
         self.graph.update(new_outputs, new_edges)
-        self._methods = self.get_output_node_methods(self.outputs)
+        self._methods = self.create_output_node_methods(self.outputs)
 
     def create_graph(self, first_layer):
         return Graph(first_layer.inputs, first_layer.outputs, first_layer.edges)

@@ -19,7 +19,29 @@ class Chain(BaseBlock):
     def __init__(self, *layers: BaseBlock):
         super().__init__()
         self._layer = Pipeline(*(layer._layer for layer in layers))
-        self._methods = self._layer._methods
+        # TODO replace by property
+        self._methods = self._layer.get_output_node_methods()
+
+
+def is_argument(name: str, value):
+    if name.startswith('_') and not isinstance(value, staticmethod):
+        return True
+    else:
+        return False
+
+
+def is_parameter(name: str, value):
+    if name.startswith('_') and isinstance(value, staticmethod):
+        return True
+    else:
+        return False
+
+
+def is_output(name: str, value):
+    if not name.startswith('_') and isinstance(value, staticmethod):
+        return True
+    else:
+        return False
 
 
 def collect_nodes(scope):
@@ -35,27 +57,26 @@ def collect_nodes(scope):
             # TODO
             raise ValueError(name)
 
-        if name.startswith('_'):
-            if isinstance(value, staticmethod):
-                parameters[name] = Node(name)
-            else:
-                arguments[name] = Node(name)
-        else:
-            assert isinstance(value, staticmethod)
+        if is_parameter(name, value):
+            parameters[name] = Node(name)
+        elif is_argument(name, value):
+            arguments[name] = Node(name)
+        elif is_output(name, value):
             outputs[name] = Node(name)
+        else:
+            raise RuntimeError
 
     return outputs, parameters, arguments
 
 
-def make_init(inputs, outputs, edges, arguments):
+def make_init(inputs, outputs, edges, arguments, parameters):
     # TODO: signature
     def __init__(self, **kwargs):
         kwargs = {k if k.startswith('_') else f'_{k}': v for k, v in kwargs.items()}
         _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
         _layer = CustomLayer(inputs, list(outputs.values()), _edges)
         self._layer = _layer
-        # FIXME
-        self._methods = _layer._methods
+        self._methods = _layer.get_output_node_methods()
 
     return __init__
 
@@ -68,40 +89,41 @@ class SourceBase(type):
         identifier = Node('id')
         outputs, parameters, arguments = collect_nodes(namespace)
 
-        def under(n: str):
-            if n in parameters:
-                return parameters
-            return arguments[n]
+        def get_related_nodes(name: str):
+            if name in parameters:
+                return parameters[name]
+            else:
+                return arguments[name]
 
         # TODO: detect cycles, unused nodes etc
 
-        for name, value in namespace.items():
-            if name not in parameters and name not in outputs:
+        for attr_name, attr_value in namespace.items():
+            if attr_name not in parameters and attr_name not in outputs:
                 continue
 
-            assert isinstance(value, staticmethod)
-            value = value.__func__
             # TODO: check signature
-            names = extract_signature(value)
+            attr_func = attr_value.__func__
+            func_input_names = extract_signature(attr_func)
 
-            # TODO: this is a mess
-            if name.startswith('_'):
-                out = parameters[name]
-                in_ = []
-                if names and not names[0].startswith('_'):
-                    in_.append(identifier)
-                    names = names[1:]
+            if is_parameter(attr_name, attr_value):
+                out_node = parameters[attr_name]
+                input_nodes = []
+                if func_input_names and not func_input_names[0].startswith('_'):
+                    input_nodes.append(identifier)
+                    func_input_names = func_input_names[1:]
 
-                in_.extend([under(n) for n in names])
+                input_nodes.extend([get_related_nodes(name) for name in func_input_names])
 
+            elif is_output(attr_name, attr_value):
+                assert len(func_input_names) >= 1
+                out_node = outputs[attr_name]
+                input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
             else:
-                assert len(names) >= 1
-                out = outputs[name]
-                in_ = [identifier] + [under(n) for n in names[1:]]
+                raise RuntimeError
 
-            edges.append(FunctionEdge(value, in_, out))
+            edges.append(FunctionEdge(attr_func, input_nodes, out_node))
 
-        scope = {'__init__': make_init([identifier], outputs, edges, arguments)}
+        scope = {'__init__': make_init([identifier], outputs, edges, arguments, parameters)}
         return super().__new__(mcs, class_name, bases, scope)
 
 
@@ -142,7 +164,7 @@ class TransformBase(type):
 
             edges.append(FunctionEdge(value, in_, out))
 
-        scope = {'__init__': make_init(list(inputs.values()), outputs, edges, arguments)}
+        scope = {'__init__': make_init(list(inputs.values()), outputs, edges, arguments, parameters)}
         return super().__new__(mcs, class_name, bases, scope)
 
 

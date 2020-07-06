@@ -200,6 +200,9 @@ class Layer:
     def get_connection_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
+    def get_output_node_methods(self):
+        raise NotImplementedError
+
 
 class FreeLayer(Layer):
     """
@@ -208,7 +211,7 @@ class FreeLayer(Layer):
 
     def __init__(self, *args, **kwargs):
         self.graph = self.create_graph(*args, **kwargs)
-        self._methods = self.get_output_node_methods(self.outputs)
+        self._methods = self.create_output_node_methods(self.outputs)
 
     def __call__(self, *args, node_names=None, **kwargs):
         if len(self.inputs) == 0:
@@ -229,11 +232,14 @@ class FreeLayer(Layer):
     def create_graph(self, *args, **kwargs):
         raise NotImplementedError
 
-    def get_output_node_methods(self, nodes):
+    def create_output_node_methods(self, nodes):
         methods = {}
         for node in nodes:
             methods[node.name] = partial(self.__call__, node_names=[node.name])
         return methods
+
+    def get_output_node_methods(self):
+        return self._methods
 
     @property
     def inputs(self):
@@ -255,6 +261,9 @@ class FreeLayer(Layer):
 class AttachableLayer(Layer):
     def get_connection_params(self, *args, **kwargs):
         raise NotImplementedError
+
+    def get_output_node_methods(self):
+        return {}
 
 
 # TODO redefine operators
