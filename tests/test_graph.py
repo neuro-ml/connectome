@@ -1,4 +1,5 @@
-from connectome.blocks import FunctionEdge, CustomLayer, Pipeline, MemoryCacheLayer
+from connectome.layers import CustomLayer, MemoryCacheLayer, PipelineLayer
+from connectome.edges import FunctionEdge
 from connectome.engine import Node
 from connectome.utils import extract_signature
 
@@ -57,16 +58,16 @@ def test_chain():
         div=lambda prod, x: prod / x,
         original=lambda sub, y: sub + y,
     )
-    chain = Pipeline(first)
+    chain = PipelineLayer(first)
     assert chain.sum(1, 2) == 3
     assert chain.squared(4) == 16
 
-    chain = Pipeline(first, second)
+    chain = PipelineLayer(first, second)
     assert chain.prod(7) == 7 ** 5
     assert chain.min(3) == 9
     assert chain.sub(5, 3) == 2
 
-    chain = Pipeline(first, second, third)
+    chain = PipelineLayer(first, second, third)
     assert chain.div(7) == 7 ** 4
     assert chain.original(x=9, y=10) == 9
 
@@ -82,7 +83,7 @@ def test_cache():
     assert first.x(1) == 1
     assert count == 1
 
-    chain = Pipeline(first, MemoryCacheLayer())
+    chain = PipelineLayer(first, MemoryCacheLayer())
     assert chain.x(1) == 1
     assert count == 2
     assert chain.x(1) == 1

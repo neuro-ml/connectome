@@ -1,15 +1,6 @@
 import inspect
-from hashlib import blake2b
-from pathlib import Path
-from threading import RLock
-from functools import partial, lru_cache
 from collections import defaultdict
 from typing import Sequence, Any, Tuple
-
-import cloudpickle
-import numpy as np
-
-from .utils import atomize
 
 
 class GraphParameter:
@@ -38,16 +29,17 @@ class Edge:
         self._inputs = tuple(inputs)
         self.output = output
 
-    def evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
+    def evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
         assert len(arguments) == len(essential_inputs)
         return self._evaluate(arguments, essential_inputs, parameter)
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter) -> Tuple[Any]:
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
         raise NotImplementedError
 
     def process_parameters(self, parameters: Sequence[GraphParameter]):
         raise NotImplementedError
 
+    # TODO: move to GraphParameter
     def _merge_parameters(self, parameters: Sequence):
         for param in parameters:
             assert isinstance(param, GraphParameter)
@@ -215,152 +207,3 @@ class Layer:
 
     def get_output_node_methods(self):
         raise NotImplementedError
-
-
-class FreeLayer(Layer):
-    """
-    Layer that supports 'run' method
-    """
-
-    def __init__(self, *args, **kwargs):
-        self.graph = self.create_graph(*args, **kwargs)
-        self._methods = self.create_output_node_methods(self.outputs)
-
-    def __call__(self, *args, node_names=None, **kwargs):
-        if len(self.inputs) == 0:
-            raise RuntimeError('Layer must contain at least 1 input node')
-
-        caller = self.graph.compile_graph(node_names=node_names)
-        return caller(*args, **kwargs)
-
-    def __getattr__(self, item):
-        # to stop recursion in bad cases
-        if '_methods' in self.__dict__ and item in self._methods:
-            return self._methods[item]
-
-        # TODO add more details
-        raise AttributeError
-
-    def get_connection_params(self, other_outputs: Sequence[Node]):
-        raise NotImplementedError
-
-    def create_graph(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def create_output_node_methods(self, nodes):
-        methods = {}
-        for node in nodes:
-            methods[node.name] = self.graph.compile_graph(node_names=[node.name])
-        return methods
-
-    def get_output_node_methods(self):
-        return self._methods
-
-    @property
-    def inputs(self):
-        return self.graph.inputs
-
-    @inputs.setter
-    def inputs(self, value):
-        self.graph.inputs = value
-
-    @property
-    def outputs(self):
-        return self.graph.outputs
-
-    @property
-    def edges(self):
-        return self.graph.edges
-
-
-class AttachableLayer(Layer):
-    def get_connection_params(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def get_output_node_methods(self):
-        return {}
-
-
-# TODO redefine operators
-class CacheStorage:
-    def __init__(self, atomized=True):
-        self._atomized = atomized
-        self.mutex = RLock()
-
-    def contains(self, param: GraphParameter) -> bool:
-        raise NotImplementedError
-
-    def set(self, param: GraphParameter, value):
-        raise NotImplementedError
-
-    def get(self, param: GraphParameter) -> Any:
-        raise NotImplementedError
-
-    def __getattribute__(self, name):
-        attr = super().__getattribute__(name)
-        if callable(attr):
-            if self.atomized:
-                return atomize(self.mutex)(attr)
-        else:
-            return attr
-
-    @property
-    def atomized(self):
-        return self._atomized
-
-    @atomized.setter
-    def atomized(self, value: bool):
-        self._atomized = value
-
-
-class MemoryStorage(CacheStorage):
-    def __init__(self, atomized=True):
-        super().__init__(atomized=atomized)
-        self._cache = {}
-
-    def contains(self, param: GraphParameter) -> bool:
-        return param.data in self._cache
-
-    def set(self, param: GraphParameter, value):
-        assert not self.contains(param)
-        self._cache[param.data] = value
-
-    def get(self, param: GraphParameter) -> Any:
-        return self._cache[param.data]
-
-
-# TODO: deal with cache misses by saving the pickled value
-class DiskStorage(CacheStorage):
-    def __init__(self, path):
-        super().__init__(atomized=True)
-        self.path = Path(path)
-
-    # TODO: maybe customize the caching
-    @lru_cache(None)
-    def _get_hash(self, o):
-        o = cloudpickle.dumps(o)
-        return blake2b(o, digest_size=32).hexdigest()
-
-    def _get_path(self, param, create=False):
-        path = self.path / self._get_hash(param.data)
-        if create:
-            path.mkdir(parents=True, exist_ok=True)
-        return path
-
-    # TODO: move save and load out
-    def _save(self, value, path):
-        np.save(path / 'value.npy', value)
-
-    def _load(self, path):
-        return np.load(path / 'value.npy')
-
-    def contains(self, param: GraphParameter) -> bool:
-        return self._get_path(param).exists()
-
-    def set(self, param: GraphParameter, value):
-        assert not self.contains(param)
-        # TODO: remove the folder if something goes wrong
-        self._save(value, self._get_path(param, True))
-
-    def get(self, param: GraphParameter) -> Any:
-        return self._load(self._get_path(param))

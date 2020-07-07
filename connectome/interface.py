@@ -1,6 +1,7 @@
-from connectome.blocks import ValueEdge, FunctionEdge, CustomLayer, Pipeline
-from connectome.engine import Node, Layer
-from connectome.utils import extract_signature
+from .edges import ValueEdge, FunctionEdge
+from .layers import PipelineLayer, CustomLayer
+from .engine import Node, Layer
+from .utils import extract_signature
 
 
 class BaseBlock:
@@ -18,7 +19,7 @@ class BaseBlock:
 class Chain(BaseBlock):
     def __init__(self, *layers: BaseBlock):
         super().__init__()
-        self._layer = Pipeline(*(layer._layer for layer in layers))
+        self._layer = PipelineLayer(*(layer._layer for layer in layers))
         # TODO replace by property
         self._methods = self._layer.get_output_node_methods()
 
