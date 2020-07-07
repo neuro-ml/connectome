@@ -65,13 +65,14 @@ class Edge:
         self._inputs = value
 
 
+# TODO looks unnecessary
 class StateHolder:
-    def __init__(self, *, parents: dict = None):
-        self.essential_inputs = None
-        self.required_outputs = None
+    def __init__(self, *, parents: dict, essential_inputs: list, required_outputs: list, entry_counts: defaultdict):
+        self.essential_inputs = essential_inputs
+        self.required_outputs = required_outputs
+        self.entry_counts = entry_counts
         self.parents = parents
 
-        self.entry_counts = defaultdict(int)
         self.edge_inputs = defaultdict(tuple)
         self.edge_parameters = {}
         self.cache = {}
@@ -85,7 +86,7 @@ class Graph:
 
         self.update(outputs, edges)
 
-    def __call__(self, *args, node_names=None, **kwargs):
+    def compile_graph(self, node_names=None):
         name_node_dict = {}
         for o in self.outputs:
             name_node_dict[o.name] = o
@@ -100,29 +101,36 @@ class Graph:
                 required_outputs.append(name_node_dict[name])
 
         parents = self.find_parents(required_outputs, self.edges)
-        state = StateHolder(parents=parents)
-        state.required_outputs = required_outputs
+        entry_counts = self.count_entries(parents, required_outputs)
+        essential_inputs = [x for x in self.inputs if entry_counts[x] > 0]
 
-        self.count_entries(state)
         signature = inspect.Signature([
             inspect.Parameter(node.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            for node in state.essential_inputs
+            for node in essential_inputs
         ])
 
-        scope = signature.bind(*args, **kwargs)
-        return self._run(scope=scope, state=state)
+        def caller(*args, **kwargs):
+            # TODO remove it
+            state = StateHolder(parents=parents,
+                                required_outputs=required_outputs,
+                                entry_counts=entry_counts,
+                                essential_inputs=essential_inputs)
 
-    def _run(self, *, scope, state):
-        for x in state.essential_inputs:
-            state.cache[x] = scope.arguments[x.name]
+            scope = signature.bind(*args, **kwargs)
+            for x in state.essential_inputs:
+                state.cache[x] = scope.arguments[x.name]
 
-        self.set_parameters(state)
-        result = tuple(self.render(node, state) for node in state.required_outputs)
-        # TODO: is this bad?
-        if len(result) == 1:
-            result = result[0]
+            self.set_parameters(state)
+            result = tuple(self.render(node, state) for node in state.required_outputs)
 
-        return result
+            # TODO: is this bad?
+            if len(result) == 1:
+                result = result[0]
+
+            return result
+
+        caller.__signature__ = signature
+        return caller
 
     def render(self, node: Node, state: StateHolder):
         if node not in state.cache:
@@ -169,15 +177,16 @@ class Graph:
         state.edge_parameters[edge] = param
         return param
 
-    def count_entries(self, state: StateHolder):
-        self._count_entries_rec(state.required_outputs, state)
-        state.essential_inputs = [x for x in self.inputs if state.entry_counts[x] > 0]
+    def count_entries(self, parents: dict, outputs: Sequence[Node]):
+        entry_counts = defaultdict(int)
+        self._count_entries_rec(nodes=outputs, entry_counts=entry_counts, parents=parents)
+        return entry_counts
 
-    def _count_entries_rec(self, nodes: Sequence[Node], state: StateHolder):
+    def _count_entries_rec(self, *, nodes: Sequence[Node], entry_counts: dict, parents: dict):
         for node in nodes:
-            state.entry_counts[node] += 1
-            if node in state.parents:
-                self._count_entries_rec(state.parents[node].inputs, state)
+            entry_counts[node] += 1
+            if node in parents:
+                self._count_entries_rec(nodes=parents[node].inputs, entry_counts=entry_counts, parents=parents)
 
     def find_parents(self, nodes: Sequence[Node], edges: Sequence[Edge]):
         parents = {}
@@ -220,7 +229,9 @@ class FreeLayer(Layer):
     def __call__(self, *args, node_names=None, **kwargs):
         if len(self.inputs) == 0:
             raise RuntimeError('Layer must contain at least 1 input node')
-        return self.graph(*args, node_names=node_names, **kwargs)
+
+        caller = self.graph.compile_graph(node_names=node_names)
+        return caller(*args, **kwargs)
 
     def __getattr__(self, item):
         # to stop recursion in bad cases
@@ -239,7 +250,7 @@ class FreeLayer(Layer):
     def create_output_node_methods(self, nodes):
         methods = {}
         for node in nodes:
-            methods[node.name] = partial(self.__call__, node_names=[node.name])
+            methods[node.name] = self.graph.compile_graph(node_names=[node.name])
         return methods
 
     def get_output_node_methods(self):

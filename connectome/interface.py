@@ -30,22 +30,26 @@ class FromLayer(BaseBlock):
         self._methods = self._layer.get_output_node_methods()
 
 
+def check_pattern(name: str):
+    return name.startswith('_')
+
+
 def is_argument(name: str, value):
-    if name.startswith('_') and not isinstance(value, staticmethod):
+    if check_pattern(name) and not isinstance(value, staticmethod):
         return True
     else:
         return False
 
 
 def is_parameter(name: str, value):
-    if name.startswith('_') and isinstance(value, staticmethod):
+    if check_pattern(name) and isinstance(value, staticmethod):
         return True
     else:
         return False
 
 
 def is_output(name: str, value):
-    if not name.startswith('_') and isinstance(value, staticmethod):
+    if not check_pattern(name) and isinstance(value, staticmethod):
         return True
     else:
         return False
@@ -79,7 +83,7 @@ def collect_nodes(scope):
 def make_init(inputs, outputs, edges, arguments):
     # TODO: signature
     def __init__(self, **kwargs):
-        kwargs = {k if k.startswith('_') else f'_{k}': v for k, v in kwargs.items()}
+        kwargs = {k if check_pattern(k) else f'_{k}': v for k, v in kwargs.items()}
         _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
         _layer = CustomLayer(inputs, list(outputs.values()), _edges)
         self._layer = _layer
@@ -115,7 +119,7 @@ class SourceBase(type):
             if is_parameter(attr_name, attr_value):
                 out_node = parameters[attr_name]
                 input_nodes = []
-                if func_input_names and not func_input_names[0].startswith('_'):
+                if func_input_names and not check_pattern(func_input_names[0]):
                     input_nodes.append(identifier)
                     func_input_names = func_input_names[1:]
 
@@ -136,14 +140,16 @@ class SourceBase(type):
 
 class TransformBase(type):
     def __new__(mcs, class_name, bases, namespace):
-        def get_input(n: str):
-            if n.startswith('_'):
-                if n in parameters:
-                    return parameters[n]
-                return arguments[n]
-            if n not in inputs:
-                inputs[n] = Node(n)
-            return inputs[n]
+        def get_related_nodes(name: str):
+            if check_pattern(name):
+                if name in parameters:
+                    return parameters[name]
+                else:
+                    return arguments[name]
+            if name not in inputs:
+                print(name)
+                inputs[name] = Node(name)
+            return inputs[name]
 
         edges = []
         inputs = {}
@@ -151,25 +157,25 @@ class TransformBase(type):
 
         # TODO: detect cycles, unused parameter-funcs
 
-        for name, value in namespace.items():
-            if name not in parameters and name not in outputs:
+        for attr_name, attr_value in namespace.items():
+            if attr_name not in parameters and attr_name not in outputs:
                 continue
 
-            assert isinstance(value, staticmethod)
-            value = value.__func__
             # TODO: check signature
-            names = extract_signature(value)
+            attr_func = attr_value.__func__
+            names = extract_signature(attr_func)
 
-            if name.startswith('_'):
-                out = parameters[name]
-                in_ = list(map(get_input, names))
-
-            else:
-                out = outputs[name]
+            if is_parameter(attr_name, attr_value):
+                output_node = parameters[attr_name]
+                input_nodes = list(map(get_related_nodes, names))
+            elif is_output(attr_name, attr_value):
+                output_node = outputs[attr_name]
                 # TODO: more flexibility
-                in_ = [get_input(name)] + list(map(get_input, names[1:]))
+                input_nodes = [get_related_nodes(attr_name)] + list(map(get_related_nodes, names[1:]))
+            else:
+                raise RuntimeError
 
-            edges.append(FunctionEdge(value, in_, out))
+            edges.append(FunctionEdge(attr_func, input_nodes, output_node))
 
         scope = {'__init__': make_init(list(inputs.values()), outputs, edges, arguments)}
         return super().__new__(mcs, class_name, bases, scope)

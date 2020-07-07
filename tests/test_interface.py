@@ -52,7 +52,7 @@ def test_single():
     assert cc.image(image='input') == f'input transformed 5'
 
 
-def test_params():
+def test_single_with_params():
     pipeline = ParameterizedObj(_some_constant=2)
     assert pipeline.output_method(id='666') == '<output>_666_2_<second>_666_2_<first>_666_2'
 

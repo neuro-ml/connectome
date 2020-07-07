@@ -5,8 +5,11 @@ from connectome.utils import extract_signature
 
 def funcs_layer(**kwargs):
     def get_input(n):
+        if n in outputs:
+            return outputs[n]
         if n not in inputs:
             inputs[n] = Node(n)
+
         return inputs[n]
 
     def get_output(n):
