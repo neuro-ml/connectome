@@ -23,6 +23,13 @@ class Chain(BaseBlock):
         self._methods = self._layer.get_output_node_methods()
 
 
+class FromLayer(BaseBlock):
+    def __init__(self, layer):
+        super().__init__()
+        self._layer = layer
+        self._methods = self._layer.get_output_node_methods()
+
+
 def is_argument(name: str, value):
     if name.startswith('_') and not isinstance(value, staticmethod):
         return True

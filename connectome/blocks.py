@@ -2,7 +2,8 @@ from functools import reduce
 from typing import Sequence, Tuple, Any
 
 from .utils import count_duplicates
-from .engine import Graph, GraphParameter, Layer, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage
+from .engine import Graph, GraphParameter, Layer, AttachableLayer, FreeLayer, Node, Edge, MemoryStorage, CacheStorage, \
+    DiskStorage
 
 
 class IdentityEdge(Edge):
@@ -11,6 +12,10 @@ class IdentityEdge(Edge):
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
         return arguments[0]
+
+    def process_parameters(self, parameters: Sequence[GraphParameter]):
+        assert len(parameters) == 1
+        return self.inputs, parameters[0]
 
 
 class CacheEdge(Edge):
@@ -23,7 +28,8 @@ class CacheEdge(Edge):
             self.storage = storage
 
     def process_parameters(self, parameters: Sequence[GraphParameter]):
-        parameter = self._merge_parameters(parameters)
+        assert len(parameters) == 1
+        parameter = parameters[0]
         if self.storage.contains(parameter):
             inputs = []
         else:
@@ -47,6 +53,9 @@ class FunctionEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
         return self.function(*arguments)
 
+    def process_parameters(self, parameters: Sequence[GraphParameter]):
+        return self.inputs, self._merge_parameters([GraphParameter(self.function)] + list(parameters))
+
 
 class ValueEdge(Edge):
     def __init__(self, target: Node, value):
@@ -56,14 +65,9 @@ class ValueEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
         return self.value
 
-
-class CacheToDisk(Edge):
-    # TODO: path
-    def __init__(self, incoming: Node, output: Node):
-        super().__init__([incoming], output)
-
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter) -> Tuple[Any]:
-        return arguments[0]
+    def process_parameters(self, parameters: Sequence[GraphParameter]):
+        assert not parameters
+        return self.inputs, GraphParameter(self.value)
 
 
 class MemoryCacheLayer(AttachableLayer):
@@ -71,6 +75,19 @@ class MemoryCacheLayer(AttachableLayer):
         this_outputs = [Node(o.name) for o in other_outputs]
         edges = [
             CacheEdge(other_output, this_output, storage=MemoryStorage())
+            for other_output, this_output in zip(other_outputs, this_outputs)
+        ]
+        return this_outputs, edges
+
+
+class DiskCacheLayer(AttachableLayer):
+    def __init__(self, path):
+        self.path = path
+
+    def get_connection_params(self, other_outputs: Sequence[Node]):
+        this_outputs = [Node(o.name) for o in other_outputs]
+        edges = [
+            CacheEdge(other_output, this_output, storage=DiskStorage(self.path))
             for other_output, this_output in zip(other_outputs, this_outputs)
         ]
         return this_outputs, edges
@@ -213,10 +230,3 @@ class CustomLayer(FreeLayer):
         counts: dict = count_duplicates([x for x in collection])
         if any(v > 1 for k, v in counts.items()):
             raise RuntimeError('Input nodes must have different names')
-
-    @staticmethod
-    def get_all_inputs(edges: Sequence[Edge]):
-        inputs = set()
-        for e in edges:
-            inputs.update(e.inputs)
-        return sorted(inputs, key=lambda n: n.name)
