@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Sequence
 
 from .cache import DiskStorage, MemoryStorage
@@ -25,6 +26,7 @@ class FreeLayer(Layer):
 
     def __getattr__(self, item):
         # to stop recursion in bad cases
+        # TODO: maybe use get_method instead?
         if '_methods' in self.__dict__ and item in self._methods:
             return self._methods[item]
 
@@ -82,10 +84,13 @@ class MemoryCacheLayer(AttachableLayer):
 
 
 class DiskCacheLayer(AttachableLayer):
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, storage):
+        self.path = Path(storage)
+        # TODO: pass a list of names
 
     def get_connection_params(self, other_outputs: Sequence[Node]):
+        # TODO: make sure that the names are unique
+        # TODO: use the same storage for all?
         this_outputs = [Node(o.name) for o in other_outputs]
         edges = [
             CacheEdge(other_output, this_output, storage=DiskStorage(self.path))

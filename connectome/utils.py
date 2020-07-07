@@ -2,8 +2,6 @@ import inspect
 from functools import wraps
 from collections import defaultdict
 
-from threading import RLock
-
 
 def extract_signature(func):
     res = []
@@ -17,12 +15,15 @@ def extract_signature(func):
     return res
 
 
-def atomize(mutex: RLock):
+def atomize(attribute: str = '_lock'):
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(self, *args, **kwargs):
+            mutex = getattr(self, attribute)
+            if mutex is None:
+                return func(self, *args, **kwargs)
             with mutex:
-                return func(*args, **kwargs)
+                return func(self, *args, **kwargs)
 
         return wrapper
 
