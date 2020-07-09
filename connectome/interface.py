@@ -20,6 +20,7 @@ class Chain(BaseBlock):
     def __init__(self, *layers: BaseBlock):
         super().__init__()
         self._layer = PipelineLayer(*(layer._layer for layer in layers))
+        # TODO replace by property
         self._methods = self._layer.get_output_node_methods()
 
 
@@ -48,7 +49,7 @@ def is_output(name: str, value):
 
 def collect_nodes(scope):
     allowed_magic = {'__module__', '__qualname__'}
-    outputs, parameters, arguments = {}, {}, {}
+    outputs, parameters, arguments, defaults = {}, {}, {}, {}
 
     # gather nodes
     for name, value in scope.items():
@@ -63,23 +64,32 @@ def collect_nodes(scope):
             parameters[name] = Node(name)
         elif is_argument(name, value):
             arguments[name] = Node(name)
+            defaults[name] = value
         elif is_output(name, value):
             outputs[name] = Node(name)
         else:
             raise RuntimeError
 
-    return outputs, parameters, arguments
+    return outputs, parameters, arguments, defaults
 
 
-def make_init(inputs, outputs, edges, arguments):
-    # TODO: signature
+def make_init(inputs, outputs, edges, arguments, defaults):
+    signature = inspect.Signature([
+        inspect.Parameter(name.lstrip('_'), inspect.Parameter.KEYWORD_ONLY, default=value)
+        for name, value in defaults.items()
+    ])
+
     def __init__(self, **kwargs):
+        kwargs = {k.lstrip('_'): v for k, v in kwargs.items()}
+        kwargs = signature.bind(**kwargs).kwargs
         kwargs = {k if check_pattern(k) else f'_{k}': v for k, v in kwargs.items()}
+
         _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
         _layer = CustomLayer(inputs, list(outputs.values()), _edges)
         self._layer = _layer
         self._methods = _layer.get_output_node_methods()
 
+    __init__.__signature__ = signature
     return __init__
 
 
@@ -93,6 +103,7 @@ class SourceBase(type):
         ids_param_name = '_ids_arg'
 
         outputs, parameters, arguments = collect_nodes(namespace)
+        outputs, parameters, arguments, defaults = collect_nodes(namespace)
 
         def get_related_nodes(name: str):
             if name in parameters:
@@ -131,6 +142,7 @@ class SourceBase(type):
                     input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
 
                 out_node = outputs[attr_name]
+                input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
             else:
                 raise RuntimeError
 
@@ -146,44 +158,53 @@ class SourceBase(type):
 
 class TransformBase(type):
     def __new__(mcs, class_name, bases, namespace):
-        def get_related_nodes(name: str):
-            if check_pattern(name):
-                if name in parameters:
-                    return parameters[name]
-                else:
-                    return arguments[name]
-            if name not in inputs:
-                inputs[name] = Node(name)
-            return inputs[name]
-
-        edges = []
-        inputs = {}
-        outputs, parameters, arguments = collect_nodes(namespace)
-
-        # TODO: detect cycles, unused parameter-funcs
-
-        for attr_name, attr_value in namespace.items():
-            if attr_name not in parameters and attr_name not in outputs:
-                continue
-
-            # TODO: check signature
-            attr_func = attr_value.__func__
-            names = extract_signature(attr_func)
-
-            if is_parameter(attr_name, attr_value):
-                output_node = parameters[attr_name]
-                input_nodes = list(map(get_related_nodes, names))
-            elif is_output(attr_name, attr_value):
-                output_node = outputs[attr_name]
-                # TODO: more flexibility
-                input_nodes = [get_related_nodes(attr_name)] + list(map(get_related_nodes, names[1:]))
-            else:
-                raise RuntimeError
-
-            edges.append(FunctionEdge(attr_func, input_nodes, output_node))
-
-        scope = {'__init__': make_init(list(inputs.values()), outputs, edges, arguments)}
+        scope = build_transform_namespace(namespace)
         return super().__new__(mcs, class_name, bases, scope)
+
+
+def build_transform_namespace(namespace):
+    def get_related_nodes(name: str):
+        if check_pattern(name):
+            if name in parameters:
+                return parameters[name]
+            else:
+                return arguments[name]
+        if name not in inputs:
+            print(name)
+            inputs[name] = Node(name)
+        return inputs[name]
+
+    edges = []
+    inputs = {}
+    outputs, parameters, arguments, defaults = collect_nodes(namespace)
+
+    # TODO: detect cycles, unused parameter-funcs
+
+    for attr_name, attr_value in namespace.items():
+        if attr_name not in parameters and attr_name not in outputs:
+            continue
+
+        # TODO: check signature
+        attr_func = attr_value.__func__
+        names = extract_signature(attr_func)
+
+        if is_parameter(attr_name, attr_value):
+            output_node = parameters[attr_name]
+            input_nodes = list(map(get_related_nodes, names))
+        elif is_output(attr_name, attr_value):
+            output_node = outputs[attr_name]
+            # TODO: more flexibility
+            input_nodes = [get_related_nodes(attr_name)] + list(map(get_related_nodes, names[1:]))
+        else:
+            raise RuntimeError
+
+        edges.append(FunctionEdge(attr_func, input_nodes, output_node))
+
+    return {'__init__': make_init(list(inputs.values()), outputs, edges, arguments, defaults)}
+
+
+class Source(BaseBlock, metaclass=SourceBase):
+    pass
 
 
 class Transform(BaseBlock, metaclass=TransformBase):
