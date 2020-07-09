@@ -1,3 +1,5 @@
+import inspect
+
 from .edges import ValueEdge, FunctionEdge
 from .layers import PipelineLayer, CustomLayer, MuxLayer
 from .engine import Node, Layer
@@ -102,7 +104,6 @@ class SourceBase(type):
         forbidden_methods = ['id']
         ids_param_name = '_ids_arg'
 
-        outputs, parameters, arguments = collect_nodes(namespace)
         outputs, parameters, arguments, defaults = collect_nodes(namespace)
 
         def get_related_nodes(name: str):
@@ -142,7 +143,6 @@ class SourceBase(type):
                     input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
 
                 out_node = outputs[attr_name]
-                input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
             else:
                 raise RuntimeError
 
@@ -152,7 +152,7 @@ class SourceBase(type):
         if 'ids' not in outputs:
             raise RuntimeError("'ids' method is required")
 
-        scope = {'__init__': make_init([identifier], outputs, edges, arguments)}
+        scope = {'__init__': make_init([identifier], outputs, edges, arguments, defaults)}
         return super().__new__(mcs, class_name, bases, scope)
 
 
@@ -201,10 +201,6 @@ def build_transform_namespace(namespace):
         edges.append(FunctionEdge(attr_func, input_nodes, output_node))
 
     return {'__init__': make_init(list(inputs.values()), outputs, edges, arguments, defaults)}
-
-
-class Source(BaseBlock, metaclass=SourceBase):
-    pass
 
 
 class Transform(BaseBlock, metaclass=TransformBase):
