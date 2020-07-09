@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Callable
 
 from .cache import DiskStorage, MemoryStorage
 from .edges import CacheEdge, IdentityEdge, MuxEdge
@@ -164,37 +164,41 @@ class CustomLayer(FreeLayer):
             raise RuntimeError('Input nodes must have different names')
 
 
-# TODO sequence of layers
 class MuxLayer(FreeLayer):
-    def __init__(self, func, first_layer: FreeLayer, second_layer: FreeLayer):
-        super().__init__(func, first_layer, second_layer)
+    def __init__(self, branch_selector: Callable, *layers: FreeLayer):
+        super().__init__(branch_selector, *layers)
 
-    def create_graph(self, func, first_layer: FreeLayer, second_layer: FreeLayer):
-        shared_output_names = set(
-            [o.name for o in first_layer.outputs]).intersection(
-            [o.name for o in second_layer.outputs])
+    def create_graph(self, branch_selector: Callable, *layers: FreeLayer):
+        # TODO remove this and check for essential inputs
+        assert len(set([len(layer.inputs) for layer in layers])) == 1
+        assert len(layers[0].inputs) == 1
 
-        assert len(first_layer.inputs) == len(second_layer.inputs) == 1
-        input_nodes = (first_layer.inputs[0], second_layer.inputs[0])
+        input_nodes = []
+        shared_output_names = set()
 
-        # TODO check for duplicated names
-        first_name_map = {o.name: o for o in first_layer.outputs if o.name in shared_output_names}
-        second_name_map = {o.name: o for o in second_layer.outputs if o.name in shared_output_names}
+        for layer in layers:
+            input_nodes.extend(layer.inputs)
+            # check for outputs with the same name
+            output_names = [o.name for o in layer.outputs]
+            assert any(v < 2 for _, v in count_duplicates(output_names).items())
+            shared_output_names.update(output_names)
 
-        inputs = []
+        node_name_map = []
+        for layer in layers:
+            node_name_map.append({o.name: o for o in layer.outputs if o.name in shared_output_names})
+
         outputs = []
-        hub_edges = []
-
+        mux_edges = []
         for name in shared_output_names:
             output_node = Node(name)
-            first_node, second_node = first_name_map[name], second_name_map[name]
-            edge = MuxEdge(func, [first_node, second_node], output_node)
-
-            hub_edges.append(edge)
-            inputs.extend([first_node, second_node])
+            edge = MuxEdge(branch_selector, [layer_map[name] for layer_map in node_name_map], output_node)
+            mux_edges.append(edge)
             outputs.append(output_node)
 
-        all_edges = first_layer.edges + second_layer.edges + hub_edges
+        all_edges = mux_edges
+        for layer in layers:
+            all_edges.extend(layer.edges)
+
         return Graph(input_nodes, outputs, all_edges)
 
     def get_connection_params(self, *args, **kwargs):

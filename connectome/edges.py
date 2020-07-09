@@ -67,9 +67,9 @@ class ValueEdge(Edge):
 
 
 class MuxEdge(Edge):
-    def __init__(self, index_selector: Callable, inputs: Sequence[Node], output: Node):
+    def __init__(self, branch_selector: Callable, inputs: Sequence[Node], output: Node):
         super().__init__(inputs, output)
-        self.index_selector = index_selector
+        self.branch_selector = branch_selector
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
         return arguments[0]
@@ -77,11 +77,9 @@ class MuxEdge(Edge):
     def process_parameters(self, parameters: Sequence[NodeHash]):
         ids = self.find_node_by_name(parameters)
         assert len(set(ids.values())) == 1
-        ds_index = list(ids.values())[0]
 
-        # TODO remove index dependency
-        idx = self.index_selector(ds_index)
-        return [self.inputs[idx]], parameters[idx]
+        ds_index = list(ids.values())[0]
+        return self.branch_selector(ds_index, self.inputs, parameters)
 
     @staticmethod
     def find_node_by_name(parameters: Sequence[NodeHash], name='id'):

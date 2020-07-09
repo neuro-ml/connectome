@@ -93,3 +93,7 @@ def test_cache():
     assert count == 3
     assert chain.x(2) == 2
     assert count == 3
+
+
+def test_mux():
+    pass

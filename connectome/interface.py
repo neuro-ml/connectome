@@ -1,4 +1,5 @@
 import inspect
+from typing import Sequence
 
 from .edges import ValueEdge, FunctionEdge
 from .layers import PipelineLayer, CustomLayer, MuxLayer
@@ -170,7 +171,6 @@ def build_transform_namespace(namespace):
             else:
                 return arguments[name]
         if name not in inputs:
-            print(name)
             inputs[name] = Node(name)
         return inputs[name]
 
@@ -217,25 +217,17 @@ class Source(BaseBlock, metaclass=SourceBase):
 
 
 class Merge(BaseBlock):
-    def __init__(self, first_ds: Source, second_ds: Source):
+    def __init__(self, *sources: Source):
         super().__init__()
 
-        self.first_ds = first_ds
-        self.second_ds = second_ds
-
-        self.first_layer = first_ds._layer
-        self.second_layer = second_ds._layer
-
-        ids_intersection = set(first_ds.ids()).intersection(set(second_ds.ids()))
-        if len(ids_intersection) > 0:
+        idx_intersection = set.intersection(*[set(layer.ids()) for layer in sources])
+        if len(idx_intersection) > 0:
             raise RuntimeError('Datasets have same indices')
 
-        # TODO remove this trash
+        def branch_selector(dataset_index, inputs: Sequence[Node], params: Sequence):
+            for idx, ds in enumerate(sources):
+                if dataset_index in ds.ids():
+                    return [inputs[idx]], params[idx]
 
-        def index_selector(idx):
-            if idx in first_ds.ids():
-                return 0
-            return 1
-
-        self._layer = MuxLayer(index_selector, self.first_layer, self.second_layer)
+        self._layer = MuxLayer(branch_selector, *[s._layer for s in sources])
         self._methods = self._layer.get_output_node_methods()
