@@ -6,20 +6,20 @@ from typing import Union, Sequence
 
 import cloudpickle
 
-from .engine import GraphParameter
+from .engine import NodeHash
 from .serializers import NumpySerializer, ChainSerializer, Serializer
 from .utils import atomize
 
 
 # TODO redefine operators?
 class CacheStorage:
-    def contains(self, param: GraphParameter) -> bool:
+    def contains(self, param: NodeHash) -> bool:
         raise NotImplementedError
 
-    def set(self, param: GraphParameter, value):
+    def set(self, param: NodeHash, value):
         raise NotImplementedError
 
-    def get(self, param: GraphParameter):
+    def get(self, param: NodeHash):
         raise NotImplementedError
 
 
@@ -30,16 +30,16 @@ class MemoryStorage(CacheStorage):
         self._lock = RLock()
 
     @atomize()
-    def contains(self, param: GraphParameter) -> bool:
+    def contains(self, param: NodeHash) -> bool:
         return param.data in self._cache
 
     @atomize()
-    def set(self, param: GraphParameter, value):
+    def set(self, param: NodeHash, value):
         assert not self.contains(param)
         self._cache[param.data] = value
 
     @atomize()
-    def get(self, param: GraphParameter):
+    def get(self, param: NodeHash):
         return self._cache[param.data]
 
 
@@ -78,7 +78,7 @@ class DiskStorage(CacheStorage):
         with open(path / PARAMETER_FILENAME, 'wb') as file:
             cloudpickle.dump(parameter, file)
 
-    def _inspect_path(self, param: GraphParameter):
+    def _inspect_path(self, param: NodeHash):
         # TODO: how slow is this?
         pickled = cloudpickle.dumps(param.data)
         digest = blake2b(pickled, digest_size=32).hexdigest()
@@ -98,11 +98,11 @@ class DiskStorage(CacheStorage):
         return root / str(name), pickled
 
     @atomize()
-    def contains(self, param: GraphParameter) -> bool:
+    def contains(self, param: NodeHash) -> bool:
         return self._inspect_path(param)[0].exists()
 
     @atomize()
-    def set(self, param: GraphParameter, value):
+    def set(self, param: NodeHash, value):
         path, pickled = self._inspect_path(param)
         # TODO: customize permissions
         path.mkdir(parents=True)
@@ -116,5 +116,5 @@ class DiskStorage(CacheStorage):
             raise RuntimeError('An error occurred while creating the cache. Cleaning up.') from e
 
     @atomize()
-    def get(self, param: GraphParameter):
+    def get(self, param: NodeHash):
         return self.serializer.load(self._inspect_path(param)[0])

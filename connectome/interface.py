@@ -1,5 +1,5 @@
 from .edges import ValueEdge, FunctionEdge
-from .layers import PipelineLayer, CustomLayer
+from .layers import PipelineLayer, CustomLayer, MuxLayer
 from .engine import Node, Layer
 from .utils import extract_signature
 
@@ -20,7 +20,6 @@ class Chain(BaseBlock):
     def __init__(self, *layers: BaseBlock):
         super().__init__()
         self._layer = PipelineLayer(*(layer._layer for layer in layers))
-        # TODO replace by property
         self._methods = self._layer.get_output_node_methods()
 
 
@@ -36,24 +35,15 @@ def check_pattern(name: str):
 
 
 def is_argument(name: str, value):
-    if check_pattern(name) and not isinstance(value, staticmethod):
-        return True
-    else:
-        return False
+    return check_pattern(name) and not isinstance(value, staticmethod)
 
 
 def is_parameter(name: str, value):
-    if check_pattern(name) and isinstance(value, staticmethod):
-        return True
-    else:
-        return False
+    return check_pattern(name) and isinstance(value, staticmethod)
 
 
 def is_output(name: str, value):
-    if not check_pattern(name) and isinstance(value, staticmethod):
-        return True
-    else:
-        return False
+    return not check_pattern(name) and isinstance(value, staticmethod)
 
 
 def collect_nodes(scope):
@@ -99,6 +89,9 @@ class SourceBase(type):
 
         edges = []
         identifier = Node('id')
+        forbidden_methods = ['id']
+        ids_param_name = '_ids_arg'
+
         outputs, parameters, arguments = collect_nodes(namespace)
 
         def get_related_nodes(name: str):
@@ -127,13 +120,25 @@ class SourceBase(type):
                 input_nodes.extend([get_related_nodes(name) for name in func_input_names])
 
             elif is_output(attr_name, attr_value):
-                assert len(func_input_names) >= 1
+                # TODO replace by exceptions + add more information
+                if attr_name is 'ids':
+                    assert len(func_input_names) == 1, func_input_names[0] == ids_param_name
+                    input_nodes = [get_related_nodes(func_input_names[0])]
+                elif attr_name in forbidden_methods:
+                    raise RuntimeError(f"'{attr_name}' can not be used as name of method")
+                else:
+                    assert len(func_input_names) >= 1
+                    input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
+
                 out_node = outputs[attr_name]
-                input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
             else:
                 raise RuntimeError
 
             edges.append(FunctionEdge(attr_func, input_nodes, out_node))
+
+        # check for required nodes:
+        if 'ids' not in outputs:
+            raise RuntimeError("'ids' method is required")
 
         scope = {'__init__': make_init([identifier], outputs, edges, arguments)}
         return super().__new__(mcs, class_name, bases, scope)
@@ -148,7 +153,6 @@ class TransformBase(type):
                 else:
                     return arguments[name]
             if name not in inputs:
-                print(name)
                 inputs[name] = Node(name)
             return inputs[name]
 
@@ -182,9 +186,39 @@ class TransformBase(type):
         return super().__new__(mcs, class_name, bases, scope)
 
 
-class Source(BaseBlock, metaclass=SourceBase):
-    pass
-
-
 class Transform(BaseBlock, metaclass=TransformBase):
     pass
+
+
+# TODO add inheritance
+class Source(BaseBlock, metaclass=SourceBase):
+    _ids_arg = None
+
+    @staticmethod
+    def ids(_ids_arg):
+        return ()
+
+
+class Merge(BaseBlock):
+    def __init__(self, first_ds: Source, second_ds: Source):
+        super().__init__()
+
+        self.first_ds = first_ds
+        self.second_ds = second_ds
+
+        self.first_layer = first_ds._layer
+        self.second_layer = second_ds._layer
+
+        ids_intersection = set(first_ds.ids()).intersection(set(second_ds.ids()))
+        if len(ids_intersection) > 0:
+            raise RuntimeError('Datasets have same indices')
+
+        # TODO remove this trash
+
+        def index_selector(idx):
+            if idx in first_ds.ids():
+                return 0
+            return 1
+
+        self._layer = MuxLayer(index_selector, self.first_layer, self.second_layer)
+        self._methods = self._layer.get_output_node_methods()

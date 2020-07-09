@@ -1,16 +1,7 @@
 import inspect
+
 from collections import defaultdict
 from typing import Sequence, Any, Tuple
-
-
-class GraphParameter:
-    def __init__(self, parameters, prev_edge=None, is_root: bool = False):
-        self.prev_edge = prev_edge
-        self.data = parameters
-        self.is_root = is_root
-
-    def __hash__(self):
-        return hash(self.data)
 
 
 class Node:
@@ -24,28 +15,44 @@ class Node:
         return str(self)
 
 
+class NodeHash:
+    def __init__(self, *, prev_edge=None, data=None, children=None):
+        self.prev_edge = prev_edge
+        self.children = children
+        self._data = data
+
+    def __hash__(self):
+        return hash(self.data)
+
+    @classmethod
+    def from_hash_nodes(cls, hashes: Sequence, prev_edge=None):
+        for h in hashes:
+            assert isinstance(h, NodeHash)
+        return NodeHash(children=hashes, prev_edge=prev_edge)
+
+    @property
+    def data(self):
+        if self.children is None:
+            return self._data
+        else:
+            merged = (*[h.data for h in self.children],)
+            return merged
+
+
 class Edge:
     def __init__(self, inputs: Sequence[Node], output: Node):
         self._inputs = tuple(inputs)
         self.output = output
 
-    def evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
+    def evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         assert len(arguments) == len(essential_inputs)
         return self._evaluate(arguments, essential_inputs, parameter)
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
         raise NotImplementedError
 
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
+    def process_parameters(self, parameters: Sequence[NodeHash]):
         raise NotImplementedError
-
-    # TODO: move to GraphParameter
-    def _merge_parameters(self, parameters: Sequence):
-        for param in parameters:
-            assert isinstance(param, GraphParameter)
-
-        merged = (*[p.data for p in parameters],)
-        return GraphParameter(merged, prev_edge=self)
 
     @property
     def inputs(self):
@@ -59,13 +66,16 @@ class Edge:
 
 # TODO looks unnecessary
 class StateHolder:
-    def __init__(self, *, parents: dict, essential_inputs: list, required_outputs: list, entry_counts: defaultdict):
-        self.essential_inputs = essential_inputs
+    def __init__(self, *, parents: dict, inputs_map: dict, required_outputs: list, entry_counts: defaultdict,
+                 scope: inspect.BoundArguments):
+        self.scope = scope
+        self.inputs_map = inputs_map
         self.required_outputs = required_outputs
         self.entry_counts = entry_counts
         self.parents = parents
 
         self.edge_inputs = defaultdict(tuple)
+        self.used_input_names = defaultdict(list)
         self.edge_parameters = {}
         self.cache = {}
 
@@ -92,25 +102,20 @@ class Graph:
                 assert name in name_node_dict
                 required_outputs.append(name_node_dict[name])
 
-        parents = self.find_parents(required_outputs, self.edges)
-        entry_counts = self.count_entries(parents, required_outputs)
-        essential_inputs = [x for x in self.inputs if entry_counts[x] > 0]
+        inputs_map, parents, entry_counts = self.get_graph_structure(required_outputs)
 
         signature = inspect.Signature([
-            inspect.Parameter(node.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            for node in essential_inputs
+            inspect.Parameter(node_name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            for node_name in inputs_map.keys()
         ])
 
         def caller(*args, **kwargs):
-            # TODO remove it
+            scope = signature.bind(*args, **kwargs)
             state = StateHolder(parents=parents,
                                 required_outputs=required_outputs,
                                 entry_counts=entry_counts,
-                                essential_inputs=essential_inputs)
-
-            scope = signature.bind(*args, **kwargs)
-            for x in state.essential_inputs:
-                state.cache[x] = scope.arguments[x.name]
+                                inputs_map=inputs_map,
+                                scope=scope)
 
             self.set_parameters(state)
             result = tuple(self.render(node, state) for node in state.required_outputs)
@@ -123,6 +128,45 @@ class Graph:
 
         caller.__signature__ = signature
         return caller
+
+    def set_parameters(self, state: StateHolder):
+        for name in state.inputs_map:
+            for x in state.inputs_map[name]:
+                state.cache[x] = state.scope.arguments[x.name]
+
+        for node in state.required_outputs:
+            self._set_parameters_rec(state.parents[node], state)
+
+    # TODO check if essential input nodes have different names
+
+    def _set_parameters_rec(self, edge: Edge, state: StateHolder):
+        parameters = []
+        for node in edge.inputs:
+            name = node.name
+            if name in state.inputs_map and node in state.inputs_map[name]:
+                param = NodeHash(data=state.cache[node], children=None)
+            else:
+                parent_edge: Edge = state.parents[node]
+                param = self._set_parameters_rec(parent_edge, state)
+
+            parameters.append(param)
+
+        inputs, param = edge.process_parameters(parameters)
+
+        state.edge_inputs[edge] = inputs
+        state.edge_parameters[edge] = param
+        return param
+
+    def get_graph_structure(self, required_outputs):
+        parents = self.find_parents(required_outputs, self.edges)
+        entry_counts = self.count_entries(parents, required_outputs)
+
+        inputs_map = defaultdict(list)
+        for x in self.inputs:
+            if entry_counts[x] > 0:
+                inputs_map[x.name].append(x)
+
+        return inputs_map, parents, entry_counts
 
     def render(self, node: Node, state: StateHolder):
         if node not in state.cache:
@@ -141,33 +185,6 @@ class Graph:
         if state.entry_counts[node] == 0:
             state.cache.pop(node)
         return value
-
-    def update(self, new_outputs, new_edges: Sequence[Edge]):
-        for new_edge in new_edges:
-            assert new_edge not in self.edges
-
-        self.outputs = new_outputs
-        self.edges.extend(new_edges)
-
-    def set_parameters(self, state: StateHolder):
-        for node in state.required_outputs:
-            self._set_parameters_rec(state.parents[node], state)
-
-    def _set_parameters_rec(self, edge: Edge, state: StateHolder):
-        parameters = []
-        for node in edge.inputs:
-            if node not in state.essential_inputs:
-                parent_edge: Edge = state.parents[node]
-                param = self._set_parameters_rec(parent_edge, state)
-            else:
-                param = GraphParameter(state.cache[node], is_root=True)
-
-            parameters.append(param)
-
-        inputs, param = edge.process_parameters(parameters)
-        state.edge_inputs[edge] = inputs
-        state.edge_parameters[edge] = param
-        return param
 
     def count_entries(self, parents: dict, outputs: Sequence[Node]):
         entry_counts = defaultdict(int)
@@ -199,6 +216,13 @@ class Graph:
             assert len(incoming) == 1, incoming
             edge = parents[node] = incoming[0]
             self._find_parents_rec(edge.inputs, edges, parents)
+
+    def update(self, new_outputs, new_edges: Sequence[Edge]):
+        for new_edge in new_edges:
+            assert new_edge not in self.edges
+
+        self.outputs = new_outputs
+        self.edges.extend(new_edges)
 
 
 class Layer:

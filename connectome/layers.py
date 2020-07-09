@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .cache import DiskStorage, MemoryStorage
-from .edges import CacheEdge, IdentityEdge
+from .edges import CacheEdge, IdentityEdge, MuxEdge
 from .utils import count_duplicates
 from .engine import Graph, Layer, Node, Edge
 
@@ -162,3 +162,40 @@ class CustomLayer(FreeLayer):
         counts: dict = count_duplicates([x for x in collection])
         if any(v > 1 for k, v in counts.items()):
             raise RuntimeError('Input nodes must have different names')
+
+
+# TODO sequence of layers
+class MuxLayer(FreeLayer):
+    def __init__(self, func, first_layer: FreeLayer, second_layer: FreeLayer):
+        super().__init__(func, first_layer, second_layer)
+
+    def create_graph(self, func, first_layer: FreeLayer, second_layer: FreeLayer):
+        shared_output_names = set(
+            [o.name for o in first_layer.outputs]).intersection(
+            [o.name for o in second_layer.outputs])
+
+        assert len(first_layer.inputs) == len(second_layer.inputs) == 1
+        input_nodes = (first_layer.inputs[0], second_layer.inputs[0])
+
+        # TODO check for duplicated names
+        first_name_map = {o.name: o for o in first_layer.outputs if o.name in shared_output_names}
+        second_name_map = {o.name: o for o in second_layer.outputs if o.name in shared_output_names}
+
+        inputs = []
+        outputs = []
+        hub_edges = []
+
+        for name in shared_output_names:
+            output_node = Node(name)
+            first_node, second_node = first_name_map[name], second_name_map[name]
+            edge = MuxEdge(func, [first_node, second_node], output_node)
+
+            hub_edges.append(edge)
+            inputs.extend([first_node, second_node])
+            outputs.append(output_node)
+
+        all_edges = first_layer.edges + second_layer.edges + hub_edges
+        return Graph(input_nodes, outputs, all_edges)
+
+    def get_connection_params(self, *args, **kwargs):
+        raise RuntimeError("Can't attach Mux layer")

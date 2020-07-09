@@ -1,17 +1,16 @@
-from typing import Sequence, Tuple, Any
-
+from typing import Sequence, Tuple, Any, Callable
 from .cache import CacheStorage
-from .engine import GraphParameter, Node, Edge
+from .engine import NodeHash, Node, Edge
 
 
 class IdentityEdge(Edge):
     def __init__(self, incoming: Node, output: Node):
         super().__init__([incoming], output)
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return arguments[0]
 
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
+    def process_parameters(self, parameters: Sequence[NodeHash]):
         assert len(parameters) == 1
         return self.inputs, parameters[0]
 
@@ -21,7 +20,7 @@ class CacheEdge(Edge):
         super().__init__([incoming], output)
         self.storage = storage
 
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
+    def process_parameters(self, parameters: Sequence[NodeHash]):
         assert len(parameters) == 1
         parameter = parameters[0]
         if self.storage.contains(parameter):
@@ -31,7 +30,7 @@ class CacheEdge(Edge):
 
         return inputs, parameter
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         # no arguments means that the value is cached
         if not arguments:
             return self.storage.get(parameter)
@@ -47,11 +46,11 @@ class FunctionEdge(Edge):
         super().__init__(inputs, output)
         self.function = function
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return self.function(*arguments)
 
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
-        return self.inputs, self._merge_parameters([GraphParameter(self.function)] + list(parameters))
+    def process_parameters(self, parameters: Sequence[NodeHash]):
+        return self.inputs, NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(parameters), prev_edge=self)
 
 
 class ValueEdge(Edge):
@@ -59,9 +58,46 @@ class ValueEdge(Edge):
         super().__init__([], target)
         self.value = value
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: GraphParameter):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return self.value
 
-    def process_parameters(self, parameters: Sequence[GraphParameter]):
+    def process_parameters(self, parameters: Sequence[NodeHash]):
         assert not parameters
-        return self.inputs, GraphParameter(self.value)
+        return self.inputs, NodeHash(data=self.value, prev_edge=self)
+
+
+class MuxEdge(Edge):
+    def __init__(self, index_selector: Callable, inputs: Sequence[Node], output: Node):
+        super().__init__(inputs, output)
+        self.index_selector = index_selector
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
+        return arguments[0]
+
+    def process_parameters(self, parameters: Sequence[NodeHash]):
+        ids = self.find_node_by_name(parameters)
+        assert len(set(ids.values())) == 1
+        ds_index = list(ids.values())[0]
+
+        # TODO remove index dependency
+        idx = self.index_selector(ds_index)
+        return [self.inputs[idx]], parameters[idx]
+
+    @staticmethod
+    def find_node_by_name(parameters: Sequence[NodeHash], name='id'):
+        result = {}
+
+        # TODO generalize it somehow
+        def find_name_rec(params: Sequence[NodeHash]):
+            for param in params:
+                if param.prev_edge is not None:
+                    for i in param.prev_edge.inputs:
+                        if i.name == name:
+                            assert isinstance(param.prev_edge, FunctionEdge)
+                            result[param] = param.data[1]
+
+                if param.children is not None:
+                    find_name_rec(param.children)
+
+        find_name_rec(parameters)
+        return result
