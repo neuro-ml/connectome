@@ -168,11 +168,10 @@ class MuxLayer(FreeLayer):
     def __init__(self, branch_selector: Callable, *layers: FreeLayer):
         super().__init__(branch_selector, *layers)
 
-    def create_graph(self, branch_selector: Callable, *layers: FreeLayer):
-        # TODO remove this and check for essential inputs
-        assert len(set([len(layer.inputs) for layer in layers])) == 1
-        assert len(layers[0].inputs) == 1
+    def get_connection_params(self, *args, **kwargs):
+        raise RuntimeError("Mux layer can't be attached")
 
+    def create_graph(self, branch_selector: Callable, *layers: FreeLayer):
         input_nodes = []
         shared_output_names = set()
 
@@ -183,23 +182,34 @@ class MuxLayer(FreeLayer):
             assert any(v < 2 for _, v in count_duplicates(output_names).items())
             shared_output_names.update(output_names)
 
-        node_name_map = []
+        layers_outputs_map = []
+        layers_input_names = []
+
         for layer in layers:
-            node_name_map.append({o.name: o for o in layer.outputs if o.name in shared_output_names})
+            cur_outputs_map = {o.name: o for o in layer.outputs if o.name in shared_output_names}
+            cur_essential_inputs_map, _, _ = layer.graph.get_graph_structure(cur_outputs_map.values())
+            # check for essential inputs with the same name
+            assert any(v < 2 for _, v in count_duplicates(cur_essential_inputs_map.keys()).items())
+
+            layers_outputs_map.append(cur_outputs_map)
+            layers_input_names.append(cur_essential_inputs_map.keys())
+
+        # all layers must contain the same set of input nodes
+        input_names_union = set.union(*[set(names) for names in layers_input_names])
+        input_names_intersection = set.intersection(*[set(names) for names in layers_input_names])
+        assert input_names_intersection == input_names_union
 
         outputs = []
         mux_edges = []
         for name in shared_output_names:
             output_node = Node(name)
-            edge = MuxEdge(branch_selector, [layer_map[name] for layer_map in node_name_map], output_node)
+            edge = MuxEdge(branch_selector, [layer_map[name] for layer_map in layers_outputs_map], output_node)
             mux_edges.append(edge)
             outputs.append(output_node)
 
-        all_edges = mux_edges
+        all_edges = []
         for layer in layers:
             all_edges.extend(layer.edges)
 
+        all_edges.extend(mux_edges)
         return Graph(input_nodes, outputs, all_edges)
-
-    def get_connection_params(self, *args, **kwargs):
-        raise RuntimeError("Can't attach Mux layer")

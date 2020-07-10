@@ -68,14 +68,13 @@ class Edge:
 class StateHolder:
     def __init__(self, *, parents: dict, inputs_map: dict, required_outputs: list, entry_counts: defaultdict,
                  scope: inspect.BoundArguments):
-        self.scope = scope
+        self.parents = parents
         self.inputs_map = inputs_map
         self.required_outputs = required_outputs
         self.entry_counts = entry_counts
-        self.parents = parents
+        self.scope = scope
 
         self.edge_inputs = defaultdict(tuple)
-        self.used_input_names = defaultdict(list)
         self.edge_parameters = {}
         self.cache = {}
 
@@ -103,7 +102,6 @@ class Graph:
                 required_outputs.append(name_node_dict[name])
 
         inputs_map, parents, entry_counts = self.get_graph_structure(required_outputs)
-
         signature = inspect.Signature([
             inspect.Parameter(node_name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             for node_name in inputs_map.keys()

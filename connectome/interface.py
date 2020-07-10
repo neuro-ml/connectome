@@ -103,7 +103,6 @@ class SourceBase(type):
         edges = []
         identifier = Node('id')
         forbidden_methods = ['id']
-        ids_param_name = '_ids_arg'
 
         outputs, parameters, arguments, defaults = collect_nodes(namespace)
 
@@ -133,15 +132,14 @@ class SourceBase(type):
                 input_nodes.extend([get_related_nodes(name) for name in func_input_names])
 
             elif is_output(attr_name, attr_value):
-                # TODO replace by exceptions + add more information
-                if attr_name is 'ids':
-                    assert len(func_input_names) == 1, func_input_names[0] == ids_param_name
-                    input_nodes = [get_related_nodes(func_input_names[0])]
-                elif attr_name in forbidden_methods:
+                if attr_name in forbidden_methods:
                     raise RuntimeError(f"'{attr_name}' can not be used as name of method")
                 else:
                     assert len(func_input_names) >= 1
-                    input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
+                    if attr_name == 'ids':
+                        input_nodes = [get_related_nodes(n) for n in func_input_names]
+                    else:
+                        input_nodes = [identifier] + [get_related_nodes(n) for n in func_input_names[1:]]
 
                 out_node = outputs[attr_name]
             else:

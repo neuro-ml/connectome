@@ -75,14 +75,14 @@ class MuxEdge(Edge):
         return arguments[0]
 
     def process_parameters(self, parameters: Sequence[NodeHash]):
-        ids = self.find_node_by_name(parameters)
-        assert len(set(ids.values())) == 1
+        branch_codes = self.find_node_by_name(parameters)
 
-        ds_index = list(ids.values())[0]
-        return self.branch_selector(ds_index, self.inputs, parameters)
+        assert len(set(branch_codes.values())) == 1
+        branch_code = list(branch_codes.values())[0]
+        return self.branch_selector(branch_code, self.inputs, parameters)
 
     @staticmethod
-    def find_node_by_name(parameters: Sequence[NodeHash], name='id'):
+    def find_node_by_name(parameters: Sequence[NodeHash], target_name='id'):
         result = {}
 
         # TODO generalize it somehow
@@ -90,7 +90,7 @@ class MuxEdge(Edge):
             for param in params:
                 if param.prev_edge is not None:
                     for i in param.prev_edge.inputs:
-                        if i.name == name:
+                        if i.name == target_name:
                             assert isinstance(param.prev_edge, FunctionEdge)
                             result[param] = param.data[1]
 
