@@ -3,78 +3,97 @@ from typing import Sequence, Callable
 
 from .cache import DiskStorage, MemoryStorage
 from .edges import CacheEdge, IdentityEdge, MuxEdge
-from .utils import count_duplicates
+from .utils import count_duplicates, node_to_dict
 from .engine import Graph, Layer, Node, Edge
 
 
 class FreeLayer(Layer):
-    """
-    Layer that supports 'run' method
-    """
+    def __init__(self, use_backward):
+        self.use_backward = use_backward
 
-    def __init__(self, *args, **kwargs):
-        self.graph = self.create_graph(*args, **kwargs)
-        self._methods = self.create_output_node_methods(self.outputs)
+        self._edges = []
+        self._inputs = []
+        self._outputs = []
+        self._backwards = []
+
+        self.graph = Graph()
+        self._forward_methods = {}
 
     # TODO: do we need this?
-    def __call__(self, *args, node_names=None, **kwargs):
-        if len(self.inputs) == 0:
+    # TODO: We have a test where it is used)
+    def __call__(self, *args, **kwargs):
+        if len(self._inputs) == 0:
             raise RuntimeError('Layer must contain at least 1 input node')
 
-        caller = self.graph.compile_graph(node_names=node_names)
+        caller = self.graph.compile_graph(self._outputs, self._inputs, self._edges)
         return caller(*args, **kwargs)
 
-    def __getattr__(self, item):
-        # to stop recursion in bad cases
-        # TODO: maybe use get_method instead?
-        if '_methods' in self.__dict__ and item in self._methods:
-            return self._methods[item]
-
-        # TODO add more details
-        raise AttributeError
-
-    def get_connection_params(self, other_outputs: Sequence[Node]):
-        raise NotImplementedError
-
-    def create_graph(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def create_output_node_methods(self, nodes):
+    def create_methods(self, outputs, inputs, edges):
         methods = {}
-        for node in nodes:
-            methods[node.name] = self.graph.compile_graph(node_names=[node.name])
+        for output in outputs:
+            methods[output.name] = self.graph.compile_graph([output], inputs, edges)
         return methods
 
-    def get_output_node_methods(self):
-        return self._methods
+    def get_backward_params(self, other_backwards: Sequence[Node]):
+        self.check_for_duplicates([x.name for x in other_backwards])
 
-    @property
-    def inputs(self):
-        return self.graph.inputs
+        other_backwards = node_to_dict(other_backwards)
+        new_edges = []
 
-    @inputs.setter
-    def inputs(self, value):
-        self.graph.inputs = value
+        for i in self._backwards:
+            new_edges.append(IdentityEdge(other_backwards[i.name], i))
+        return self._backwards, new_edges
 
-    @property
-    def outputs(self):
-        return self.graph.outputs
+    def get_method(self, name):
+        return self._forward_methods[name]
 
-    @property
-    def edges(self):
-        return self.graph.edges
+    def get_all_methods(self):
+        return self._forward_methods
+
+    def get_backwards(self):
+        return self._backwards
+
+    def get_inputs(self):
+        return self._inputs
+
+    def get_outputs(self):
+        return self._outputs
+
+    def get_edges(self):
+        return self._edges
+
+    def get_forward_params(self, other_outputs: Sequence[Node]):
+        raise NotImplementedError
+
+    # TODO add error message
+    @staticmethod
+    def check_for_duplicates(collection):
+        counts: dict = count_duplicates([x for x in collection])
+        assert not any(v > 1 for k, v in counts.items())
 
 
 class AttachableLayer(Layer):
-    def get_connection_params(self, *args, **kwargs):
+    def get_forward_params(self, *args, **kwargs):
         raise NotImplementedError
 
-    def get_output_node_methods(self):
+    def get_all_methods(self):
         return {}
+
+    def get_backwards(self):
+        raise AttributeError
+
+    def get_inputs(self):
+        raise AttributeError
+
+    def get_outputs(self):
+        raise AttributeError
+
+    def get_edges(self):
+        raise AttributeError
 
 
 class MemoryCacheLayer(AttachableLayer):
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         this_outputs = [Node(o.name) for o in other_outputs]
         edges = [
             CacheEdge(other_output, this_output, storage=MemoryStorage())
@@ -88,7 +107,7 @@ class DiskCacheLayer(AttachableLayer):
         self.path = Path(storage)
         # TODO: pass a list of names
 
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         # TODO: make sure that the names are unique
         # TODO: use the same storage for all?
         this_outputs = [Node(o.name) for o in other_outputs]
@@ -100,27 +119,43 @@ class DiskCacheLayer(AttachableLayer):
 
 
 class PipelineLayer(FreeLayer):
-    def __init__(self, *layers: Layer):
+    def __init__(self, *layers: Layer, use_backward=False):
         assert len(layers) > 0
-        super().__init__(layers[0])
+        super().__init__(use_backward)
 
-        self.layers = layers
+        first_layer = layers[0]
+        self.layers = [first_layer]
+
+        self._edges = list(first_layer.get_edges())
+        self._inputs = list(first_layer.get_inputs())
+        self._outputs = list(first_layer.get_outputs())
+        # self._backwards = (first_layer.get_backwards())
+
+        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
+
         for layer in layers[1:]:
             self.add_layer(layer)
 
     def add_layer(self, layer):
-        new_outputs, new_edges = layer.get_connection_params(self.outputs)
+        new_outputs, new_edges = layer.get_forward_params(self._outputs)
+        self._outputs = new_outputs
 
-        self.graph.update(new_outputs, new_edges)
-        self._methods = self.create_output_node_methods(self.outputs)
+        for e in new_edges:
+            assert e not in self._edges
+            self._edges.append(e)
 
-    def create_graph(self, first_layer):
-        return Graph(first_layer.inputs, first_layer.outputs, first_layer.edges)
+        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
 
-    def get_connection_params(self, outputs: Sequence[Node]):
+        # if self.use_backward:
+        #   for layer in reversed(self.layers):
+        #       self._backwards = layer.get_backward_params(self._backwards)
+
+        self.layers.append(layer)
+
+    def get_forward_params(self, outputs: Sequence[Node]):
         all_edges = []
         for layer in self.layers:
-            outputs, edges = layer.get_connection_params(outputs)
+            outputs, edges = layer.get_forward_params(outputs)
             all_edges.extend(edges)
 
         return outputs, all_edges
@@ -139,46 +174,50 @@ class PipelineLayer(FreeLayer):
 
 
 class CustomLayer(FreeLayer):
-    def __init__(self, inputs, outputs, edges: Sequence[Edge]):
-        super().__init__(inputs, outputs, edges)
+    def __init__(self, inputs: Sequence[Node], outputs: Sequence[Node], edges: Sequence[Edge],
+                 use_backward: bool = False, backwards: Sequence[Node] = None):
+        super().__init__(use_backward=use_backward)
 
-    def create_graph(self, inputs, outputs, edges: Sequence[Edge]):
-        return Graph(inputs, outputs, edges)
+        self._edges = edges
+        self._inputs = inputs
+        self._outputs = outputs
+        self._backwards = backwards
 
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
+
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         self.check_for_duplicates([x.name for x in other_outputs])
+        outputs = node_to_dict(other_outputs)
 
-        outputs = {}
-        for o in other_outputs:
-            outputs[o.name] = o
+        forward_edges = []
+        for i in self._inputs:
+            forward_edges.append(IdentityEdge(outputs[i.name], i))
 
-        new_edges = []
-        for i in self.inputs:
-            new_edges.append(IdentityEdge(outputs[i.name], i))
-        return self.outputs, self.edges + new_edges
-
-    @staticmethod
-    def check_for_duplicates(collection):
-        counts: dict = count_duplicates([x for x in collection])
-        if any(v > 1 for k, v in counts.items()):
-            raise RuntimeError('Input nodes must have different names')
+        forward_edges.extend(self._edges)
+        return self._outputs, forward_edges
 
 
 class MuxLayer(FreeLayer):
     def __init__(self, branch_selector: Callable, *layers: FreeLayer):
-        super().__init__(branch_selector, *layers)
+        super().__init__(use_backward=False)
 
-    def get_connection_params(self, *args, **kwargs):
+        self._outputs, self._inputs, self._edges = self.create_graph(branch_selector, layers)
+        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
+
+    def get_forward_params(self, *args, **kwargs):
         raise RuntimeError("Mux layer can't be attached")
 
-    def create_graph(self, branch_selector: Callable, *layers: FreeLayer):
-        input_nodes = []
+    def get_backward_params(self, other_backwards: Sequence[Node]):
+        pass
+
+    def create_graph(self, branch_selector: Callable, layers: Sequence[FreeLayer]):
+        inputs = []
         shared_output_names = set()
 
         for layer in layers:
-            input_nodes.extend(layer.inputs)
+            inputs.extend(layer.get_inputs())
             # check for outputs with the same name
-            output_names = [o.name for o in layer.outputs]
+            output_names = [o.name for o in layer.get_outputs()]
             assert any(v < 2 for _, v in count_duplicates(output_names).items())
             shared_output_names.update(output_names)
 
@@ -186,8 +225,9 @@ class MuxLayer(FreeLayer):
         layers_input_names = []
 
         for layer in layers:
-            cur_outputs_map = {o.name: o for o in layer.outputs if o.name in shared_output_names}
-            cur_essential_inputs_map, _, _ = layer.graph.get_graph_structure(cur_outputs_map.values())
+            cur_outputs_map = {o.name: o for o in layer.get_outputs() if o.name in shared_output_names}
+            cur_essential_inputs_map, _, _ = self.graph.get_graph_structure(cur_outputs_map.values(),
+                                                                            layer.get_inputs(), layer.get_edges())
             # check for essential inputs with the same name
             assert any(v < 2 for _, v in count_duplicates(cur_essential_inputs_map.keys()).items())
 
@@ -209,7 +249,7 @@ class MuxLayer(FreeLayer):
 
         all_edges = []
         for layer in layers:
-            all_edges.extend(layer.edges)
+            all_edges.extend(layer.get_edges())
 
         all_edges.extend(mux_edges)
-        return Graph(input_nodes, outputs, all_edges)
+        return outputs, inputs, all_edges

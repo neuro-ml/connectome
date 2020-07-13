@@ -7,7 +7,7 @@ from .layers import AttachableLayer, FreeLayer
 
 
 class IdentityLayer(AttachableLayer):
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         this_outputs = [Node(o.name) for o in other_outputs]
         edges = [
             IdentityEdge(other_output, this_output)
@@ -21,7 +21,7 @@ class Lambda(AttachableLayer):
         self.required_node_names = required_node_names
         self.func = func
 
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         if self.required_node_names is None:
             required_node_names = [o.name for o in other_outputs]
         else:
@@ -45,7 +45,7 @@ class Reducer(AttachableLayer):
         self.output_name = output_name
         self.func = func
 
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         output = Node(self.output_name)
 
         def reduce_decorator(func):
@@ -76,5 +76,5 @@ class InputLayer(FreeLayer):
         edges = [IdentityEdge(i, o) for i, o in zip(inputs, outputs)]
         return Graph(inputs, outputs, edges)
 
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         return self.outputs, self.edges

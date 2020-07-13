@@ -33,9 +33,9 @@ def test_single():
         squared=lambda x: x ** 2,
     )
     assert block(3, 2) == (5, 1, 9)
-    assert block.sum(1, 2) == 3
-    assert block.sub(1, 2) == -1
-    assert block.squared(9) == 81
+    assert block.get_method('sum')(1, 2) == 3
+    assert block.get_method('sub')(1, 2) == -1
+    assert block.get_method('squared')(9) == 81
 
 
 def test_chain():
@@ -59,17 +59,17 @@ def test_chain():
         original=lambda sub, y: sub + y,
     )
     chain = PipelineLayer(first)
-    assert chain.sum(1, 2) == 3
-    assert chain.squared(4) == 16
+    assert chain.get_method('sum')(1, 2) == 3
+    assert chain.get_method('squared')(4) == 16
 
     chain = PipelineLayer(first, second)
-    assert chain.prod(7) == 7 ** 5
-    assert chain.min(3) == 9
-    assert chain.sub(5, 3) == 2
+    assert chain.get_method('prod')(7) == 7 ** 5
+    assert chain.get_method('min')(3) == 9
+    assert chain.get_method('sub')(5, 3) == 2
 
     chain = PipelineLayer(first, second, third)
-    assert chain.div(7) == 7 ** 4
-    assert chain.original(x=9, y=10) == 9
+    assert chain.get_method('div')(7) == 7 ** 4
+    assert chain.get_method('original')(x=9, y=10) == 9
 
 
 def test_cache():
@@ -80,18 +80,18 @@ def test_cache():
 
     count = 0
     first = funcs_layer(x=counter)
-    assert first.x(1) == 1
+    assert first.get_method('x')(1) == 1
     assert count == 1
 
     chain = PipelineLayer(first, MemoryCacheLayer())
-    assert chain.x(1) == 1
+    assert chain.get_method('x')(1) == 1
     assert count == 2
-    assert chain.x(1) == 1
+    assert chain.get_method('x')(1) == 1
     assert count == 2
 
-    assert chain.x(2) == 2
+    assert chain.get_method('x')(2) == 2
     assert count == 3
-    assert chain.x(2) == 2
+    assert chain.get_method('x')(2) == 2
     assert count == 3
 
 

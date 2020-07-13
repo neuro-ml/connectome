@@ -64,9 +64,9 @@ class Edge:
         self._inputs = value
 
 
-# TODO looks unnecessary
+# TODO it looks unnecessary
 class StateHolder:
-    def __init__(self, *, parents: dict, inputs_map: dict, required_outputs: list, entry_counts: defaultdict,
+    def __init__(self, *, parents: dict, inputs_map: dict, required_outputs: Sequence[Node], entry_counts: defaultdict,
                  scope: inspect.BoundArguments):
         self.parents = parents
         self.inputs_map = inputs_map
@@ -80,28 +80,9 @@ class StateHolder:
 
 
 class Graph:
-    def __init__(self, inputs: Sequence[Node], outputs: Sequence[Node], edges: Sequence[Edge]):
-        self.inputs = inputs
-        self.outputs = []
-        self.edges = []
+    def compile_graph(self, outputs: Sequence[Node], input_nodes: Sequence[Node], edges: Sequence[Node]):
+        inputs_map, parents, entry_counts = self.get_graph_structure(outputs, input_nodes, edges)
 
-        self.update(outputs, edges)
-
-    def compile_graph(self, node_names=None):
-        name_node_dict = {}
-        for o in self.outputs:
-            name_node_dict[o.name] = o
-
-        if node_names is None:
-            required_outputs = self.outputs
-        else:
-            required_outputs = []
-            for name in node_names:
-                # TODO replace by exception
-                assert name in name_node_dict
-                required_outputs.append(name_node_dict[name])
-
-        inputs_map, parents, entry_counts = self.get_graph_structure(required_outputs)
         signature = inspect.Signature([
             inspect.Parameter(node_name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             for node_name in inputs_map.keys()
@@ -110,7 +91,7 @@ class Graph:
         def caller(*args, **kwargs):
             scope = signature.bind(*args, **kwargs)
             state = StateHolder(parents=parents,
-                                required_outputs=required_outputs,
+                                required_outputs=outputs,
                                 entry_counts=entry_counts,
                                 inputs_map=inputs_map,
                                 scope=scope)
@@ -155,12 +136,13 @@ class Graph:
         state.edge_parameters[edge] = param
         return param
 
-    def get_graph_structure(self, required_outputs):
-        parents = self.find_parents(required_outputs, self.edges)
+    def get_graph_structure(self, required_outputs, required_inputs, edges):
+        parents = self.find_parents(required_outputs, required_inputs, edges)
         entry_counts = self.count_entries(parents, required_outputs)
 
         inputs_map = defaultdict(list)
-        for x in self.inputs:
+
+        for x in required_inputs:
             if entry_counts[x] > 0:
                 inputs_map[x.name].append(x)
 
@@ -195,15 +177,15 @@ class Graph:
             if node in parents:
                 self._count_entries_rec(nodes=parents[node].inputs, entry_counts=entry_counts, parents=parents)
 
-    def find_parents(self, nodes: Sequence[Node], edges: Sequence[Edge]):
+    def find_parents(self, output_nodes: Sequence[Node], input_nodes: Sequence[Node], edges: Sequence[Edge]):
         parents = {}
-        self._find_parents_rec(nodes, edges, parents)
+        self._find_parents_rec(output_nodes, input_nodes, edges, parents)
         return parents
 
-    def _find_parents_rec(self, nodes: Sequence[Node], edges: Sequence[Edge], parents: dict):
-        for node in nodes:
+    def _find_parents_rec(self, outputs: Sequence[Node], inputs: Sequence[Node], edges: Sequence[Edge], parents: dict):
+        for node in outputs:
             # input has no parents
-            if node in self.inputs:
+            if node in inputs:
                 continue
 
             incoming = []
@@ -213,19 +195,24 @@ class Graph:
 
             assert len(incoming) == 1, incoming
             edge = parents[node] = incoming[0]
-            self._find_parents_rec(edge.inputs, edges, parents)
-
-    def update(self, new_outputs, new_edges: Sequence[Edge]):
-        for new_edge in new_edges:
-            assert new_edge not in self.edges
-
-        self.outputs = new_outputs
-        self.edges.extend(new_edges)
+            self._find_parents_rec(edge.inputs, inputs, edges, parents)
 
 
 class Layer:
-    def get_connection_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
-    def get_output_node_methods(self):
+    def get_all_methods(self):
+        raise NotImplementedError
+
+    def get_backwards(self):
+        raise NotImplementedError
+
+    def get_inputs(self):
+        raise NotImplementedError
+
+    def get_outputs(self):
+        raise NotImplementedError
+
+    def get_edges(self):
         raise NotImplementedError

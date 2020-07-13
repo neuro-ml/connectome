@@ -24,14 +24,14 @@ class Chain(BaseBlock):
         super().__init__()
         self._layer = PipelineLayer(*(layer._layer for layer in layers))
         # TODO replace by property
-        self._methods = self._layer.get_output_node_methods()
+        self._methods = self._layer.get_all_methods()
 
 
 class FromLayer(BaseBlock):
     def __init__(self, layer):
         super().__init__()
         self._layer = layer
-        self._methods = self._layer.get_output_node_methods()
+        self._methods = self._layer.get_all_methods()
 
 
 def check_pattern(name: str):
@@ -90,7 +90,7 @@ def make_init(inputs, outputs, edges, arguments, defaults):
         _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
         _layer = CustomLayer(inputs, list(outputs.values()), _edges)
         self._layer = _layer
-        self._methods = _layer.get_output_node_methods()
+        self._methods = _layer.get_all_methods()
 
     __init__.__signature__ = signature
     return __init__
@@ -228,4 +228,4 @@ class Merge(BaseBlock):
                     return [inputs[idx]], params[idx]
 
         self._layer = MuxLayer(branch_selector, *[s._layer for s in sources])
-        self._methods = self._layer.get_output_node_methods()
+        self._methods = self._layer.get_all_methods()

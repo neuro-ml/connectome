@@ -36,3 +36,7 @@ def count_duplicates(sequence):
         counts[x] += 1
 
     return counts
+
+
+def node_to_dict(nodes):
+    return {node.name: node for node in nodes}
