@@ -38,5 +38,11 @@ def count_duplicates(sequence):
     return counts
 
 
+# TODO add error message
+def check_for_duplicates(collection):
+    counts: dict = count_duplicates([x for x in collection])
+    assert not any(v > 1 for k, v in counts.items())
+
+
 def node_to_dict(nodes):
     return {node.name: node for node in nodes}

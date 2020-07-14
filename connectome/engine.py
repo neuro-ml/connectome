@@ -75,6 +75,7 @@ class StateHolder:
         self.scope = scope
 
         self.edge_inputs = defaultdict(tuple)
+        self.used_inputs = {}
         self.edge_parameters = {}
         self.cache = {}
 
@@ -202,10 +203,16 @@ class Layer:
     def get_forward_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
-    def get_all_methods(self):
+    def get_backward_params(self, other_backwards: Sequence[Node]):
         raise NotImplementedError
 
-    def get_backwards(self):
+    def get_all_forward_methods(self):
+        raise NotImplementedError
+
+    def get_backward_inputs(self):
+        raise NotImplementedError
+
+    def get_backward_outputs(self):
         raise NotImplementedError
 
     def get_inputs(self):

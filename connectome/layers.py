@@ -3,30 +3,43 @@ from typing import Sequence, Callable
 
 from .cache import DiskStorage, MemoryStorage
 from .edges import CacheEdge, IdentityEdge, MuxEdge
-from .utils import count_duplicates, node_to_dict
+from .utils import count_duplicates, check_for_duplicates, node_to_dict
 from .engine import Graph, Layer, Node, Edge
 
 
-class FreeLayer(Layer):
-    def __init__(self, use_backward):
-        self.use_backward = use_backward
+# TODO come up with a good name
+class NodeInterface:
+    """
+    Keeps forward and backward methods.
+    """
 
+    def __init__(self, name, forward_method, backward_method=None):
+        # self.edges = None
+        self.name = name
+
+        self._forward_method = forward_method
+        self._backward_method = backward_method
+
+    @property
+    def forward(self):
+        return self._forward_method
+
+    @property
+    def backward(self):
+        return self._backward_method
+
+
+class FreeLayer(Layer):
+    def __init__(self):
         self._edges = []
         self._inputs = []
         self._outputs = []
-        self._backwards = []
+        self._backward_inputs = []
+        self._backward_outputs = []
 
         self.graph = Graph()
         self._forward_methods = {}
-
-    # TODO: do we need this?
-    # TODO: We have a test where it is used)
-    def __call__(self, *args, **kwargs):
-        if len(self._inputs) == 0:
-            raise RuntimeError('Layer must contain at least 1 input node')
-
-        caller = self.graph.compile_graph(self._outputs, self._inputs, self._edges)
-        return caller(*args, **kwargs)
+        self._backward_methods = {}
 
     def create_methods(self, outputs, inputs, edges):
         methods = {}
@@ -34,24 +47,67 @@ class FreeLayer(Layer):
             methods[output.name] = self.graph.compile_graph([output], inputs, edges)
         return methods
 
+    # just for now
     def get_backward_params(self, other_backwards: Sequence[Node]):
-        self.check_for_duplicates([x.name for x in other_backwards])
+        check_for_duplicates([x.name for x in other_backwards])
 
         other_backwards = node_to_dict(other_backwards)
         new_edges = []
 
-        for i in self._backwards:
+        for i in self._backward_inputs:
             new_edges.append(IdentityEdge(other_backwards[i.name], i))
-        return self._backwards, new_edges
+        return self._backward_outputs, new_edges
 
-    def get_method(self, name):
+    def set_graph_forwards_from_layer(self, layer: Layer):
+        self._edges = list(layer.get_edges())
+        self._inputs = list(layer.get_inputs())
+        self._outputs = list(layer.get_outputs())
+        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
+
+    def set_graph_backwards_from_layer(self, layer: Layer):
+        self._backward_inputs = list(layer.get_backward_inputs())
+        self._backward_outputs = list(layer.get_backward_outputs())
+
+        self.check_backwards()
+        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
+
+    def check_backwards(self):
+        backward_inputs_dict = node_to_dict(self._backward_inputs)
+        backward_outputs_dict = node_to_dict(self._backward_outputs)
+        outputs_dict = node_to_dict(self._outputs)
+
+        for name in backward_outputs_dict.keys():
+            assert name in backward_inputs_dict
+            assert name in outputs_dict
+
+    def get_forward_method(self, name):
         return self._forward_methods[name]
 
-    def get_all_methods(self):
+    def get_all_forward_methods(self):
         return self._forward_methods
 
-    def get_backwards(self):
-        return self._backwards
+    def get_backward_method(self, name):
+        return self._backward_methods[name]
+
+    def get_all_backward_methods(self):
+        return self._backward_methods
+
+    def get_node_interface(self, name):
+        # TODO replace by exception
+        # TODO refactor
+        assert name in self._forward_methods
+
+        if name in self._backward_methods:
+            return NodeInterface(name, self._forward_methods[name], self._backward_methods[name])
+
+        return NodeInterface(name, self._forward_methods[name])
+
+    # TODO replace by properties
+    def get_backward_inputs(self):
+        return self._backward_inputs
+
+    def get_backward_outputs(self):
+        return self._backward_outputs
 
     def get_inputs(self):
         return self._inputs
@@ -65,22 +121,23 @@ class FreeLayer(Layer):
     def get_forward_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
-    # TODO add error message
-    @staticmethod
-    def check_for_duplicates(collection):
-        counts: dict = count_duplicates([x for x in collection])
-        assert not any(v > 1 for k, v in counts.items())
-
 
 class AttachableLayer(Layer):
+    # TODO just for now
+    def get_backward_params(self, other_backwards: Sequence[Node]):
+        return other_backwards, []
+
     def get_forward_params(self, *args, **kwargs):
         raise NotImplementedError
 
-    def get_all_methods(self):
+    def get_all_forward_methods(self):
         return {}
 
-    def get_backwards(self):
-        raise AttributeError
+    def get_backward_inputs(self):
+        return []
+
+    def get_backward_outputs(self):
+        return []
 
     def get_inputs(self):
         raise AttributeError
@@ -119,38 +176,37 @@ class DiskCacheLayer(AttachableLayer):
 
 
 class PipelineLayer(FreeLayer):
-    def __init__(self, *layers: Layer, use_backward=False):
+    def __init__(self, *layers: Layer):
         assert len(layers) > 0
-        super().__init__(use_backward)
+        super().__init__()
 
-        first_layer = layers[0]
-        self.layers = [first_layer]
+        self.set_graph_forwards_from_layer(layers[0])
+        self.create_forward_connections(layers)
 
-        self._edges = list(first_layer.get_edges())
-        self._inputs = list(first_layer.get_inputs())
-        self._outputs = list(first_layer.get_outputs())
-        # self._backwards = (first_layer.get_backwards())
+        self.set_graph_backwards_from_layer(layers[-1])
+        self.create_backward_connections(layers[:-1])
+        self.layers = layers
 
-        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
-
+    def create_forward_connections(self, layers):
         for layer in layers[1:]:
-            self.add_layer(layer)
+            self._outputs, new_edges = layer.get_forward_params(self._outputs)
 
-    def add_layer(self, layer):
-        new_outputs, new_edges = layer.get_forward_params(self._outputs)
-        self._outputs = new_outputs
-
-        for e in new_edges:
-            assert e not in self._edges
-            self._edges.append(e)
+            for e in new_edges:
+                assert e not in self._edges
+                self._edges.append(e)
 
         self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
 
-        # if self.use_backward:
-        #   for layer in reversed(self.layers):
-        #       self._backwards = layer.get_backward_params(self._backwards)
+    def create_backward_connections(self, new_layers):
+        for layer in reversed(new_layers):
+            self._backward_outputs, new_edges = layer.get_backward_params(self._backward_outputs)
 
-        self.layers.append(layer)
+            for e in new_edges:
+                assert e not in self._edges
+                self._edges.append(e)
+
+        self.check_backwards()
+        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
 
     def get_forward_params(self, outputs: Sequence[Node]):
         all_edges = []
@@ -175,18 +231,29 @@ class PipelineLayer(FreeLayer):
 
 class CustomLayer(FreeLayer):
     def __init__(self, inputs: Sequence[Node], outputs: Sequence[Node], edges: Sequence[Edge],
-                 use_backward: bool = False, backwards: Sequence[Node] = None):
-        super().__init__(use_backward=use_backward)
+                 backward_inputs: Sequence[Node] = None, backward_outputs: Sequence[Node] = None):
+        super().__init__()
 
         self._edges = edges
         self._inputs = inputs
         self._outputs = outputs
-        self._backwards = backwards
-
         self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
 
+        if backward_inputs is None:
+            self._backward_inputs = []
+        else:
+            self._backward_inputs = backward_inputs
+
+        if backward_outputs is None:
+            self._backwards_outputs = []
+        else:
+            self._backward_outputs = backward_outputs
+
+        self.check_backwards()
+        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
+
     def get_forward_params(self, other_outputs: Sequence[Node]):
-        self.check_for_duplicates([x.name for x in other_outputs])
+        check_for_duplicates([x.name for x in other_outputs])
         outputs = node_to_dict(other_outputs)
 
         forward_edges = []
@@ -197,18 +264,16 @@ class CustomLayer(FreeLayer):
         return self._outputs, forward_edges
 
 
+# TODO add backwards
 class MuxLayer(FreeLayer):
     def __init__(self, branch_selector: Callable, *layers: FreeLayer):
-        super().__init__(use_backward=False)
+        super().__init__()
 
         self._outputs, self._inputs, self._edges = self.create_graph(branch_selector, layers)
         self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
 
     def get_forward_params(self, *args, **kwargs):
         raise RuntimeError("Mux layer can't be attached")
-
-    def get_backward_params(self, other_backwards: Sequence[Node]):
-        pass
 
     def create_graph(self, branch_selector: Callable, layers: Sequence[FreeLayer]):
         inputs = []
