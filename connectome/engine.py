@@ -15,6 +15,7 @@ class Node:
         return str(self)
 
 
+# TODO: hashes should also store a type
 class NodeHash:
     def __init__(self, *, prev_edge=None, data=None, children=None):
         self.prev_edge = prev_edge

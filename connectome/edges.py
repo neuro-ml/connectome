@@ -54,6 +54,10 @@ class FunctionEdge(Edge):
 
 
 class ValueEdge(Edge):
+    """
+    Used in interface to provide constant parameters.
+    """
+
     def __init__(self, target: Node, value):
         super().__init__([], target)
         self.value = value
@@ -64,6 +68,36 @@ class ValueEdge(Edge):
     def process_parameters(self, parameters: Sequence[NodeHash]):
         assert not parameters
         return self.inputs, NodeHash(data=self.value, prev_edge=self)
+
+
+class InitEdge(FunctionEdge):
+    """
+    Used to hold the ``self`` object created after calling __init__.
+    ``function`` is stored for hashing purposes.
+    """
+
+    def __init__(self, init, this, inputs: Sequence[Node], output: Node):
+        super().__init__(init, inputs, output)
+        self.this = this
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+        return self.this
+
+
+class AttrGetterEdge(Edge):
+    """
+    Used in conjunction with `SelfEdge` to provide constant parameters.
+    """
+
+    def __init__(self, name: str, incoming: Node, output: Node):
+        super().__init__([incoming], output)
+        self.name = name
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+        return getattr(arguments[0], self.name)
+
+    def process_parameters(self, parameters: Sequence[NodeHash]):
+        return NodeHash.from_hash_nodes([NodeHash(data=self.name), *parameters], prev_edge=self)
 
 
 class MuxEdge(Edge):
