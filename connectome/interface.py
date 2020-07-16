@@ -1,10 +1,11 @@
 import inspect
-from typing import Sequence
+from typing import Sequence, Callable
+from functools import wraps, partial
 
 from .edges import ValueEdge, FunctionEdge
 from .layers import PipelineLayer, CustomLayer, MuxLayer
-from .engine import Node, Layer
-from .utils import extract_signature
+from .engine import Node, Layer, Graph
+from .utils import MultiDict, DecoratorAdapter, extract_signature, node_to_dict
 
 
 class BaseBlock:
@@ -18,13 +19,35 @@ class BaseBlock:
     def __getattr__(self, name):
         return self._methods[name]
 
+    def wrap_predict(self, predict: Callable, forward_output_names, backward_input_name):
+        outputs = node_to_dict(self._layer.get_outputs())
+        backward_inputs = node_to_dict(self._layer.get_backward_inputs())
+        backward_outputs = node_to_dict(self._layer.get_backward_outputs())
+
+        cross_pipe_edge = FunctionEdge(predict, [outputs[name] for name in forward_output_names],
+                                       backward_inputs[backward_input_name])
+
+        caller = Graph().compile_graph([backward_outputs[backward_input_name]], self._layer.get_inputs(),
+                                       list(self._layer.get_edges()) + [cross_pipe_edge])
+
+        return caller
+
 
 class Chain(BaseBlock):
     def __init__(self, *layers: BaseBlock):
         super().__init__()
-        self._layer = PipelineLayer(*(layer._layer for layer in layers))
-        # TODO replace by property
+
+        self._layer: PipelineLayer = PipelineLayer(*(layer._layer for layer in layers))
         self._methods = self._layer.get_all_forward_methods()
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            # TODO exception
+            assert index.step in [1, None]
+
+            return FromLayer(self._layer.slice(index.start, index.stop))
+
+        return FromLayer(self._layer.slice(index.start, index.stop))
 
 
 class FromLayer(BaseBlock):
@@ -50,9 +73,14 @@ def is_output(name: str, value):
     return not check_pattern(name) and isinstance(value, staticmethod)
 
 
+def is_backward(name, value):
+    return not check_pattern(name) and isinstance(value, staticmethod) \
+           and isinstance(value.__func__, InverseDecoratorAdapter)
+
+
 def collect_nodes(scope):
     allowed_magic = {'__module__', '__qualname__'}
-    outputs, parameters, arguments, defaults = {}, {}, {}, {}
+    outputs, parameters, arguments, defaults, backwards = {}, {}, {}, {}, {}
 
     # gather nodes
     for name, value in scope.items():
@@ -76,7 +104,8 @@ def collect_nodes(scope):
     return outputs, parameters, arguments, defaults
 
 
-def make_init(inputs, outputs, edges, arguments, defaults):
+def make_init(inputs, outputs, edges, arguments, defaults, backward_inputs=None, backward_outputs=None):
+    # TODO is it correct?
     signature = inspect.Signature([
         inspect.Parameter(name.lstrip('_'), inspect.Parameter.KEYWORD_ONLY, default=value)
         for name, value in defaults.items()
@@ -88,7 +117,7 @@ def make_init(inputs, outputs, edges, arguments, defaults):
         kwargs = {k if check_pattern(k) else f'_{k}': v for k, v in kwargs.items()}
 
         _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
-        _layer = CustomLayer(inputs, list(outputs.values()), _edges)
+        _layer = CustomLayer(inputs, outputs, _edges, backward_inputs, backward_outputs)
         self._layer = _layer
         self._methods = _layer.get_all_forward_methods()
 
@@ -151,54 +180,138 @@ class SourceBase(type):
         if 'ids' not in outputs:
             raise RuntimeError("'ids' method is required")
 
-        scope = {'__init__': make_init([identifier], outputs, edges, arguments, defaults)}
+        scope = {'__init__': make_init([identifier], list(outputs.values()), edges, arguments, defaults)}
         return super().__new__(mcs, class_name, bases, scope)
 
 
+class InverseDecoratorAdapter(DecoratorAdapter):
+    name = 'inverse'
+
+
+def inverse(func: Callable):
+    return wraps(func)(InverseDecoratorAdapter(func))
+
+
+def process_methods(scope):
+    allowed_magic = {'__module__', '__qualname__'}
+
+    arguments = {}
+    parameters = {}
+    backward_methods = {}
+    forward_methods = {}
+
+    for name, value in scope.items():
+
+        if name.startswith('__'):
+            assert name in allowed_magic
+
+        elif is_parameter(name, value):
+            func = value.__func__
+            parameters[name] = (func, extract_signature(func))
+
+        elif is_argument(name, value):
+            arguments[name] = value
+
+        elif is_output(name, value):
+            func = value.__func__
+            forward_methods[name] = (func, extract_signature(func))
+
+        elif is_backward(name, value):
+            func = value.__func__
+            backward_methods[name] = (func, extract_signature(func))
+
+        elif isinstance(value, list):
+            value_forwards = []
+            value_backwards = []
+
+            for func in value:
+                if is_backward(name, func):
+                    value_backwards.append(func)
+                elif is_output(name, func):
+                    value_forwards.append(func)
+                else:
+                    raise RuntimeError
+
+            assert len(value_forwards) == 1
+            func = value_forwards[0].__func__
+            forward_methods[name] = (func, extract_signature(func))
+
+            if len(value_backwards) == 1:
+                func = value_backwards[0].__func__
+                backward_methods[name] = (func, extract_signature(func))
+            else:
+                # TODO replace by exception
+                assert len(value_backwards) == 0
+        else:
+            # TODO add more information
+            raise RuntimeError
+
+    # TODO check that there is no intersection in parameters and arguments names
+    return forward_methods, backward_methods, parameters, arguments
+
+
 class TransformBase(type):
+    @classmethod
+    def __prepare__(mcs, *args):
+        return MultiDict()
+
     def __new__(mcs, class_name, bases, namespace):
         scope = build_transform_namespace(namespace)
         return super().__new__(mcs, class_name, bases, scope)
 
 
 def build_transform_namespace(namespace):
-    def get_related_nodes(name: str):
-        if check_pattern(name):
-            if name in parameters:
-                return parameters[name]
-            else:
-                return arguments[name]
-        if name not in inputs:
-            inputs[name] = Node(name)
-        return inputs[name]
+    forward_methods, backward_methods, parameters, arguments = process_methods(namespace)
 
     edges = []
-    inputs = {}
-    outputs, parameters, arguments, defaults = collect_nodes(namespace)
+    argument_values = {key: value for key, value in arguments.items()}
 
-    # TODO: detect cycles, unused parameter-funcs
+    def get_nodes_name_map(dct: dict):
+        return {n: Node(n) for n, _ in dct.items()}
 
-    for attr_name, attr_value in namespace.items():
-        if attr_name not in parameters and attr_name not in outputs:
-            continue
+    argument_nodes = get_nodes_name_map(arguments)
+    parameter_nodes = get_nodes_name_map(parameters)
 
-        # TODO: check signature
-        attr_func = attr_value.__func__
-        names = extract_signature(attr_func)
+    # sequence must have equal length and equal set of names
+    inputs = get_nodes_name_map(forward_methods)
+    outputs = get_nodes_name_map(forward_methods)
 
-        if is_parameter(attr_name, attr_value):
-            output_node = parameters[attr_name]
-            input_nodes = list(map(get_related_nodes, names))
-        elif is_output(attr_name, attr_value):
-            output_node = outputs[attr_name]
-            # TODO: more flexibility
-            input_nodes = [get_related_nodes(attr_name)] + list(map(get_related_nodes, names[1:]))
+    backward_inputs = get_nodes_name_map(backward_methods)
+    backward_outputs = get_nodes_name_map(backward_methods)
+
+    def get_related_nodes(key: str, backward=False):
+        if check_pattern(key):
+            if key in parameter_nodes:
+                return parameter_nodes[key]
+            else:
+                return argument_nodes[key]
         else:
-            raise RuntimeError
+            if backward:
+                return backward_inputs[key]
+            else:
+                return inputs[key]
 
-        edges.append(FunctionEdge(attr_func, input_nodes, output_node))
+    for func_name, (func, attr_names) in forward_methods.items():
+        output_node = outputs[func_name]
+        cur_inputs = [get_related_nodes(func_name)] + list(map(get_related_nodes, attr_names[1:]))
+        edges.append(FunctionEdge(func, cur_inputs, output_node))
 
-    return {'__init__': make_init(list(inputs.values()), outputs, edges, arguments, defaults)}
+    for func_name, (func, attr_names) in parameters.items():
+        output_node = parameter_nodes[func_name]
+        cur_inputs = list(map(get_related_nodes, attr_names))
+        edges.append(FunctionEdge(func, cur_inputs, output_node))
+
+    for func_name, (func, attr_names) in backward_methods.items():
+        output_node = backward_outputs[func_name]
+        cur_inputs = [get_related_nodes(func_name, backward=True)]
+        cur_inputs += [get_related_nodes(n, backward=True) for n in attr_names[1:]]
+        edges.append(FunctionEdge(func, cur_inputs, output_node))
+
+    print(argument_nodes)
+    scope = {
+        '__init__': make_init(list(inputs.values()), list(outputs.values()), edges, argument_nodes,
+                              arguments, list(backward_inputs.values()), list(backward_outputs.values()))}
+    return scope
 
 
 class Transform(BaseBlock, metaclass=TransformBase):

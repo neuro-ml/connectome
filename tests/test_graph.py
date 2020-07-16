@@ -141,5 +141,33 @@ def test_backward():
     assert node_interface.backward(node_interface.forward(15)) == 15.0
 
 
+def test_slicing():
+    first = funcs_layer(
+        sum=lambda x, y: x + y,
+        sub=lambda x, y: x - y,
+        squared=lambda x: x ** 2,
+        cube=lambda x: x ** 3,
+        x=lambda x: x,
+        y=lambda y: y,
+    )
+    second = funcs_layer(
+        prod=lambda squared, cube: squared * cube,
+        min=lambda squared, cube: min(squared, cube),
+        x=lambda x: x,
+        y=lambda y: y,
+        sub=lambda sub: sub,
+    )
+    third = funcs_layer(
+        div=lambda prod, x: prod / x,
+        original=lambda sub, y: sub + y,
+    )
+
+    chain = PipelineLayer(first, second, third)
+
+    assert chain.slice(1, 3).get_forward_method('div')(squared=4, cube=3, x=3) == 4
+    assert chain.slice(0, 1).get_forward_method('sum')(x=2, y=10) == 12
+    assert chain.slice(0, 2).get_forward_method('min')(x=5) == 25
+
+
 def test_mux():
     pass

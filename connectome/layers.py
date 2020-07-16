@@ -39,7 +39,6 @@ class FreeLayer(Layer):
 
         self.graph = Graph()
         self._forward_methods = {}
-        self._backward_methods = {}
 
     def create_methods(self, outputs, inputs, edges):
         methods = {}
@@ -69,7 +68,7 @@ class FreeLayer(Layer):
         self._backward_outputs = list(layer.get_backward_outputs())
 
         self.check_backwards()
-        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
+        # self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
 
     def check_backwards(self):
         backward_inputs_dict = node_to_dict(self._backward_inputs)
@@ -87,18 +86,18 @@ class FreeLayer(Layer):
         return self._forward_methods
 
     def get_backward_method(self, name):
-        return self._backward_methods[name]
+        return self.get_all_backward_methods()[name]
 
     def get_all_backward_methods(self):
-        return self._backward_methods
+        return self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
 
     def get_node_interface(self, name):
         # TODO replace by exception
         # TODO refactor
         assert name in self._forward_methods
 
-        if name in self._backward_methods:
-            return NodeInterface(name, self._forward_methods[name], self._backward_methods[name])
+        if name in node_to_dict(self._backward_inputs):
+            return NodeInterface(name, self._forward_methods[name], self.get_backward_method(name))
 
         return NodeInterface(name, self._forward_methods[name])
 
@@ -206,7 +205,7 @@ class PipelineLayer(FreeLayer):
                 self._edges.append(e)
 
         self.check_backwards()
-        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
+        # self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
 
     def get_forward_params(self, outputs: Sequence[Node]):
         all_edges = []
@@ -221,7 +220,7 @@ class PipelineLayer(FreeLayer):
         return self.slice(index, index + 1)
 
     def slice(self, start, stop):
-        assert start >= 0, start > stop
+        assert start >= 0, start < stop
 
         if issubclass(type(self.layers[start]), FreeLayer):
             return PipelineLayer(*self.layers[start:stop])
@@ -250,7 +249,7 @@ class CustomLayer(FreeLayer):
             self._backward_outputs = backward_outputs
 
         self.check_backwards()
-        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
+        # self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
 
     def get_forward_params(self, other_outputs: Sequence[Node]):
         check_for_duplicates([x.name for x in other_outputs])

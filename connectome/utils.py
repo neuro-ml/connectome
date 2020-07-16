@@ -3,6 +3,32 @@ from functools import wraps
 from collections import defaultdict
 
 
+class MultiDict(dict):
+    def __setitem__(self, key, new_value):
+        if key in self:
+            cur_value = self[key]
+            if isinstance(cur_value, list):
+                cur_value.append(new_value)
+            else:
+                super().__setitem__(key, [cur_value, new_value])
+        else:
+            super().__setitem__(key, new_value)
+
+
+class DecoratorAdapter(object):
+    name = None
+
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, instance, owner):
+        self.instance = instance
+        return self.func
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+
 def extract_signature(func):
     res = []
     signature = inspect.signature(func)

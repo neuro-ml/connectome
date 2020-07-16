@@ -1,4 +1,5 @@
-from connectome.interface import Source, Transform, Chain, Merge
+import re
+from connectome.interface import Source, Transform, Chain, Merge, inverse
 
 
 class SomeDS(Source):
@@ -53,6 +54,26 @@ class Crop(Transform):
         return x + f' transformed {_size}'
 
     spacing = lungs = image
+
+    @staticmethod
+    @inverse
+    def image(x, _size):
+        return re.sub(f' transformed {_size}', '', x)
+
+
+class Zoom(Transform):
+    _spacing=None
+
+    @staticmethod
+    def image(x, _spacing):
+        return str(x + _spacing)
+
+    spacing = lungs = image
+
+    @staticmethod
+    @inverse
+    def image(x, _spacing):
+        return int(x) - _spacing
 
 
 class ParameterizedObj(Source):
@@ -111,3 +132,17 @@ def test_merge():
 
     assert pipeline.image(id=8) == f'image, 1: 8 transformed 11'
     assert pipeline.image(id='8') == f'second_ds_2_8 transformed 13'
+
+
+def test_backward():
+    pipeline = Chain(
+        SomeDS(_first_constant=2, _ids_arg=15),
+        Zoom(_spacing=123),
+        Crop()
+    )
+
+    identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
+    double = pipeline[1:].wrap_predict(lambda x: 2 * x, ['image'], 'image')
+
+    assert identity(100500) == 100500
+    assert double(100500) == 100623100500
