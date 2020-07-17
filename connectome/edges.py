@@ -84,7 +84,7 @@ class InitEdge(FunctionEdge):
         return self.this
 
 
-class AttrGetterEdge(Edge):
+class ItemGetterEdge(Edge):
     """
     Used in conjunction with `SelfEdge` to provide constant parameters.
     """
@@ -94,7 +94,7 @@ class AttrGetterEdge(Edge):
         self.name = name
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
-        return getattr(arguments[0], self.name)
+        return arguments[0][self.name]
 
     def process_parameters(self, parameters: Sequence[NodeHash]):
         return NodeHash.from_hash_nodes([NodeHash(data=self.name), *parameters], prev_edge=self)

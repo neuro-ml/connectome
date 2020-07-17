@@ -3,21 +3,17 @@ from typing import Sequence, Callable
 from functools import wraps, partial
 
 from .edges import ValueEdge, FunctionEdge
+from .factory import SourceFactory, TransformFactory
 from .layers import PipelineLayer, CustomLayer, MuxLayer
 from .engine import Node, Layer, Graph
 from .utils import MultiDict, DecoratorAdapter, extract_signature, node_to_dict
 
 
 class BaseBlock:
-    _methods: dict
     _layer: Layer
 
-    # just to silence some linters
-    def __init__(self, **kwargs):
-        pass
-
     def __getattr__(self, name):
-        return self._methods[name]
+        return self._layer.get_method(name)
 
     def wrap_predict(self, predict: Callable, forward_output_names, backward_input_name):
         outputs = node_to_dict(self._layer.get_outputs())
@@ -104,29 +100,22 @@ def collect_nodes(scope):
     return outputs, parameters, arguments, defaults
 
 
-def make_init(inputs, outputs, edges, arguments, defaults, backward_inputs=None, backward_outputs=None):
-    # TODO is it correct?
-    signature = inspect.Signature([
-        inspect.Parameter(name.lstrip('_'), inspect.Parameter.KEYWORD_ONLY, default=value)
-        for name, value in defaults.items()
-    ])
-
-    def __init__(self, **kwargs):
-        kwargs = {k.lstrip('_'): v for k, v in kwargs.items()}
-        kwargs = signature.bind(**kwargs).kwargs
-        kwargs = {k if check_pattern(k) else f'_{k}': v for k, v in kwargs.items()}
-
-        _edges = tuple(edges + [ValueEdge(arguments[k], v) for k, v in kwargs.items()])
-        _layer = CustomLayer(inputs, outputs, _edges, backward_inputs, backward_outputs)
-        self._layer = _layer
-        self._methods = _layer.get_all_forward_methods()
-
-    __init__.__signature__ = signature
-    return __init__
-
-
 class SourceBase(type):
     def __new__(mcs, class_name, bases, namespace):
+        def __init__(*args, **kwargs):
+            # TODO: error message
+            self, = args
+            # TODO: split into two objects: the first one holds the scope
+            #  the second one compiles the layer
+            factory = SourceFactory(namespace)
+            signature = factory.get_init_signature()
+            kwargs = signature.bind(**kwargs).kwargs
+            # TODO: should only build if not called from super
+            factory.build(kwargs)
+            self._layer = factory.get_layer()
+
+        return super().__new__(mcs, class_name, bases, {'__init__': __init__})
+
         # TODO: check magic, duplicates
 
         edges = []
@@ -180,8 +169,8 @@ class SourceBase(type):
         if 'ids' not in outputs:
             raise RuntimeError("'ids' method is required")
 
-        scope = {'__init__': make_init([identifier], list(outputs.values()), edges, arguments, defaults)}
-        return super().__new__(mcs, class_name, bases, scope)
+        namespace = {'__init__': make_init([identifier], list(outputs.values()), edges, arguments, defaults)}
+        return super().__new__(mcs, class_name, bases, namespace)
 
 
 class InverseDecoratorAdapter(DecoratorAdapter):
@@ -256,8 +245,22 @@ class TransformBase(type):
         return MultiDict()
 
     def __new__(mcs, class_name, bases, namespace):
-        scope = build_transform_namespace(namespace)
-        return super().__new__(mcs, class_name, bases, scope)
+        def __init__(*args, **kwargs):
+            # TODO: error message
+            self, = args
+            # TODO: split into two objects: the first one holds the scope
+            #  the second one compiles the layer
+            factory = TransformFactory(namespace)
+            signature = factory.get_init_signature()
+            kwargs = signature.bind(**kwargs).kwargs
+            factory.build(kwargs)
+            self._layer = factory.get_layer()
+
+        return super().__new__(mcs, class_name, bases, {'__init__': __init__})
+
+    # def __new__(mcs, class_name, bases, namespace):
+    #     scope = build_transform_namespace(namespace)
+    #     return super().__new__(mcs, class_name, bases, scope)
 
 
 def build_transform_namespace(namespace):

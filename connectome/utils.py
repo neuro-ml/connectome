@@ -3,6 +3,7 @@ from functools import wraps
 from collections import defaultdict
 
 
+# TODO: better keep all in lists, override `items` and `getitem`
 class MultiDict(dict):
     def __setitem__(self, key, new_value):
         if key in self:
