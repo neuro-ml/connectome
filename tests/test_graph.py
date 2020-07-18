@@ -68,6 +68,15 @@ def test_single(first_layer):
     assert first_layer.get_forward_method('squared')(9) == 81
 
 
+def test_duplicates():
+    double = funcs_layer(x=lambda x: 2 * x)
+    assert double.get_forward_method('x')(4) == 8
+    eight = PipelineLayer(
+        double, double, double,
+    )
+    assert eight.get_forward_method('x')(4) == 32
+
+
 def test_chain(first_layer, second_layer, third_layer):
     chain = PipelineLayer(first_layer)
 
