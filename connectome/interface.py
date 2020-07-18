@@ -4,12 +4,12 @@ from functools import wraps
 from connectome.engine.edges import FunctionEdge
 from .factory import SourceFactory, TransformFactory
 from .layers import PipelineLayer, MuxLayer
-from .old_engine import Node, Layer, Graph
+# from .engine import Node, Layer, Graph
 from .utils import MultiDict, DecoratorAdapter, extract_signature, node_to_dict
 
 
 class BaseBlock:
-    _layer: Layer
+    # _layer: Layer
 
     def __getattr__(self, name):
         return self._layer.get_method(name)

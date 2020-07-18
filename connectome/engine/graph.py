@@ -3,7 +3,7 @@ import inspect
 from collections import defaultdict
 from typing import Sequence, Union
 
-from .base import TreeNode
+from .base import TreeNode, NodeHash
 from .utils import ExpirationCache
 
 __all__ = 'compile_graph',
@@ -16,7 +16,7 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
 
     validate_graph(inputs, outputs)
     counts = count_entries(inputs, outputs)
-    inputs = [x for x in inputs if counts[x]]
+    inputs = [x for x in inputs if counts.get(x, 0)]
     inputs_map = {x.name: x for x in inputs}
 
     signature = inspect.Signature([
@@ -27,12 +27,14 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
     def caller(*args, **kwargs):
         scope = signature.bind(*args, **kwargs)
         # drop unnecessary branches
-        masks, hashes = prune(inputs_map, outputs, scope.arguments, counts)
-        # prepare
+        masks, hashes = prune(inputs_map, outputs, scope.arguments)
+        # prepare for render
+        hashes = ExpirationCache(counts.copy(), hashes)
         cache = ExpirationCache(count_entries(inputs, outputs, masks))
         for name, n in inputs_map.items():
             cache[n] = scope.arguments[name]
 
+        # render
         result = tuple(render(node, cache, masks, hashes) for node in outputs)
         if squeeze:
             result = result[0]
@@ -45,13 +47,16 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
 def validate_graph(inputs, outputs):
     def visitor(nodes):
         for node in nodes:
+            # input doesn't need parents
+            if node in inputs:
+                continue
+
             # no edges - must be an input
             if not node.edges:
                 assert node in inputs
 
-            assert len(node.edges) == 1
-            # input doesn't need parents
-            if node not in inputs:
+            else:
+                assert len(node.edges) == 1, len(node.edges)
                 for group in node.edges.values():
                     visitor(group)
 
@@ -69,7 +74,8 @@ def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks
         if masks is not None:
             group = [group[idx] for idx in masks[node]]
 
-        visitor(group)
+        for n in group:
+            visitor(n)
 
     entry_counts = defaultdict(int)
     for x in outputs:
@@ -77,10 +83,10 @@ def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks
     return dict(entry_counts)
 
 
-def prune(inputs_map, outputs, arguments, counts):
+def prune(inputs_map, outputs, arguments):
     def visitor(node: TreeNode):
         if node in cache:
-            return
+            return cache[node]
 
         (edge, group), = node.edges.items()
         result, mask = edge.process_hashes([visitor(x) for x in group])
@@ -89,9 +95,9 @@ def prune(inputs_map, outputs, arguments, counts):
         return result
 
     masks = {}
-    cache = ExpirationCache(counts.copy())
+    cache = {}
     for name, n in inputs_map.items():
-        cache[n] = arguments[name]
+        cache[n] = NodeHash(data=arguments[name])
     for n in outputs:
         visitor(n)
 
@@ -102,7 +108,8 @@ def render(node, cache, masks, hashes):
     if node not in cache:
         (edge, inputs), = node.edges.items()
         mask = masks[node]
-        inputs = [inputs[idx] for idx in masks]
+
+        inputs = [inputs[idx] for idx in mask]
         cache[node] = edge.evaluate([render(x, cache, masks, hashes) for x in inputs], mask, hashes[node])
 
     return cache[node]

@@ -3,7 +3,7 @@ from functools import wraps
 from typing import Callable
 
 from connectome.engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
-from .old_engine import Node
+from .engine import Node
 from .layers import CustomLayer
 from .utils import extract_signature
 

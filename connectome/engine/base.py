@@ -14,7 +14,7 @@ class NodeHash:
     @classmethod
     def from_hash_nodes(cls, hashes: Sequence, prev_edge=None):
         for h in hashes:
-            assert isinstance(h, NodeHash)
+            assert isinstance(h, NodeHash), type(h)
         return NodeHash(children=hashes, prev_edge=prev_edge)
 
     @property
@@ -59,9 +59,23 @@ class TreeNode:
         self.edges = edges
         self.name = name
 
+    def add(self, edge, inputs):
+        assert not self.edges, self.edges
+        self.edges[edge] = inputs
+
     @staticmethod
     def from_edges(edges: Sequence['BoundEdge']) -> dict:
-        pass
+        def update(*nodes):
+            for node in nodes:
+                if node not in mapping:
+                    mapping[node] = TreeNode(node.name, {})
+
+        mapping = {}
+        for edge in edges:
+            update(*edge.inputs, edge.output)
+            mapping[edge.output].add(edge.edge, [mapping[x] for x in edge.inputs])
+
+        return mapping
 
     @staticmethod
     def to_edges(nodes: Sequence['TreeNode']) -> dict:
@@ -75,7 +89,8 @@ class TreeNode:
 
 
 class Node:
-    name: str
+    def __init__(self, name: str):
+        self.name = name
 
 
 class BoundEdge(NamedTuple):

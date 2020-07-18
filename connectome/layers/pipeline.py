@@ -4,14 +4,14 @@ from .base import EdgesBag
 from ..engine.graph import compile_graph
 
 
-def add_identity(outputs, inputs):
-    for inp in inputs:
-        for out in outputs:
+def add_identity(inputs, outputs):
+    for out in outputs:
+        for inp in inputs:
             if inp.name == out.name:
                 yield BoundEdge(IdentityEdge(), [inp], out)
-                continue
-
-        raise ValueError
+                break
+        else:
+            raise ValueError(out.name)
 
 
 class PipelineLayer(EdgesBag):
@@ -34,7 +34,7 @@ class PipelineLayer(EdgesBag):
 
         super().__init__(inputs, outputs, edges)
 
-    def get_method(self, name):
+    def get_forward_method(self, name):
         return self._methods[name]
 
     #     self.set_graph_forwards_from_layer(layers[0])

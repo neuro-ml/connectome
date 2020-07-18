@@ -1,7 +1,7 @@
 class ExpirationCache:
-    def __init__(self, counts):
+    def __init__(self, counts, cache=None):
         self.counts = counts
-        self.cache = {}
+        self.cache = cache or {}
 
     def __setitem__(self, key, value):
         assert key in self.counts

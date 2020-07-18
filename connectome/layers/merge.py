@@ -2,7 +2,7 @@ from typing import Sequence, Callable
 
 from connectome.engine.edges import MuxEdge
 from ..utils import count_duplicates
-from ..old_engine import Node
+from ..engine import Node
 from .base import FreeLayer
 
 

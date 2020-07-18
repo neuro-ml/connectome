@@ -1,8 +1,8 @@
 import pytest
 
-from connectome.layers import CustomLayer, MemoryCacheLayer, PipelineLayer
-from connectome.edges import FunctionEdge, ValueEdge
-from connectome.engine import Node
+from connectome.layers import CustomLayer, PipelineLayer, EdgesBag, BoundEdge
+from connectome.engine.edges import FunctionEdge, ValueEdge
+from connectome.engine.base import Node
 from connectome.utils import extract_signature
 
 
@@ -22,10 +22,13 @@ def funcs_layer(**kwargs):
     inputs = {}
     outputs = {}
     edges = [
-        FunctionEdge(func, list(map(get_input, extract_signature(func))), get_output(name))
-        for name, func in kwargs.items()
+        BoundEdge(
+            FunctionEdge(func, len(extract_signature(func))),
+            list(map(get_input, extract_signature(func))),
+            get_output(name),
+        ) for name, func in kwargs.items()
     ]
-    return CustomLayer(list(inputs.values()), list(outputs.values()), edges)
+    return EdgesBag(list(inputs.values()), list(outputs.values()), edges)
 
 
 @pytest.fixture(scope='module')
