@@ -27,7 +27,7 @@ class NodeStorage(dict):
         return super().__getitem__(name)
 
     def __setitem__(self, key, value):
-        raise ValueEdge
+        raise ValueError
 
 
 class DecoratorAdapter(object):

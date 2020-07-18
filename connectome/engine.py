@@ -1,18 +1,7 @@
 import inspect
 
 from collections import defaultdict
-from typing import Sequence, Any, Tuple
-
-
-class Node:
-    def __init__(self, name: str):
-        self.name = name
-
-    def __str__(self):
-        return f'<Node: {self.name}>'
-
-    def __repr__(self):
-        return str(self)
+from typing import Sequence, Any, Tuple, Dict, Union
 
 
 # TODO: hashes should also store a type
@@ -40,29 +29,42 @@ class NodeHash:
             return merged
 
 
+NodesMask = Sequence[int]
+
+
 class Edge:
-    def __init__(self, inputs: Sequence[Node], output: Node):
-        self._inputs = tuple(inputs)
-        self.output = output
+    def __init__(self, arity):
+        self.arity = arity
 
-    def evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
-        assert len(arguments) == len(essential_inputs)
-        return self._evaluate(arguments, essential_inputs, parameter)
+    def evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        assert len(arguments) == len(mask)
+        return self._evaluate(arguments, mask, node_hash)
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
+    def process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        assert len(hashes) == self.arity
+        node_hash, mask = self._process_hashes(hashes)
+        assert all(0 <= x < self.arity for x in mask)
+        assert len(set(mask)) == len(mask)
+        return node_hash, mask
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         raise NotImplementedError
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         raise NotImplementedError
 
-    @property
-    def inputs(self):
-        return self._inputs
 
-    @inputs.setter
-    def inputs(self, value):
-        assert len(value) == len(self._inputs)
-        self._inputs = value
+class Node:
+    def __init__(self, name: str, edges: Dict[Edge, Sequence['Node']]):
+        # TODO: need an object that encapsulates this relation
+        self.edges = edges
+        self.name = name
+
+    def __str__(self):
+        return f'<Node: {self.name}>'
+
+    def __repr__(self):
+        return str(self)
 
 
 # TODO it looks unnecessary
@@ -81,42 +83,126 @@ class StateHolder:
         self.cache = {}
 
 
+class ExpirationCache:
+    def __init__(self, counts):
+        self.counts = counts
+        self.cache = {}
+
+    def __setitem__(self, key, value):
+        assert key in self.counts
+        assert key not in self.cache
+        self.cache[key] = value
+
+    def __getitem__(self, key):
+        assert self.counts[key]
+        value = self.cache[key]
+        self.counts[key] -= 1
+        if self.counts[key] <= 0:
+            del self.cache[key]
+            del self.counts[key]
+        return value
+
+    def __contains__(self, key):
+        return key in self.cache
+
+
 class Graph:
-    def compile_graph(self, outputs: Sequence[Node], input_nodes: Sequence[Node], edges: Sequence[Node]):
-        inputs_map, parents, entry_counts = self.get_graph_structure(outputs, input_nodes, edges)
+    def compile(self, inputs: Sequence[Node], outputs: Union[Node, Sequence[Node]]):
+        squeeze = isinstance(outputs, Node)
+        if squeeze:
+            outputs = [outputs]
+
+        self.validate_graph(inputs, outputs)
+        counts = self.count_entries(inputs, outputs)
+        inputs = [x for x in inputs if counts[x]]
+        inputs_map = {x.name: x for x in inputs}
 
         signature = inspect.Signature([
-            inspect.Parameter(node_name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            for node_name in inputs_map.keys()
+            inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            for name in inputs_map
         ])
 
         def caller(*args, **kwargs):
             scope = signature.bind(*args, **kwargs)
-            state = StateHolder(parents=parents,
-                                required_outputs=outputs,
-                                entry_counts=entry_counts,
-                                inputs_map=inputs_map,
-                                scope=scope)
+            # drop unnecessary branches
+            masks = self.get_masks(inputs_map, outputs, scope.arguments, counts)
+            # prepare
+            cache = ExpirationCache(self.count_entries(inputs, outputs, masks))
+            for name, n in inputs_map.items():
+                cache[n] = scope.arguments[name]
 
-            self.set_parameters(state)
-            result = tuple(self.render(node, state) for node in state.required_outputs)
-
-            # TODO: is this bad?
-            if len(result) == 1:
+            result = tuple(self.render(node, cache, masks) for node in outputs)
+            if squeeze:
                 result = result[0]
-
             return result
 
         caller.__signature__ = signature
         return caller
 
-    def set_parameters(self, state: StateHolder):
-        for name in state.inputs_map:
-            for x in state.inputs_map[name]:
-                state.cache[x] = state.scope.arguments[x.name]
+    @staticmethod
+    def validate_graph(inputs, outputs):
+        def visitor(nodes):
+            for node in nodes:
+                # no edges - must be an input
+                if not node.edges:
+                    assert node in inputs
 
-        for node in state.required_outputs:
-            self._set_parameters_rec(state.parents[node], state)
+                assert len(node.edges) == 1
+                # input doesn't need parents
+                if node not in inputs:
+                    for group in node.edges.values():
+                        visitor(group)
+
+        visitor(outputs)
+
+    @staticmethod
+    def count_entries(inputs: Sequence[Node], outputs: Sequence[Node], masks=None):
+        def visitor(node: Node):
+            entry_counts[node] += 1
+            # input doesn't need parents
+            if node in inputs:
+                return
+
+            group, = node.edges.values()
+            if masks is not None:
+                group = [group[idx] for idx in masks[node]]
+
+            visitor(group)
+
+        entry_counts = defaultdict(int)
+        for x in outputs:
+            visitor(x)
+        return dict(entry_counts)
+
+    @staticmethod
+    def get_masks(inputs_map, outputs, arguments, counts):
+        def visitor(node: Node):
+            if node in cache:
+                return
+
+            (edge, group), = node.edges.items()
+            result, mask = edge.process_hashes([visitor(x) for x in group])
+            masks[node] = mask
+            cache[node] = result
+            return result
+
+        masks = {}
+        cache = ExpirationCache(counts.copy())
+        for name, n in inputs_map.items():
+            cache[n] = arguments[name]
+        for n in outputs:
+            visitor(n)
+
+        return masks
+
+    def render(self, node, cache, masks, hashes):
+        if node not in cache:
+            (edge, inputs), = node.edges.items()
+            mask = masks[node]
+            inputs = [inputs[idx] for idx in masks]
+            cache[node] = edge.evaluate([self.render(x, cache, masks, hashes) for x in inputs], mask, hashes[node])
+
+        return cache[node]
 
     # TODO check if essential input nodes have different names
 
@@ -132,7 +218,7 @@ class Graph:
 
             parameters.append(param)
 
-        inputs, param = edge.process_parameters(parameters)
+        inputs, param = edge.process_hashes(parameters)
 
         state.edge_inputs[edge] = inputs
         state.edge_parameters[edge] = param
@@ -149,35 +235,6 @@ class Graph:
                 inputs_map[x.name].append(x)
 
         return inputs_map, parents, entry_counts
-
-    def render(self, node: Node, state: StateHolder):
-        if node not in state.cache:
-            edge: Edge = state.parents[node]
-            arguments = []
-            for x in state.edge_inputs[edge]:
-                arg = self.render(x, state)
-                arguments.append(arg)
-
-            state.cache[node] = edge.evaluate(arguments, state.edge_inputs[edge], state.edge_parameters[edge])
-
-        # extract
-        state.entry_counts[node] -= 1
-        value = state.cache[node]
-        # expire
-        if state.entry_counts[node] == 0:
-            state.cache.pop(node)
-        return value
-
-    def count_entries(self, parents: dict, outputs: Sequence[Node]):
-        entry_counts = defaultdict(int)
-        self._count_entries_rec(nodes=outputs, entry_counts=entry_counts, parents=parents)
-        return entry_counts
-
-    def _count_entries_rec(self, *, nodes: Sequence[Node], entry_counts: dict, parents: dict):
-        for node in nodes:
-            entry_counts[node] += 1
-            if node in parents:
-                self._count_entries_rec(nodes=parents[node].inputs, entry_counts=entry_counts, parents=parents)
 
     def find_parents(self, output_nodes: Sequence[Node], input_nodes: Sequence[Node], edges: Sequence[Edge]):
         parents = {}

@@ -10,7 +10,7 @@ class IdentityEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return arguments[0]
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def process_hashes(self, parameters: Sequence[NodeHash]):
         assert len(parameters) == 1
         return self.inputs, parameters[0]
 
@@ -20,7 +20,7 @@ class CacheEdge(Edge):
         super().__init__([incoming], output)
         self.storage = storage
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def process_hashes(self, parameters: Sequence[NodeHash]):
         assert len(parameters) == 1
         parameter = parameters[0]
         if self.storage.contains(parameter):
@@ -49,7 +49,7 @@ class FunctionEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return self.function(*arguments)
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def process_hashes(self, parameters: Sequence[NodeHash]):
         return self.inputs, NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(parameters), prev_edge=self)
 
 
@@ -65,7 +65,7 @@ class ValueEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return self.value
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def process_hashes(self, parameters: Sequence[NodeHash]):
         assert not parameters
         return self.inputs, NodeHash(data=self.value, prev_edge=self)
 
@@ -96,7 +96,7 @@ class ItemGetterEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
         return arguments[0][self.name]
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def process_hashes(self, parameters: Sequence[NodeHash]):
         return NodeHash.from_hash_nodes([NodeHash(data=self.name), *parameters], prev_edge=self)
 
 
@@ -108,7 +108,7 @@ class MuxEdge(Edge):
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
         return arguments[0]
 
-    def process_parameters(self, parameters: Sequence[NodeHash]):
+    def process_hashes(self, parameters: Sequence[NodeHash]):
         branch_codes = self.find_node_by_name(parameters)
 
         assert len(set(branch_codes.values())) == 1
