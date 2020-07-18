@@ -1,22 +1,36 @@
-from typing import Sequence, Tuple, Any, Callable
-from .cache import CacheStorage
-from .engine import NodeHash, Node, Edge
+from typing import Sequence, Tuple, Callable
+
+from connectome.cache import CacheStorage
+from connectome.engine import NodeHash, TreeNode, Edge, NodesMask
+
+
+class FunctionEdge(Edge):
+    def __init__(self, function: Callable, arity: int):
+        super().__init__(arity)
+        self.function = function
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        return self.function(*arguments)
+
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        return NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(hashes), prev_edge=self), None
 
 
 class IdentityEdge(Edge):
-    def __init__(self, incoming: Node, output: Node):
-        super().__init__([incoming], output)
+    def __init__(self):
+        super().__init__(1)
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return arguments[0]
 
-    def process_hashes(self, parameters: Sequence[NodeHash]):
-        assert len(parameters) == 1
-        return self.inputs, parameters[0]
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        return hashes[0], None
 
+
+# TODO: everything below is old
 
 class CacheEdge(Edge):
-    def __init__(self, incoming: Node, output: Node, *, storage: CacheStorage):
+    def __init__(self, incoming: TreeNode, output: TreeNode, *, storage: CacheStorage):
         super().__init__([incoming], output)
         self.storage = storage
 
@@ -30,7 +44,7 @@ class CacheEdge(Edge):
 
         return inputs, parameter
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
         # no arguments means that the value is cached
         if not arguments:
             return self.storage.get(parameter)
@@ -41,28 +55,16 @@ class CacheEdge(Edge):
         return value
 
 
-class FunctionEdge(Edge):
-    def __init__(self, function, inputs: Sequence[Node], output: Node):
-        super().__init__(inputs, output)
-        self.function = function
-
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
-        return self.function(*arguments)
-
-    def process_hashes(self, parameters: Sequence[NodeHash]):
-        return self.inputs, NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(parameters), prev_edge=self)
-
-
 class ValueEdge(Edge):
     """
     Used in interface to provide constant parameters.
     """
 
-    def __init__(self, target: Node, value):
+    def __init__(self, target: TreeNode, value):
         super().__init__([], target)
         self.value = value
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
         return self.value
 
     def process_hashes(self, parameters: Sequence[NodeHash]):
@@ -76,11 +78,11 @@ class InitEdge(FunctionEdge):
     ``function`` is stored for hashing purposes.
     """
 
-    def __init__(self, init, this, inputs: Sequence[Node], output: Node):
+    def __init__(self, init, this, inputs: Sequence[TreeNode], output: TreeNode):
         super().__init__(init, inputs, output)
         self.this = this
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
         return self.this
 
 
@@ -89,11 +91,11 @@ class ItemGetterEdge(Edge):
     Used in conjunction with `SelfEdge` to provide constant parameters.
     """
 
-    def __init__(self, name: str, incoming: Node, output: Node):
+    def __init__(self, name: str, incoming: TreeNode, output: TreeNode):
         super().__init__([incoming], output)
         self.name = name
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter: NodeHash):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
         return arguments[0][self.name]
 
     def process_hashes(self, parameters: Sequence[NodeHash]):
@@ -101,11 +103,11 @@ class ItemGetterEdge(Edge):
 
 
 class MuxEdge(Edge):
-    def __init__(self, branch_selector: Callable, inputs: Sequence[Node], output: Node):
+    def __init__(self, branch_selector: Callable, inputs: Sequence[TreeNode], output: TreeNode):
         super().__init__(inputs, output)
         self.branch_selector = branch_selector
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[Node], parameter):
+    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter):
         return arguments[0]
 
     def process_hashes(self, parameters: Sequence[NodeHash]):

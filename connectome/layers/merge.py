@@ -1,8 +1,8 @@
 from typing import Sequence, Callable
 
-from ..edges import MuxEdge
+from connectome.engine.edges import MuxEdge
 from ..utils import count_duplicates
-from ..engine import Node
+from ..old_engine import Node
 from .base import FreeLayer
 
 

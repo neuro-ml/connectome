@@ -1,11 +1,10 @@
-import inspect
 from typing import Sequence, Callable
-from functools import wraps, partial
+from functools import wraps
 
-from .edges import ValueEdge, FunctionEdge
+from connectome.engine.edges import FunctionEdge
 from .factory import SourceFactory, TransformFactory
-from .layers import PipelineLayer, CustomLayer, MuxLayer
-from .engine import Node, Layer, Graph
+from .layers import PipelineLayer, MuxLayer
+from .old_engine import Node, Layer, Graph
 from .utils import MultiDict, DecoratorAdapter, extract_signature, node_to_dict
 
 

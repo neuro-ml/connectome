@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import Sequence
 
 from ..cache import DiskStorage, MemoryStorage
-from ..edges import CacheEdge, IdentityEdge
-from ..engine import Node
+from connectome.engine.edges import CacheEdge, IdentityEdge
+from ..old_engine import Node
 from .base import AttachableLayer
 
 

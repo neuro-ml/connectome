@@ -6,7 +6,7 @@ from typing import Union, Sequence
 
 import cloudpickle
 
-from .engine import NodeHash
+from .old_engine import NodeHash
 from .serializers import NumpySerializer, ChainSerializer, Serializer
 from .utils import atomize
 

@@ -1,8 +1,8 @@
 from functools import reduce
 from typing import Sequence
 
-from .edges import IdentityEdge, FunctionEdge
-from .engine import Graph, Node
+from connectome.engine.edges import IdentityEdge, FunctionEdge
+from .old_engine import Graph, Node
 from .layers import AttachableLayer, FreeLayer
 
 

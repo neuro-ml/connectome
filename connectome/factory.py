@@ -1,9 +1,9 @@
 import inspect
 from functools import wraps
-from typing import Sequence, Callable
+from typing import Callable
 
-from .edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
-from .engine import Node
+from connectome.engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
+from .old_engine import Node
 from .layers import CustomLayer
 from .utils import extract_signature
 

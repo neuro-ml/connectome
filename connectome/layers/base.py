@@ -1,8 +1,44 @@
 from typing import Sequence
 
-from ..edges import IdentityEdge
+from connectome.engine.edges import IdentityEdge
 from ..utils import check_for_duplicates, node_to_dict
-from ..engine import Graph, Layer, Node, Edge
+from ..engine import TreeNode, Edge, BoundEdge, Node
+
+
+class Layer:
+    def get_forward_params(self, other_outputs: Sequence[Node]):
+        raise NotImplementedError
+
+    def get_backward_params(self, other_backwards: Sequence[Node]):
+        raise NotImplementedError
+
+    def get_all_forward_methods(self):
+        raise NotImplementedError
+
+    def get_backward_inputs(self):
+        raise NotImplementedError
+
+    def get_backward_outputs(self):
+        raise NotImplementedError
+
+    def get_inputs(self):
+        raise NotImplementedError
+
+    def get_outputs(self):
+        raise NotImplementedError
+
+    def get_edges(self):
+        raise NotImplementedError
+
+
+class EdgesBag(Layer):
+    def __init__(self, inputs: Sequence[Node], outputs: Sequence[Node], edges: Sequence[BoundEdge]):
+        # backward_inputs: Sequence[Node], backward_outputs: Sequence[Node]):
+        self.inputs = inputs
+        self.outputs = outputs
+        self.edges = edges
+        # self.backward_inputs = backward_inputs
+        # self.backward_outputs = backward_outputs
 
 
 # TODO come up with a good name
@@ -46,7 +82,7 @@ class FreeLayer(Layer):
         return methods
 
     # just for now
-    def get_backward_params(self, other_backwards: Sequence[Node]):
+    def get_backward_params(self, other_backwards: Sequence[TreeNode]):
         check_for_duplicates([x.name for x in other_backwards])
 
         other_backwards = node_to_dict(other_backwards)
@@ -116,13 +152,13 @@ class FreeLayer(Layer):
     def get_edges(self):
         return self._edges
 
-    def get_forward_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[TreeNode]):
         raise NotImplementedError
 
 
 class AttachableLayer(Layer):
     # TODO just for now
-    def get_backward_params(self, other_backwards: Sequence[Node]):
+    def get_backward_params(self, other_backwards: Sequence[TreeNode]):
         return other_backwards, []
 
     def get_forward_params(self, *args, **kwargs):
@@ -148,8 +184,8 @@ class AttachableLayer(Layer):
 
 
 class CustomLayer(FreeLayer):
-    def __init__(self, inputs: Sequence[Node], outputs: Sequence[Node], edges: Sequence[Edge],
-                 backward_inputs: Sequence[Node] = None, backward_outputs: Sequence[Node] = None):
+    def __init__(self, inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], edges: Sequence[Edge],
+                 backward_inputs: Sequence[TreeNode] = None, backward_outputs: Sequence[TreeNode] = None):
         super().__init__()
 
         self._edges = edges
@@ -170,7 +206,7 @@ class CustomLayer(FreeLayer):
         self.check_backwards()
         self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
 
-    def get_forward_params(self, other_outputs: Sequence[Node]):
+    def get_forward_params(self, other_outputs: Sequence[TreeNode]):
         check_for_duplicates([x.name for x in other_outputs])
         outputs = node_to_dict(other_outputs)
 
