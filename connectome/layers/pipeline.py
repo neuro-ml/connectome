@@ -1,41 +1,18 @@
 from ..engine.edges import IdentityEdge
 from ..engine import BoundEdge, TreeNode
-from .base import EdgesBag
+from .base import EdgesBag, Attachable
 from ..engine.graph import compile_graph
 
 
-def add_identity(inputs, outputs):
-    for out in outputs:
-        for inp in inputs:
-            if inp.name == out.name:
-                yield BoundEdge(IdentityEdge(), [inp], out)
-                break
-        else:
-            raise ValueError(out.name)
-
-
 class PipelineLayer(EdgesBag):
-    def __init__(self, head: EdgesBag, *tail: EdgesBag):
-        inputs = head.inputs
-        edges = list(head.edges)
-        outputs = head.outputs
+    def __init__(self, head: EdgesBag, *tail: Attachable):
+        inputs, outputs, edges = head.prepare()
+
         for layer in tail:
-            edges.extend(add_identity(outputs, layer.inputs))
-            edges.extend(layer.edges)
-            outputs = layer.outputs
-
-        mapping = TreeNode.from_edges(edges)
-        inputs = [mapping[x] for x in inputs]
-        outputs = [mapping[x] for x in outputs]
-
-        self._methods = {}
-        for node in outputs:
-            self._methods[node.name] = compile_graph(inputs, node)
+            outputs, _, new = layer.attach(outputs, [])
+            edges.extend(new)
 
         super().__init__(inputs, outputs, edges)
-
-    def get_forward_method(self, name):
-        return self._methods[name]
 
     #     self.set_graph_forwards_from_layer(layers[0])
     #     self.create_forward_connections(layers)

@@ -1,11 +1,90 @@
-from typing import Sequence
+from typing import Sequence, Tuple
 
 from connectome.engine.edges import IdentityEdge
+from ..engine.graph import compile_graph
 from ..utils import check_for_duplicates, node_to_dict
 from ..engine import TreeNode, Edge, BoundEdge, Node
 
+Nodes = Sequence[Node]
+Edges = Sequence[BoundEdge]
+
 
 class Layer:
+    pass
+
+
+class Attachable(Layer):
+    def attach(self, forwards: Nodes, backwards: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+        """
+        Returns new forward and backward nodes, as well as additional edges.
+        """
+        edges = []
+        forwards, new = self._attach_forward(forwards)
+        edges.extend(new)
+        backwards, new = self._attach_backward(forwards)
+        edges.extend(new)
+        return forwards, backwards, edges
+
+    def _attach_forward(self, nodes: Nodes) -> Tuple[Nodes, Edges]:
+        raise NotImplementedError
+
+    def _attach_backward(self, nodes: Nodes) -> Tuple[Nodes, Edges]:
+        raise NotImplementedError
+
+
+class EdgesBag(Attachable):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges):
+        # backward_inputs: Sequence[Node], backward_outputs: Sequence[Node]):
+        self.inputs = inputs
+        self.outputs = outputs
+        self.edges = edges
+        # self.backward_inputs = backward_inputs
+        # self.backward_outputs = backward_outputs
+
+        mapping = TreeNode.from_edges(edges)
+        inputs = [mapping[x] for x in inputs]
+        outputs = [mapping[x] for x in outputs]
+
+        self._methods = {}
+        for node in outputs:
+            self._methods[node.name] = compile_graph(inputs, node)
+
+    def get_forward_method(self, name):
+        return self._methods[name]
+
+    def prepare(self):
+        """
+        Prepares a copy of edges and nodes for connection.
+        """
+        mapping = {}
+
+        def update(nodes):
+            for node in nodes:
+                if node not in mapping:
+                    mapping[node] = Node(node.name)
+            return [mapping[x] for x in nodes]
+
+        edges = []
+        for edge in self.edges:
+            edges.append(BoundEdge(edge.edge, update(edge.inputs), update([edge.output])[0]))
+
+        return update(self.inputs), update(self.outputs), edges
+
+    def attach(self, forwards: Nodes, backwards: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+        # TODO: add backward support
+        assert not backwards
+        inputs, outputs, edges = self.prepare()
+
+        check_for_duplicates([x.name for x in forwards])
+        forwards = node_to_dict(forwards)
+
+        for i in inputs:
+            edges.append(BoundEdge(IdentityEdge(), [forwards[i.name]], i))
+
+        return outputs, [], edges
+
+
+class _Layer:
     def get_forward_params(self, other_outputs: Sequence[Node]):
         raise NotImplementedError
 
@@ -29,16 +108,6 @@ class Layer:
 
     def get_edges(self):
         raise NotImplementedError
-
-
-class EdgesBag(Layer):
-    def __init__(self, inputs: Sequence[Node], outputs: Sequence[Node], edges: Sequence[BoundEdge]):
-        # backward_inputs: Sequence[Node], backward_outputs: Sequence[Node]):
-        self.inputs = inputs
-        self.outputs = outputs
-        self.edges = edges
-        # self.backward_inputs = backward_inputs
-        # self.backward_outputs = backward_outputs
 
 
 # TODO come up with a good name
