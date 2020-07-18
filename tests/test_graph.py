@@ -1,3 +1,5 @@
+import pytest
+
 from connectome.layers import CustomLayer, MemoryCacheLayer, PipelineLayer
 from connectome.edges import FunctionEdge, ValueEdge
 from connectome.engine import Node
@@ -26,19 +28,9 @@ def funcs_layer(**kwargs):
     return CustomLayer(list(inputs.values()), list(outputs.values()), edges)
 
 
-def test_single():
-    block = funcs_layer(
-        sum=lambda x, y: x + y,
-        sub=lambda x, y: x - y,
-        squared=lambda x: x ** 2,
-    )
-    assert block.get_forward_method('sum')(1, 2) == 3
-    assert block.get_forward_method('sub')(1, 2) == -1
-    assert block.get_forward_method('squared')(9) == 81
-
-
-def test_chain():
-    first = funcs_layer(
+@pytest.fixture(scope='module')
+def first_layer():
+    return funcs_layer(
         sum=lambda x, y: x + y,
         sub=lambda x, y: x - y,
         squared=lambda x: x ** 2,
@@ -46,27 +38,45 @@ def test_chain():
         x=lambda x: x,
         y=lambda y: y,
     )
-    second = funcs_layer(
+
+
+@pytest.fixture(scope='module')
+def second_layer():
+    return funcs_layer(
         prod=lambda squared, cube: squared * cube,
         min=lambda squared, cube: min(squared, cube),
         x=lambda x: x,
         y=lambda y: y,
         sub=lambda sub: sub,
     )
-    third = funcs_layer(
+
+
+@pytest.fixture(scope='module')
+def third_layer():
+    return funcs_layer(
         div=lambda prod, x: prod / x,
         original=lambda sub, y: sub + y,
     )
-    chain = PipelineLayer(first)
+
+
+def test_single(first_layer):
+    assert first_layer.get_forward_method('sum')(1, 2) == 3
+    assert first_layer.get_forward_method('sub')(1, 2) == -1
+    assert first_layer.get_forward_method('squared')(9) == 81
+
+
+def test_chain(first_layer, second_layer, third_layer):
+    chain = PipelineLayer(first_layer)
+
     assert chain.get_forward_method('sum')(1, 2) == 3
     assert chain.get_forward_method('squared')(4) == 16
 
-    chain = PipelineLayer(first, second)
+    chain = PipelineLayer(first_layer, second_layer)
     assert chain.get_forward_method('prod')(7) == 7 ** 5
     assert chain.get_forward_method('min')(3) == 9
     assert chain.get_forward_method('sub')(5, 3) == 2
 
-    chain = PipelineLayer(first, second, third)
+    chain = PipelineLayer(first_layer, second_layer, third_layer)
     assert chain.get_forward_method('div')(7) == 7 ** 4
     assert chain.get_forward_method('original')(x=9, y=10) == 9
 
@@ -82,7 +92,7 @@ def test_cache():
     assert first.get_forward_method('x')(1) == 1
     assert count == 1
 
-    chain = PipelineLayer(first, MemoryCacheLayer())
+    chain = PipelineLayer(first, MemoryCacheLayer(names=['x']))
     assert chain.get_forward_method('x')(1) == 1
     assert count == 2
     assert chain.get_forward_method('x')(1) == 1
@@ -92,6 +102,14 @@ def test_cache():
     assert count == 3
     assert chain.get_forward_method('x')(2) == 2
     assert count == 3
+
+
+def test_slicing(first_layer, second_layer, third_layer):
+    chain = PipelineLayer(first_layer, second_layer, third_layer)
+
+    assert chain.slice(1, 3).get_forward_method('div')(squared=4, cube=3, x=3) == 4
+    assert chain.slice(0, 1).get_forward_method('sum')(x=2, y=10) == 12
+    assert chain.slice(0, 2).get_forward_method('min')(x=5) == 25
 
 
 def test_backward():
@@ -139,34 +157,6 @@ def test_backward():
 
     assert node_interface.forward(10) == '20'
     assert node_interface.backward(node_interface.forward(15)) == 15.0
-
-
-def test_slicing():
-    first = funcs_layer(
-        sum=lambda x, y: x + y,
-        sub=lambda x, y: x - y,
-        squared=lambda x: x ** 2,
-        cube=lambda x: x ** 3,
-        x=lambda x: x,
-        y=lambda y: y,
-    )
-    second = funcs_layer(
-        prod=lambda squared, cube: squared * cube,
-        min=lambda squared, cube: min(squared, cube),
-        x=lambda x: x,
-        y=lambda y: y,
-        sub=lambda sub: sub,
-    )
-    third = funcs_layer(
-        div=lambda prod, x: prod / x,
-        original=lambda sub, y: sub + y,
-    )
-
-    chain = PipelineLayer(first, second, third)
-
-    assert chain.slice(1, 3).get_forward_method('div')(squared=4, cube=3, x=3) == 4
-    assert chain.slice(0, 1).get_forward_method('sum')(x=2, y=10) == 12
-    assert chain.slice(0, 2).get_forward_method('min')(x=5) == 25
 
 
 def test_mux():
