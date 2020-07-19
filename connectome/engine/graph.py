@@ -29,11 +29,15 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
         # drop unnecessary branches
         masks, hashes = prune(inputs_map, outputs, scope.arguments)
         # prepare for render
-        hashes = ExpirationCache(counts.copy(), inputs, hashes)
-        cache = ExpirationCache(count_entries(inputs, outputs, masks), inputs)
+        local_counts = counts.copy()
+        hashes = ExpirationCache(local_counts, hashes)
+
+        local_counts = (count_entries(inputs, outputs, masks))
+        cache = ExpirationCache(local_counts)
 
         for name, n in inputs_map.items():
-            cache[n] = scope.arguments[name]
+            if n in local_counts:
+                cache[n] = scope.arguments[name]
 
         # render
         result = tuple(render(node, cache, masks, hashes) for node in outputs)

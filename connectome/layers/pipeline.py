@@ -3,24 +3,40 @@ from ..engine import BoundEdge, TreeNode
 from .base import EdgesBag, Attachable
 from ..engine.graph import compile_graph
 
+from connectome.utils import node_to_dict
+
 
 class PipelineLayer(EdgesBag):
     def __init__(self, head: EdgesBag, *tail: Attachable):
-        inputs, outputs, edges = head.prepare()
+        edges, node_map = head.prepare()
+
+        forward_inputs = self.update_map(head.inputs, node_map)
+        forward_outputs = self.update_map(head.outputs, node_map)
+
+        backward_inputs = self.update_map(head.backward_inputs, node_map)
+        backward_outputs = self.update_map(head.backward_outputs, node_map)
 
         for layer in tail:
-            outputs, _, new = layer.attach(outputs, [])
-            edges.extend(new)
+            forward_outputs, backward_inputs, new_edges = layer.attach(forward_outputs, backward_inputs)
+            for edge in new_edges:
+                assert edge not in edges
+                edges.append(edge)
 
-        super().__init__(inputs, outputs, edges)
+        self.layers = [head, *tail]
+        super().__init__(forward_inputs, forward_outputs, edges, backward_inputs, backward_outputs)
 
-    #     self.set_graph_forwards_from_layer(layers[0])
-    #     self.create_forward_connections(layers)
-    #
-    #     self.set_graph_backwards_from_layer(layers[-1])
-    #     self.create_backward_connections(layers[:-1])
-    #     self.layers = layers
-    #
+    def index(self, index):
+        return self.slice(index, index + 1)
+
+    def slice(self, start, stop):
+        assert start >= 0
+        assert start < stop
+
+        if issubclass(type(self.layers[start]), EdgesBag):
+            return PipelineLayer(*self.layers[start:stop])
+        else:
+            raise IndexError('First layer must be a EdgesBag')
+
     # def create_forward_connections(self, layers):
     #     for layer in layers[1:]:
     #         self._outputs, new_edges = layer.get_forward_params(self._outputs)

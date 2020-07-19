@@ -18,7 +18,7 @@ class FunctionEdge(Edge):
 
 class IdentityEdge(Edge):
     def __init__(self):
-        super().__init__(1)
+        super().__init__(arity=1)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return arguments[0]
@@ -27,21 +27,19 @@ class IdentityEdge(Edge):
         return hashes[0], None
 
 
-# TODO: everything below is old
-
 class CacheEdge(Edge):
     def __init__(self, storage: CacheStorage):
-        super().__init__(1)
+        super().__init__(arity=1)
         self.storage = storage
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         assert len(hashes) == 1
         if self.storage.contains(hashes[0]):
-            inputs = []
+            mask = []
         else:
-            inputs = None
+            mask = None
 
-        return hashes[0], inputs
+        return hashes[0], mask
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # no arguments means that the value is cached
@@ -59,16 +57,16 @@ class ValueEdge(Edge):
     Used in interface to provide constant parameters.
     """
 
-    def __init__(self, target: TreeNode, value):
-        super().__init__([], target)
+    def __init__(self, value):
+        super().__init__(arity=0)
         self.value = value
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
         return self.value
 
-    def process_hashes(self, parameters: Sequence[NodeHash]):
-        assert not parameters
-        return self.inputs, NodeHash(data=self.value, prev_edge=self)
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        assert not hashes
+        return NodeHash(data=self.value, prev_edge=self), None
 
 
 class InitEdge(FunctionEdge):

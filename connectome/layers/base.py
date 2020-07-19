@@ -14,74 +14,111 @@ class Layer:
 
 
 class Attachable(Layer):
-    def attach(self, forwards: Nodes, backwards: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+    def attach(self, forward_backwards: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
         """
         Returns new forward and backward nodes, as well as additional edges.
         """
-        edges = []
-        forwards, new = self._attach_forward(forwards)
+        edges, node_map = self.prepare()
+        forward_backwards, new = self._attach_forward(forward_backwards, node_map)
         edges.extend(new)
-        backwards, new = self._attach_backward(forwards)
+        backward_inputs, new = self._attach_backward(backward_inputs, node_map)
         edges.extend(new)
-        return forwards, backwards, edges
+        return forward_backwards, backward_inputs, edges
 
-    def _attach_forward(self, nodes: Nodes) -> Tuple[Nodes, Edges]:
+    def prepare(self) -> Tuple[list, dict]:
+        return [], {}
+
+    def _attach_forward(self, nodes: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
         raise NotImplementedError
 
-    def _attach_backward(self, nodes: Nodes) -> Tuple[Nodes, Edges]:
+    def _attach_backward(self, nodes: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
         raise NotImplementedError
 
 
 class EdgesBag(Attachable):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges):
-        # backward_inputs: Sequence[Node], backward_outputs: Sequence[Node]):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges, backward_inputs: Nodes = None,
+                 backward_outputs: Nodes = None):
+
         self.inputs = inputs
         self.outputs = outputs
         self.edges = edges
-        # self.backward_inputs = backward_inputs
-        # self.backward_outputs = backward_outputs
+
+        if backward_inputs is None:
+            backward_inputs = []
+
+        if backward_outputs is None:
+            backward_outputs = []
+
+        self.backward_inputs = backward_inputs
+        self.backward_outputs = backward_outputs
 
         mapping = TreeNode.from_edges(edges)
         inputs = [mapping[x] for x in inputs]
         outputs = [mapping[x] for x in outputs]
 
-        self._methods = {}
+        backward_inputs = [mapping[x] for x in backward_inputs]
+        backward_outputs = [mapping[x] for x in backward_outputs]
+
+        self._forward_methods = {}
         for node in outputs:
-            self._methods[node.name] = compile_graph(inputs, node)
+            self._forward_methods[node.name] = compile_graph(inputs, node)
+
+        self._backward_methods = {}
+        for node in backward_outputs:
+            self._backward_methods[node.name] = compile_graph(backward_inputs, node)
 
     def get_forward_method(self, name):
-        return self._methods[name]
+        return self._forward_methods[name]
+
+    def get_backward_method(self, name):
+        return self._backward_methods[name]
 
     def prepare(self):
         """
         Prepares a copy of edges and nodes for connection.
         """
-        mapping = {}
+        node_map = {}
 
-        def update(nodes):
-            for node in nodes:
-                if node not in mapping:
-                    mapping[node] = Node(node.name)
-            return [mapping[x] for x in nodes]
-
-        edges = []
+        edges_copy = []
         for edge in self.edges:
-            edges.append(BoundEdge(edge.edge, update(edge.inputs), update([edge.output])[0]))
+            inputs = self.update_map(edge.inputs, node_map)
+            output = self.update_map([edge.output], node_map)[0]
+            edges_copy.append(BoundEdge(edge.edge, inputs, output))
 
-        return update(self.inputs), update(self.outputs), edges
+        return edges_copy, node_map
 
-    def attach(self, forwards: Nodes, backwards: Nodes) -> Tuple[Nodes, Nodes, Edges]:
-        # TODO: add backward support
-        assert not backwards
-        inputs, outputs, edges = self.prepare()
-
+    # TODO remove duplicated code
+    def _attach_forward(self, forwards: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
         check_for_duplicates([x.name for x in forwards])
+
+        new_edges = []
+        inputs = self.update_map(self.inputs, node_map)
+        outputs = self.update_map(self.outputs, node_map)
+
         forwards = node_to_dict(forwards)
-
         for i in inputs:
-            edges.append(BoundEdge(IdentityEdge(), [forwards[i.name]], i))
+            new_edges.append(BoundEdge(IdentityEdge(), [forwards[i.name]], i))
+        return outputs, new_edges
 
-        return outputs, [], edges
+    # TODO remove duplicated code
+    def _attach_backward(self, backwards: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
+        check_for_duplicates([x.name for x in backwards])
+
+        new_edges = []
+        backward_inputs = self.update_map(self.backward_inputs, node_map)
+        backward_outputs = self.update_map(self.backward_outputs, node_map)
+
+        backwards = node_to_dict(backwards)
+        for o in backward_outputs:
+            new_edges.append(BoundEdge(IdentityEdge(), [o], backwards[o.name]))
+        return backward_inputs, new_edges
+
+    @staticmethod
+    def update_map(nodes, node_map):
+        for node in nodes:
+            if node not in node_map:
+                node_map[node] = Node(node.name)
+        return [node_map[x] for x in nodes]
 
 
 class _Layer:

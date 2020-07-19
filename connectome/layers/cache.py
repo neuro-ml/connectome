@@ -16,21 +16,21 @@ class CacheLayer(Attachable):
     def get_storage(self):
         raise NotImplementedError
 
-    def attach(self, forwards: Nodes, backwards: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+    def attach(self, forward_backwards: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
         # TODO: add backward support
-        assert not backwards
+        assert not backward_inputs
 
-        check_for_duplicates([x.name for x in forwards])
-        forwards = node_to_dict(forwards)
+        check_for_duplicates([x.name for x in forward_backwards])
+        forward_backwards = node_to_dict(forward_backwards)
 
         edges = []
-        outputs = [Node(name) for name in forwards]
+        outputs = [Node(name) for name in forward_backwards]
 
         for node in outputs:
             if node.name in self.cache_names:
-                edges.append(BoundEdge(CacheEdge(self.get_storage()), [forwards[node.name]], node))
+                edges.append(BoundEdge(CacheEdge(self.get_storage()), [forward_backwards[node.name]], node))
             else:
-                edges.append(BoundEdge(IdentityEdge(), [forwards[node.name]], node))
+                edges.append(BoundEdge(IdentityEdge(), [forward_backwards[node.name]], node))
 
         return outputs, [], edges
 

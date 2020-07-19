@@ -116,14 +116,6 @@ def test_cache():
     assert count == 3
 
 
-def test_slicing(first_layer, second_layer, third_layer):
-    chain = PipelineLayer(first_layer, second_layer, third_layer)
-
-    assert chain.slice(1, 3).get_forward_method('div')(squared=4, cube=3, x=3) == 4
-    assert chain.slice(0, 1).get_forward_method('sum')(x=2, y=10) == 12
-    assert chain.slice(0, 2).get_forward_method('min')(x=5) == 25
-
-
 def test_backward():
     forward_input = Node('image')
     forward_output = Node('image')
@@ -133,24 +125,22 @@ def test_backward():
 
     spacing = 2
     spacing_node = Node('spacing')
-    spacing_edge = ValueEdge(spacing_node, spacing)
+    spacing_edge = BoundEdge(ValueEdge(spacing), [], spacing_node)
 
-    forward_edge = FunctionEdge(lambda x, y: x * y, [forward_input, spacing_node], forward_output)
+    forward_edge = BoundEdge(FunctionEdge(lambda x, y: x * y, 2), [forward_input, spacing_node], forward_output)
 
-    backward_edge = FunctionEdge(lambda x, y: x / y, [backward_input, spacing_node], backward_output)
+    backward_edge = BoundEdge(FunctionEdge(lambda x, y: x / y, 2), [backward_input, spacing_node], backward_output)
 
-    first = CustomLayer([forward_input], [forward_output], [spacing_edge, forward_edge, backward_edge],
-                        [backward_input], [backward_output])
+    first = EdgesBag([forward_input], [forward_output], [spacing_edge, forward_edge, backward_edge],
+                     [backward_input], [backward_output])
 
-    node_interface = first.get_node_interface('image')
-    assert node_interface.backward(10) == 5
-    assert node_interface.backward(node_interface.forward(15)) == 15
+    assert first.get_backward_method('image')(10) == 5
+    assert first.get_backward_method('image')(first.get_forward_method('image')(15)) == 15
 
     first = PipelineLayer(first)
 
-    node_interface = first.get_node_interface('image')
-    assert node_interface.backward(10) == 5
-    assert node_interface.backward(node_interface.forward(15)) == 15
+    assert first.get_backward_method('image')(10) == 5
+    assert first.get_backward_method('image')(first.get_forward_method('image')(15)) == 15
 
     forward_input = Node('image')
     forward_output = Node('image')
@@ -158,17 +148,23 @@ def test_backward():
     backward_input = Node('image')
     backward_output = Node('image')
 
-    forward_edge = FunctionEdge(lambda x: str(x), [forward_input], forward_output)
-    backward_edge = FunctionEdge(lambda x: int(x), [backward_input], backward_output)
+    forward_edge = BoundEdge(FunctionEdge(lambda x: str(x), 1), [forward_input], forward_output)
+    backward_edge = BoundEdge(FunctionEdge(lambda x: int(x), 1), [backward_input], backward_output)
 
-    second = CustomLayer([forward_input], [forward_output], [forward_edge, backward_edge],
-                         [backward_input], [backward_output])
+    second = EdgesBag([forward_input], [forward_output], [forward_edge, backward_edge],
+                      [backward_input], [backward_output])
 
     chain = PipelineLayer(first, second)
-    node_interface = chain.get_node_interface('image')
+    assert chain.get_forward_method('image')(10) == '20'
+    assert chain.get_backward_method('image')(chain.get_forward_method('image')(15)) == 15.0
 
-    assert node_interface.forward(10) == '20'
-    assert node_interface.backward(node_interface.forward(15)) == 15.0
+
+def test_slicing(first_layer, second_layer, third_layer):
+    chain = PipelineLayer(first_layer, second_layer, third_layer)
+
+    assert chain.slice(1, 3).get_forward_method('div')(squared=4, cube=3, x=3) == 4
+    assert chain.slice(0, 1).get_forward_method('sum')(x=2, y=10) == 12
+    assert chain.slice(0, 2).get_forward_method('min')(x=5) == 25
 
 
 def test_mux():
