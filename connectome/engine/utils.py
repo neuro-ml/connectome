@@ -1,10 +1,13 @@
 class ExpirationCache:
-    def __init__(self, counts, cache=None):
+    def __init__(self, counts, inputs, cache=None):
         self.counts = counts
+        self.inputs = inputs
         self.cache = cache or {}
 
     def __setitem__(self, key, value):
-        assert key in self.counts
+        if key not in self.inputs:
+            assert key in self.counts
+
         assert key not in self.cache
         self.cache[key] = value
 

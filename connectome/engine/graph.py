@@ -29,8 +29,9 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
         # drop unnecessary branches
         masks, hashes = prune(inputs_map, outputs, scope.arguments)
         # prepare for render
-        hashes = ExpirationCache(counts.copy(), hashes)
-        cache = ExpirationCache(count_entries(inputs, outputs, masks))
+        hashes = ExpirationCache(counts.copy(), inputs, hashes)
+        cache = ExpirationCache(count_entries(inputs, outputs, masks), inputs)
+
         for name, n in inputs_map.items():
             cache[n] = scope.arguments[name]
 

@@ -30,28 +30,27 @@ class IdentityEdge(Edge):
 # TODO: everything below is old
 
 class CacheEdge(Edge):
-    def __init__(self, incoming: TreeNode, output: TreeNode, *, storage: CacheStorage):
-        super().__init__([incoming], output)
+    def __init__(self, storage: CacheStorage):
+        super().__init__(1)
         self.storage = storage
 
-    def process_hashes(self, parameters: Sequence[NodeHash]):
-        assert len(parameters) == 1
-        parameter = parameters[0]
-        if self.storage.contains(parameter):
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        assert len(hashes) == 1
+        if self.storage.contains(hashes[0]):
             inputs = []
         else:
-            inputs = self.inputs
+            inputs = None
 
-        return inputs, parameter
+        return hashes[0], inputs
 
-    def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # no arguments means that the value is cached
         if not arguments:
-            return self.storage.get(parameter)
+            return self.storage.get(node_hash)
 
         assert len(arguments) == 1
         value = arguments[0]
-        self.storage.set(parameter, value)
+        self.storage.set(node_hash, value)
         return value
 
 

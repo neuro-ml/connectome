@@ -1,6 +1,6 @@
 import pytest
 
-from connectome.layers import CustomLayer, PipelineLayer, EdgesBag, BoundEdge
+from connectome.layers import CustomLayer, PipelineLayer, EdgesBag, BoundEdge, MemoryCacheLayer
 from connectome.engine.edges import FunctionEdge, ValueEdge
 from connectome.engine.base import Node
 from connectome.utils import extract_signature
@@ -33,14 +33,14 @@ def funcs_layer(**kwargs):
 
 @pytest.fixture(scope='module')
 def first_layer():
-    return funcs_layer(
+    return PipelineLayer(funcs_layer(
         sum=lambda x, y: x + y,
         sub=lambda x, y: x - y,
         squared=lambda x: x ** 2,
         cube=lambda x: x ** 3,
         x=lambda x: x,
         y=lambda y: y,
-    )
+    ))
 
 
 @pytest.fixture(scope='module')

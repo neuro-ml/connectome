@@ -1,30 +1,38 @@
 from pathlib import Path
 from typing import Sequence
 
-from ..cache import DiskStorage, MemoryStorage
+from connectome.engine.base import BoundEdge, Node
 from connectome.engine.edges import CacheEdge, IdentityEdge
-from ..old_engine import Node
-from .base import AttachableLayer
+from connectome.utils import check_for_duplicates, node_to_dict
+
+from .base import Attachable, Nodes, Tuple, Edges
+from ..cache import DiskStorage, MemoryStorage
 
 
-class CacheLayer(AttachableLayer):
+class CacheLayer(Attachable):
     def __init__(self, names):
-        self.names = names
+        self.cache_names = names
 
     def get_storage(self):
         raise NotImplementedError
 
-    def get_forward_params(self, other_outputs: Sequence[Node]):
-        this_outputs = [Node(o.name) for o in other_outputs]
-        edges = []
-        for other_output, this_output in zip(other_outputs, this_outputs):
-            if self.names is None or other_output.name in self.names:
-                edge = CacheEdge(other_output, this_output, storage=self.get_storage())
-            else:
-                edge = IdentityEdge(other_output, this_output)
+    def attach(self, forwards: Nodes, backwards: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+        # TODO: add backward support
+        assert not backwards
 
-            edges.append(edge)
-        return this_outputs, edges
+        check_for_duplicates([x.name for x in forwards])
+        forwards = node_to_dict(forwards)
+
+        edges = []
+        outputs = [Node(name) for name in forwards]
+
+        for node in outputs:
+            if node.name in self.cache_names:
+                edges.append(BoundEdge(CacheEdge(self.get_storage()), [forwards[node.name]], node))
+            else:
+                edges.append(BoundEdge(IdentityEdge(), [forwards[node.name]], node))
+
+        return outputs, [], edges
 
     def get_backward_params(self, other_inputs: Sequence[Node]):
         this_inputs = [Node(o.name) for o in other_inputs]
