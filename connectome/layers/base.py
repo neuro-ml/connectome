@@ -1,8 +1,8 @@
-from typing import Sequence, Tuple
+from typing import Sequence, Callable, Tuple
 
-from connectome.engine.edges import IdentityEdge
+from connectome.engine.edges import IdentityEdge, FunctionEdge
 from ..engine.graph import compile_graph
-from ..utils import check_for_duplicates, node_to_dict
+from ..utils import check_for_duplicates, extract_signature, node_to_dict
 from ..engine import TreeNode, Edge, BoundEdge, Node
 
 Nodes = Sequence[Node]
@@ -14,16 +14,17 @@ class Layer:
 
 
 class Attachable(Layer):
-    def attach(self, forward_backwards: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+    def attach(self, forward_outputs: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
         """
         Returns new forward and backward nodes, as well as additional edges.
         """
         edges, node_map = self.prepare()
-        forward_backwards, new = self._attach_forward(forward_backwards, node_map)
+        forward_outputs, new = self._attach_forward(forward_outputs, node_map)
         edges.extend(new)
+
         backward_inputs, new = self._attach_backward(backward_inputs, node_map)
         edges.extend(new)
-        return forward_backwards, backward_inputs, edges
+        return forward_outputs, backward_inputs, edges
 
     def prepare(self) -> Tuple[list, dict]:
         return [], {}
@@ -52,12 +53,12 @@ class EdgesBag(Attachable):
         self.backward_inputs = backward_inputs
         self.backward_outputs = backward_outputs
 
-        mapping = TreeNode.from_edges(edges)
-        inputs = [mapping[x] for x in inputs]
-        outputs = [mapping[x] for x in outputs]
+        node_to_tree_node = TreeNode.from_edges(edges)
+        inputs = [node_to_tree_node[x] for x in inputs]
+        outputs = [node_to_tree_node[x] for x in outputs]
 
-        backward_inputs = [mapping[x] for x in backward_inputs]
-        backward_outputs = [mapping[x] for x in backward_outputs]
+        backward_inputs = [node_to_tree_node[x] for x in backward_inputs]
+        backward_outputs = [node_to_tree_node[x] for x in backward_outputs]
 
         self._forward_methods = {}
         for node in outputs:
@@ -112,6 +113,39 @@ class EdgesBag(Attachable):
         for o in backward_outputs:
             new_edges.append(BoundEdge(IdentityEdge(), [o], backwards[o.name]))
         return backward_inputs, new_edges
+
+    def get_loopback(self, function: Callable, backward_input_name: str):
+        """
+        Creates a graph by closing forward outputs and backward input using the given function.
+        """
+
+        attr_names = extract_signature(function)
+
+        forward_outputs = node_to_dict(self.outputs)
+        backward_inputs = node_to_dict(self.backward_inputs)
+        backward_outputs = node_to_dict(self.backward_outputs)
+
+        required_outputs = {}
+        for name in attr_names:
+            assert name in forward_outputs
+            required_outputs[name] = forward_outputs[name]
+
+        assert backward_input_name in backward_inputs
+        loopback_output = backward_inputs[backward_input_name]
+        loopback_inputs = list(required_outputs.values())
+
+        loopback_edge = BoundEdge(
+            FunctionEdge(function, len(attr_names)),
+            loopback_inputs, loopback_output
+        )
+
+        edges = list(self.edges)
+        edges.append(loopback_edge)
+
+        mapping = TreeNode.from_edges(edges)
+        graph_inputs = [mapping[x] for x in self.inputs]
+        graph_output = mapping[backward_outputs[backward_input_name]]
+        return compile_graph(graph_inputs, graph_output)
 
     @staticmethod
     def update_map(nodes, node_map):
