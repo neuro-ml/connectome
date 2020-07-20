@@ -26,7 +26,8 @@ class NodeHash:
             return merged
 
 
-NodesMask = Union[Sequence[int], None]
+FULL_MASK = None
+NodesMask = Union[Sequence[int], FULL_MASK]
 
 
 class Edge:
@@ -40,7 +41,7 @@ class Edge:
     def process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         assert len(hashes) == self.arity
         node_hash, mask = self._process_hashes(hashes)
-        if mask is None:
+        if mask == FULL_MASK:
             mask = range(self.arity)
         assert all(0 <= x < self.arity for x in mask)
         assert len(set(mask)) == len(mask)

@@ -1,7 +1,26 @@
 from typing import Sequence, Tuple, Callable
 
 from connectome.cache import CacheStorage
-from connectome.engine import NodeHash, TreeNode, Edge, NodesMask
+from connectome.engine import NodeHash, TreeNode, Edge, NodesMask, FULL_MASK
+
+
+# TODO: maybe the engine itself should deal with these
+class Nothing:
+    """
+    A unity-like which is propagated through functional edges.
+    """
+
+    # TODO: singleton
+    def __init__(self):
+        raise RuntimeError("Don't init me!")
+
+    @staticmethod
+    def in_data(data):
+        return any(x is Nothing for x in data)
+
+    @staticmethod
+    def in_hashes(hashes: Sequence[NodeHash]):
+        return any(x.data is Nothing for x in hashes)
 
 
 class FunctionEdge(Edge):
@@ -10,10 +29,16 @@ class FunctionEdge(Edge):
         self.function = function
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        if Nothing.in_data(arguments):
+            return Nothing
+
         return self.function(*arguments)
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(hashes), prev_edge=self), None
+        if Nothing.in_hashes(hashes):
+            return NodeHash(data=Nothing, prev_edge=self), FULL_MASK
+
+        return NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(hashes), prev_edge=self), FULL_MASK
 
 
 class IdentityEdge(Edge):
@@ -24,7 +49,7 @@ class IdentityEdge(Edge):
         return arguments[0]
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return hashes[0], None
+        return hashes[0], FULL_MASK
 
 
 class CacheEdge(Edge):
@@ -33,24 +58,82 @@ class CacheEdge(Edge):
         self.storage = storage
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        assert len(hashes) == 1
-        if self.storage.contains(hashes[0]):
+        node_hash, = hashes
+        if self.storage.contains(node_hash):
             mask = []
         else:
-            mask = None
+            mask = FULL_MASK
 
-        return hashes[0], mask
+        return node_hash, mask
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # no arguments means that the value is cached
         if not arguments:
             return self.storage.get(node_hash)
 
-        assert len(arguments) == 1
-        value = arguments[0]
+        value, = arguments
+        # TODO: need a subclass for edges that interact with Nothing
+        if value is Nothing:
+            return value
+
         self.storage.set(node_hash, value)
         return value
 
+
+class ProductEdge(Edge):
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        return arguments
+
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        return NodeHash.from_hash_nodes(hashes, prev_edge=self)
+
+
+# TODO: are Switch and Projection the only edges that need Nothing?
+# TODO: does Nothing live only in hashes?
+class SwitchEdge(Edge):
+    def __init__(self, selector: Callable):
+        super().__init__(arity=1)
+        self.selector = selector
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        value, = arguments
+        if self.selector(node_hash.data):
+            return value
+        return Nothing
+
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        node_hash, = hashes
+        if self.selector(node_hash.data):
+            node_hash = NodeHash(data=Nothing, prev_edge=self)
+        return node_hash, FULL_MASK
+
+
+class ProjectionEdge(Edge):
+    def __init__(self):
+        super().__init__(arity=1)
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        # take the only non-Nothing value
+        real = []
+        for v in arguments[0]:
+            if v is not Nothing:
+                real.append(v)
+
+        assert len(real) == 1
+        return real[0]
+
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        # take the only non-Nothing hash
+        real = []
+        for v in hashes[0].children:
+            if v.data is not Nothing:
+                real.append(v)
+
+        assert len(real) == 1
+        return real[0], FULL_MASK
+
+
+# TODO: move the code below to interface
 
 class ValueEdge(Edge):
     """
@@ -66,7 +149,7 @@ class ValueEdge(Edge):
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         assert not hashes
-        return NodeHash(data=self.value, prev_edge=self), None
+        return NodeHash(data=self.value, prev_edge=self), FULL_MASK
 
 
 class InitEdge(FunctionEdge):

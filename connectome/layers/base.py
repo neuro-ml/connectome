@@ -80,6 +80,7 @@ class EdgesBag(Attachable):
         """
         node_map = {}
 
+        # TODO: layer inputs and outputs may not be among the edges
         edges_copy = []
         for edge in self.edges:
             inputs = self.update_map(edge.inputs, node_map)
@@ -321,38 +322,3 @@ class AttachableLayer(Layer):
 
     def get_edges(self):
         raise AttributeError
-
-
-class CustomLayer(FreeLayer):
-    def __init__(self, inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], edges: Sequence[Edge],
-                 backward_inputs: Sequence[TreeNode] = None, backward_outputs: Sequence[TreeNode] = None):
-        super().__init__()
-
-        self._edges = edges
-        self._inputs = inputs
-        self._outputs = outputs
-        self._forward_methods = self.create_methods(self._outputs, self._inputs, self._edges)
-
-        if backward_inputs is None:
-            self._backward_inputs = []
-        else:
-            self._backward_inputs = backward_inputs
-
-        if backward_outputs is None:
-            self._backwards_outputs = []
-        else:
-            self._backward_outputs = backward_outputs
-
-        self.check_backwards()
-        self._backward_methods = self.create_methods(self._backward_outputs, self._backward_inputs, self._edges)
-
-    def get_forward_params(self, other_outputs: Sequence[TreeNode]):
-        check_for_duplicates([x.name for x in other_outputs])
-        outputs = node_to_dict(other_outputs)
-
-        forward_edges = []
-        for i in self._inputs:
-            forward_edges.append(IdentityEdge(outputs[i.name], i))
-
-        forward_edges.extend(self._edges)
-        return self._outputs, forward_edges

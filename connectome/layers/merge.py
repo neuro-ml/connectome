@@ -1,9 +1,83 @@
+from collections import defaultdict
 from typing import Sequence, Callable
 
-from connectome.engine.edges import MuxEdge
+from . import PipelineLayer
+from ..engine.edges import MuxEdge, ProductEdge, SwitchEdge, ProjectionEdge
 from ..utils import count_duplicates
-from ..engine import Node
-from .base import FreeLayer
+from ..engine import Node, BoundEdge
+from .base import FreeLayer, EdgesBag
+
+
+class ProductLayer(EdgesBag):
+    def __init__(self, *layers: EdgesBag):
+        self.layers = layers
+        super().__init__(*self.create_graph())
+
+    def create_graph(self):
+        # TODO: backwards support?
+        inputs = []
+        all_edges = []
+        output_groups = defaultdict(list)
+        for layer in self.layers:
+            inp, = layer.inputs
+            edges, mapping = layer.prepare()
+            inputs.append(mapping[inp])
+
+            for output in layer.outputs:
+                output = mapping[output]
+                output_groups[output.name].append(output)
+
+            all_edges.extend(edges)
+
+        arity = len(self.layers)
+        outputs = []
+        for name, nodes in output_groups.values():
+            if len(nodes) != arity:
+                continue
+
+            output = Node(name)
+            outputs.append(output)
+            all_edges.append(BoundEdge(ProductEdge(arity), inputs, output))
+
+        assert outputs
+        return inputs, outputs, all_edges
+
+
+class SwitchLayer(PipelineLayer):
+    """
+    Parameters
+    ----------
+    selector
+        returns the index of the branch to be evaluated
+    """
+
+    def __init__(self, selector: Callable, *layers: EdgesBag):
+        self.selector = selector
+        self.core = ProductLayer(*layers)
+        super().__init__(self.make_switch(), self.core, self.make_projector())
+
+    def make_switch(self):
+        def selector(idx):
+            return lambda value: self.selector(value) == idx
+
+        inputs = [Node('$input')]
+        edges, outputs = [], []
+        for i, output in enumerate(self.core.inputs):
+            output = Node(output.name)
+            outputs.append(output)
+            edges.append(BoundEdge(SwitchEdge(selector(i)), inputs, output))
+
+        return EdgesBag(inputs, outputs, edges)
+
+    def make_projector(self):
+        inputs, outputs, edges = [], [], []
+        for node in self.core.outputs:
+            inp, out = Node(node.name), Node(node.name)
+            inputs.append(inp)
+            outputs.append(out)
+            edges.append(BoundEdge(ProjectionEdge(), [inp], out))
+
+        return EdgesBag(inputs, outputs, edges)
 
 
 # TODO add backwards
