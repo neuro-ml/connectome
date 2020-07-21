@@ -2,8 +2,8 @@ from typing import Sequence, Callable, Tuple
 
 from connectome.engine.edges import IdentityEdge, FunctionEdge
 from ..engine.graph import compile_graph
-from ..utils import check_for_duplicates, extract_signature, node_to_dict
-from ..engine import TreeNode, Edge, BoundEdge, Node
+from ..utils import check_for_duplicates, node_to_dict
+from ..engine import TreeNode, BoundEdge, Node
 
 Nodes = Sequence[Node]
 Edges = Sequence[BoundEdge]
@@ -97,6 +97,11 @@ class EdgesBag(Attachable):
 
     # TODO remove duplicated code
     def _attach_backward(self, backwards: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
+        # TODO is it bad?
+        # means that this is the last backward layer
+        if len(backwards) == 0:
+            return self.update_map(self.backward_inputs, node_map), []
+
         check_for_duplicates([x.name for x in backwards])
 
         new_edges = []
@@ -108,28 +113,26 @@ class EdgesBag(Attachable):
             new_edges.append(BoundEdge(IdentityEdge(), [o], backwards[o.name]))
         return backward_inputs, new_edges
 
-    def get_loopback(self, function: Callable, backward_input_name: str):
+    def get_loopback(self, function: Callable, forward_names: Sequence[str], backward_name: str):
         """
         Creates a graph by closing forward outputs and backward input using the given function.
         """
-
-        attr_names = extract_signature(function)
 
         forward_outputs = node_to_dict(self.outputs)
         backward_inputs = node_to_dict(self.backward_inputs)
         backward_outputs = node_to_dict(self.backward_outputs)
 
         required_outputs = {}
-        for name in attr_names:
+        for name in forward_names:
             assert name in forward_outputs
             required_outputs[name] = forward_outputs[name]
 
-        assert backward_input_name in backward_inputs
-        loopback_output = backward_inputs[backward_input_name]
+        assert backward_name in backward_inputs
+        loopback_output = backward_inputs[backward_name]
         loopback_inputs = list(required_outputs.values())
 
         loopback_edge = BoundEdge(
-            FunctionEdge(function, len(attr_names)),
+            FunctionEdge(function, len(forward_names)),
             loopback_inputs, loopback_output
         )
 
@@ -138,7 +141,7 @@ class EdgesBag(Attachable):
 
         mapping = TreeNode.from_edges(edges)
         graph_inputs = [mapping[x] for x in self.inputs]
-        graph_output = mapping[backward_outputs[backward_input_name]]
+        graph_output = mapping[backward_outputs[backward_name]]
         return compile_graph(graph_inputs, graph_output)
 
     @staticmethod

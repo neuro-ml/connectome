@@ -1,9 +1,4 @@
-from ..engine.edges import IdentityEdge
-from ..engine import BoundEdge, TreeNode
 from .base import EdgesBag, Attachable
-from ..engine.graph import compile_graph
-
-from connectome.utils import node_to_dict
 
 
 class PipelineLayer(EdgesBag):
@@ -30,7 +25,6 @@ class PipelineLayer(EdgesBag):
 
     def slice(self, start, stop):
         assert start >= 0
-        assert start < stop
 
         if issubclass(type(self.layers[start]), EdgesBag):
             return PipelineLayer(*self.layers[start:stop])

@@ -1,13 +1,18 @@
-from typing import Callable
+from typing import Callable, Sequence
 
-from ..engine.edges import FunctionEdge
 from ..layers import PipelineLayer, Layer, EdgesBag, SwitchLayer
-from ..utils import MultiDict, node_to_dict
+from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory
 
 
 class BaseBlock:
     _layer: Layer
+
+    def wrap_predict(self, function: Callable, forward_names: Sequence[str], backward_name: str):
+        if isinstance(self._layer, EdgesBag):
+            return self._layer.get_loopback(function, forward_names, backward_name)
+        else:
+            raise TypeError
 
 
 class CallableBlock(BaseBlock):
@@ -16,19 +21,6 @@ class CallableBlock(BaseBlock):
     def __getattr__(self, name):
         return self._layer.get_forward_method(name)
 
-    def wrap_predict(self, predict: Callable, forward_output_names, backward_input_name):
-        outputs = node_to_dict(self._layer.get_outputs())
-        backward_inputs = node_to_dict(self._layer.get_backward_inputs())
-        backward_outputs = node_to_dict(self._layer.get_backward_outputs())
-
-        cross_pipe_edge = FunctionEdge(predict, [outputs[name] for name in forward_output_names],
-                                       backward_inputs[backward_input_name])
-
-        caller = Graph().compile_graph([backward_outputs[backward_input_name]], self._layer.get_inputs(),
-                                       list(self._layer.get_edges()) + [cross_pipe_edge])
-
-        return caller
-
 
 class Chain(CallableBlock):
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
@@ -36,12 +28,6 @@ class Chain(CallableBlock):
         self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
 
     def __getitem__(self, index):
-        if isinstance(index, slice):
-            # TODO exception
-            assert index.step in [1, None]
-
-            return FromLayer(self._layer.slice(index.start, index.stop))
-
         return FromLayer(self._layer.slice(index.start, index.stop))
 
 
@@ -101,9 +87,9 @@ class Merge(CallableBlock):
     def __init__(self, *blocks: CallableBlock):
         super().__init__()
 
-        # FIXME: this won't work if there are more than 2 blocks
-        idx_intersection = set.intersection(*[set(layer.ids()) for layer in blocks])
-        if len(idx_intersection) > 0:
+        # FIXME: hope this works :)
+        idx_union = set.union(*[set(layer.ids()) for layer in blocks])
+        if sum(len(layer.ids()) for layer in blocks) != len(idx_union):
             raise RuntimeError('Datasets have same indices')
 
         def branch_selector(identifier):

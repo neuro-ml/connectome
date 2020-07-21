@@ -9,8 +9,8 @@ def test_single(first_simple):
     assert first_simple.get_forward_method('squared')(9) == 81
 
 
-def test_duplicates(builder):
-    double = builder.build_layer(x=lambda x: 2 * x)
+def test_duplicates(layer_builder):
+    double = layer_builder.build_layer(x=lambda x: 2 * x)
     assert double.get_forward_method('x')(4) == 8
     eight = PipelineLayer(
         double, double, double,
@@ -34,14 +34,14 @@ def test_chain(first_simple, second_simple, third_simple):
     assert chain.get_forward_method('original')(x=9, y=10) == 9
 
 
-def test_cache(builder):
+def test_cache(layer_builder):
     def counter(x):
         nonlocal count
         count += 1
         return x
 
     count = 0
-    first = builder.build_layer(x=counter)
+    first = layer_builder.build_layer(x=counter)
     assert first.get_forward_method('x')(1) == 1
     assert count == 1
 
@@ -78,13 +78,13 @@ def test_backward_methods(first_backward, second_backward):
     assert chain.get_backward_method('prod')(chain.get_forward_method('prod')(15)) == 15.0
 
 
-def test_loopback(first_backward, second_backward, builder):
+def test_loopback(first_backward, second_backward, layer_builder):
     layer = PipelineLayer(first_backward, second_backward)
 
-    wrapped = layer.get_loopback(lambda prod: prod, 'prod')
+    wrapped = layer.get_loopback(lambda x: x, ['prod'], 'prod')
     assert wrapped(4) == 4
 
-    wrapped = layer.get_loopback(lambda prod: prod * 2, 'prod')
+    wrapped = layer.get_loopback(lambda x: x * 2, ['prod'], 'prod')
     assert wrapped(4) == 49.
 
     def counter():
@@ -93,17 +93,13 @@ def test_loopback(first_backward, second_backward, builder):
         return 5
 
     count = 0
-    cross_pipes_checker = builder.build_layer(
+    cross_pipes_checker = layer_builder.build_layer(
         prod=lambda prod, _counter: prod,
         inverse_prod=lambda prod, _counter: prod,
         _counter=counter
     )
 
     layer = PipelineLayer(layer, cross_pipes_checker)
-    wrapped = layer.get_loopback(lambda prod: prod * 2, 'prod')
+    wrapped = layer.get_loopback(lambda x: x * 2, ['prod'], 'prod')
     assert wrapped(4) == 49.
     assert count == 1
-
-
-def test_mux():
-    pass
