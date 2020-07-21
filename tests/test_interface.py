@@ -1,5 +1,6 @@
 import re
-from connectome.interface import Source, Transform, Chain, Merge, inverse
+from connectome.interface.base import Source, Transform, Chain, Merge
+from connectome.interface.decorators import inverse
 
 
 class SomeDS(Source):
@@ -62,7 +63,7 @@ class Crop(Transform):
 
 
 class Zoom(Transform):
-    _spacing=None
+    _spacing = None
 
     @staticmethod
     def image(x, _spacing):
@@ -98,32 +99,32 @@ class ParameterizedObj(Source):
 
 
 def test_single():
-    pipeline = SomeDS(_first_constant=2, _ids_arg=15)
+    pipeline = SomeDS(first_constant=2, ids_arg=15)
     cc = Crop()
     assert pipeline.image(id='123123') == 'image, 2: 123123'
     assert cc.image(image='input') == f'input transformed 5'
 
 
 def test_single_with_params():
-    pipeline = ParameterizedObj(_some_constant=2, _ids_arg=15)
+    pipeline = ParameterizedObj(some_constant=2, ids_arg=15)
     assert pipeline.output_method(id='666') == '<output>_666_2_<second>_666_2_<first>_666_2'
 
 
 def test_chain():
     pipeline = Chain(
-        SomeDS(_first_constant=2, _ids_arg=15),
+        SomeDS(first_constant=2, ids_arg=15),
         Crop(),
     )
     assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 16'
 
 
 def test_merge():
-    first_ds = SomeDS(_first_constant=1, _ids_arg=15)
-    second_ds = SomeDS2(_second_constant=2, _ids_arg=15)
+    first_ds = SomeDS(first_constant=1, ids_arg=15)
+    second_ds = SomeDS2(second_constant=2, ids_arg=15)
 
     merged = Merge(first_ds, second_ds)
-    assert merged.image(id=8) == f'image, 1: 8'
-    assert merged.image(id='8') == f'second_ds_2_8'
+    assert merged.image(8) == f'image, 1: 8'
+    assert merged.image('8') == f'second_ds_2_8'
 
     pipeline = Chain(
         merged,
@@ -136,8 +137,8 @@ def test_merge():
 
 def test_backward():
     pipeline = Chain(
-        SomeDS(_first_constant=2, _ids_arg=15),
-        Zoom(_spacing=123),
+        SomeDS(first_constant=2, ids_arg=15),
+        Zoom(spacing=123),
         Crop()
     )
 
@@ -146,3 +147,6 @@ def test_backward():
 
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
+
+
+test_merge()

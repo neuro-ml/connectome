@@ -58,12 +58,11 @@ def validate_graph(inputs, outputs):
 
             # no edges - must be an input
             if not node.edges:
-                assert node in inputs
+                assert node in inputs, (node, inputs)
 
             else:
-                assert len(node.edges) == 1, len(node.edges)
-                for group in node.edges.values():
-                    visitor(group)
+                group, = node.edges.values()
+                visitor(group)
 
     visitor(outputs)
 

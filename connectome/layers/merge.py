@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Sequence, Callable
 
 from . import PipelineLayer
-from ..engine.edges import MuxEdge, ProductEdge, SwitchEdge, ProjectionEdge
+from ..engine.edges import MuxEdge, ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge
 from ..utils import count_duplicates
 from ..engine import Node, BoundEdge
 from .base import FreeLayer, EdgesBag
@@ -31,7 +31,7 @@ class ProductLayer(EdgesBag):
 
         arity = len(self.layers)
         outputs = []
-        for name, nodes in output_groups.values():
+        for name, nodes in output_groups.items():
             if len(nodes) != arity:
                 continue
 
@@ -40,7 +40,15 @@ class ProductLayer(EdgesBag):
             all_edges.append(BoundEdge(ProductEdge(arity), inputs, output))
 
         assert outputs
-        return inputs, outputs, all_edges
+
+        # avoiding name clashes
+        unique_inputs = []
+        for idx, node in enumerate(inputs):
+            inp = Node(f'arg{idx}')
+            unique_inputs.append(inp)
+            all_edges.append(BoundEdge(IdentityEdge(), [inp], node))
+
+        return unique_inputs, outputs, all_edges
 
 
 class SwitchLayer(PipelineLayer):
@@ -58,9 +66,14 @@ class SwitchLayer(PipelineLayer):
 
     def make_switch(self):
         def selector(idx):
-            return lambda value: self.selector(value) == idx
+            def func(value):
+                selected = self.selector(value)
+                assert 0 <= selected < len(self.core.inputs), selected
+                return selected == idx
 
-        inputs = [Node('$input')]
+            return func
+
+        inputs = [Node('input')]
         edges, outputs = [], []
         for i, output in enumerate(self.core.inputs):
             output = Node(output.name)

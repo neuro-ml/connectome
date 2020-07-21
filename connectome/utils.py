@@ -1,33 +1,27 @@
 import inspect
 from functools import wraps
-from collections import defaultdict
+from collections import Counter
 
 
-# TODO: better keep all in lists, override `items` and `getitem`
 class MultiDict(dict):
-    def __setitem__(self, key, new_value):
-        if key in self:
-            cur_value = self[key]
-            if isinstance(cur_value, list):
-                cur_value.append(new_value)
-            else:
-                super().__setitem__(key, [cur_value, new_value])
+    def items(self):
+        for key, values in super().items():
+            for value in values:
+                yield key, value
+
+    def __setitem__(self, key, value):
+        if key not in self:
+            container = []
+            super().__setitem__(key, container)
         else:
-            super().__setitem__(key, new_value)
+            container = super().__getitem__(key)
 
+        container.append(value)
 
-class DecoratorAdapter(object):
-    name = None
-
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, instance, owner):
-        self.instance = instance
-        return self.func
-
-    def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs)
+    def __getitem__(self, key):
+        container = super().__getitem__(key)
+        assert len(container) == 1
+        return container[0]
 
 
 def extract_signature(func):
@@ -58,11 +52,7 @@ def atomize(attribute: str = '_lock'):
 
 
 def count_duplicates(sequence):
-    counts = defaultdict(int)
-    for x in sequence:
-        counts[x] += 1
-
-    return counts
+    return Counter(sequence)
 
 
 # TODO add error message

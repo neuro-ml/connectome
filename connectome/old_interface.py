@@ -1,76 +1,10 @@
 from typing import Sequence, Callable
 from functools import wraps
 
-from connectome.engine.edges import FunctionEdge
+from .engine.edges import FunctionEdge
+from .layers import PipelineLayer, MuxLayer, Layer, EdgesBag, SwitchLayer
+from .utils import MultiDict, extract_signature, node_to_dict
 from .factory import SourceFactory, TransformFactory
-from .layers import PipelineLayer, MuxLayer
-# from .engine import Node, Layer, Graph
-from .utils import MultiDict, DecoratorAdapter, extract_signature, node_to_dict
-
-
-class BaseBlock:
-    # _layer: Layer
-
-    def __getattr__(self, name):
-        return self._layer.get_method(name)
-
-    def wrap_predict(self, predict: Callable, forward_output_names, backward_input_name):
-        outputs = node_to_dict(self._layer.get_outputs())
-        backward_inputs = node_to_dict(self._layer.get_backward_inputs())
-        backward_outputs = node_to_dict(self._layer.get_backward_outputs())
-
-        cross_pipe_edge = FunctionEdge(predict, [outputs[name] for name in forward_output_names],
-                                       backward_inputs[backward_input_name])
-
-        caller = Graph().compile_graph([backward_outputs[backward_input_name]], self._layer.get_inputs(),
-                                       list(self._layer.get_edges()) + [cross_pipe_edge])
-
-        return caller
-
-
-class Chain(BaseBlock):
-    def __init__(self, *layers: BaseBlock):
-        super().__init__()
-
-        self._layer: PipelineLayer = PipelineLayer(*(layer._layer for layer in layers))
-        self._methods = self._layer.get_all_forward_methods()
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            # TODO exception
-            assert index.step in [1, None]
-
-            return FromLayer(self._layer.slice(index.start, index.stop))
-
-        return FromLayer(self._layer.slice(index.start, index.stop))
-
-
-class FromLayer(BaseBlock):
-    def __init__(self, layer):
-        super().__init__()
-        self._layer = layer
-        self._methods = self._layer.get_all_forward_methods()
-
-
-def check_pattern(name: str):
-    return name.startswith('_')
-
-
-def is_argument(name: str, value):
-    return check_pattern(name) and not isinstance(value, staticmethod)
-
-
-def is_parameter(name: str, value):
-    return check_pattern(name) and isinstance(value, staticmethod)
-
-
-def is_output(name: str, value):
-    return not check_pattern(name) and isinstance(value, staticmethod)
-
-
-def is_backward(name, value):
-    return not check_pattern(name) and isinstance(value, staticmethod) \
-           and isinstance(value.__func__, InverseDecoratorAdapter)
 
 
 def collect_nodes(scope):
@@ -101,20 +35,6 @@ def collect_nodes(scope):
 
 class SourceBase(type):
     def __new__(mcs, class_name, bases, namespace):
-        def __init__(*args, **kwargs):
-            # TODO: error message
-            self, = args
-            # TODO: split into two objects: the first one holds the scope
-            #  the second one compiles the layer
-            factory = SourceFactory(namespace)
-            signature = factory.get_init_signature()
-            kwargs = signature.bind(**kwargs).kwargs
-            # TODO: should only build if not called from super
-            factory.build(kwargs)
-            self._layer = factory.get_layer()
-
-        return super().__new__(mcs, class_name, bases, {'__init__': __init__})
-
         # TODO: check magic, duplicates
 
         edges = []
@@ -170,14 +90,6 @@ class SourceBase(type):
 
         namespace = {'__init__': make_init([identifier], list(outputs.values()), edges, arguments, defaults)}
         return super().__new__(mcs, class_name, bases, namespace)
-
-
-class InverseDecoratorAdapter(DecoratorAdapter):
-    name = 'inverse'
-
-
-def inverse(func: Callable):
-    return wraps(func)(InverseDecoratorAdapter(func))
 
 
 def process_methods(scope):
@@ -238,30 +150,6 @@ def process_methods(scope):
     return forward_methods, backward_methods, parameters, arguments
 
 
-class TransformBase(type):
-    @classmethod
-    def __prepare__(mcs, *args):
-        return MultiDict()
-
-    def __new__(mcs, class_name, bases, namespace):
-        def __init__(*args, **kwargs):
-            # TODO: error message
-            self, = args
-            # TODO: split into two objects: the first one holds the scope
-            #  the second one compiles the layer
-            factory = TransformFactory(namespace)
-            signature = factory.get_init_signature()
-            kwargs = signature.bind(**kwargs).kwargs
-            factory.build(kwargs)
-            self._layer = factory.get_layer()
-
-        return super().__new__(mcs, class_name, bases, {'__init__': __init__})
-
-    # def __new__(mcs, class_name, bases, namespace):
-    #     scope = build_transform_namespace(namespace)
-    #     return super().__new__(mcs, class_name, bases, scope)
-
-
 def build_transform_namespace(namespace):
     forward_methods, backward_methods, parameters, arguments = process_methods(namespace)
 
@@ -314,33 +202,3 @@ def build_transform_namespace(namespace):
         '__init__': make_init(list(inputs.values()), list(outputs.values()), edges, argument_nodes,
                               arguments, list(backward_inputs.values()), list(backward_outputs.values()))}
     return scope
-
-
-class Transform(BaseBlock, metaclass=TransformBase):
-    pass
-
-
-# TODO add inheritance
-class Source(BaseBlock, metaclass=SourceBase):
-    _ids_arg = None
-
-    @staticmethod
-    def ids(_ids_arg):
-        return ()
-
-
-class Merge(BaseBlock):
-    def __init__(self, *sources: Source):
-        super().__init__()
-
-        idx_intersection = set.intersection(*[set(layer.ids()) for layer in sources])
-        if len(idx_intersection) > 0:
-            raise RuntimeError('Datasets have same indices')
-
-        def branch_selector(dataset_index, inputs: Sequence[Node], params: Sequence):
-            for idx, ds in enumerate(sources):
-                if dataset_index in ds.ids():
-                    return [inputs[idx]], params[idx]
-
-        self._layer = MuxLayer(branch_selector, *[s._layer for s in sources])
-        self._methods = self._layer.get_all_forward_methods()

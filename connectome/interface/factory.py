@@ -1,11 +1,10 @@
 import inspect
-from functools import wraps
-from typing import Callable
 
-from connectome.engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
-from .engine import Node
-from .layers import CustomLayer
-from .utils import extract_signature
+from ..engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
+from ..engine import Node, BoundEdge
+from ..layers import EdgesBag
+from ..utils import extract_signature, MultiDict
+from .decorators import DecoratorAdapter, InverseDecoratorAdapter
 
 
 class NodeStorage(dict):
@@ -15,8 +14,8 @@ class NodeStorage(dict):
 
     def add(self, name):
         assert isinstance(name, str)
-        assert not self.frozen
         if name not in self:
+            assert not self.frozen
             super().__setitem__(name, Node(name))
 
     def freeze(self):
@@ -28,28 +27,6 @@ class NodeStorage(dict):
 
     def __setitem__(self, key, value):
         raise ValueError
-
-
-class DecoratorAdapter(object):
-    name = None
-
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, instance, owner):
-        self.instance = instance
-        return self.func
-
-    def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs)
-
-
-class InverseDecoratorAdapter(DecoratorAdapter):
-    name = 'inverse'
-
-
-def inverse(func: Callable):
-    return wraps(func)(InverseDecoratorAdapter(func))
 
 
 def is_private(name: str):
@@ -65,12 +42,34 @@ def is_parameter(name: str, value):
 
 
 def is_forward(name: str, value):
-    return not is_private(name) and isinstance(value, staticmethod)
+    return (
+            not is_private(name)
+            and isinstance(value, staticmethod)
+            and InverseDecoratorAdapter not in get_decorators(value)
+    )
 
 
-def is_backward(name, value):
-    return not is_private(name) and isinstance(value, staticmethod) \
-           and isinstance(value.__func__, InverseDecoratorAdapter)
+def is_backward(name: str, value):
+    return (
+            not is_private(name)
+            and isinstance(value, staticmethod)
+            and InverseDecoratorAdapter in get_decorators(value)
+    )
+
+
+def get_decorators(value):
+    assert isinstance(value, staticmethod)
+    value = value.__func__
+    decorators = []
+    while isinstance(value, DecoratorAdapter):
+        decorators.append(type(value))
+        value = value.__func__
+    return decorators
+
+
+def to_argument(name):
+    assert name.startswith('_')
+    return name[1:]
 
 
 def unwrap_transform(value):
@@ -86,7 +85,10 @@ ALLOWED_MAGIC = {'__module__', '__qualname__'}
 
 
 class GraphFactory:
-    def __init__(self, scope):
+    def __init__(self, scope: MultiDict):
+        # TODO: add support
+        assert INIT_NAME not in scope
+
         self.scope = scope
         self.edges = []
         # layer inputs
@@ -98,34 +100,36 @@ class GraphFactory:
         # __init__ arguments
         self.arguments = NodeStorage()
         # their defaults
-        self.defaults = NodeStorage()
+        self.defaults = {}
         # outputs of transform parameters
         self.parameters = NodeStorage()
         # placeholders for constant parameters
         self.constants = NodeStorage()
-        # storage for constants defined in __init__
-        self.mock_storage = {}
 
+        self._init()
         self._validate()
         self._collect_nodes()
+
+    def _init(self):
+        pass
 
     def _validate(self):
         # e.g. check allowed magic here
         # or names and values
         raise NotImplementedError
 
-    def _process_parameter(self, name, value) -> FunctionEdge:
+    def _process_parameter(self, name, value) -> BoundEdge:
         raise NotImplementedError
 
-    def _process_forward(self, name, value) -> FunctionEdge:
+    def _process_forward(self, name, value) -> BoundEdge:
         raise NotImplementedError
 
-    def _process_backward(self, name, value) -> FunctionEdge:
+    def _process_backward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         first, *names = extract_signature(value)
         # TODO: check first name
-        inputs = [self.backward_inputs[first]] + list(map(self._get_private, names))
-        return FunctionEdge(value, inputs, self.backward_outputs[name])
+        inputs = [self.backward_inputs[name]] + list(map(self._get_private, names))
+        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.backward_outputs[name])
 
     def _get_private(self, name):
         assert is_private(name)
@@ -157,7 +161,7 @@ class GraphFactory:
 
             elif is_constant(name, value):
                 self.constants.add(name)
-                self.defaults[name] = value
+                self.defaults[to_argument(name)] = value
 
             else:
                 raise RuntimeError(name)
@@ -180,22 +184,22 @@ class GraphFactory:
 
         else:
             for name in self.constants:
-                name = name.lstrip('_')
+                name = to_argument(name)
                 self.arguments.add(name)
                 self.defaults.setdefault(name, inspect.Parameter.empty)
 
         self.arguments.freeze()
         assert not set(self.constants) & set(self.parameters)
-        assert set(self.arguments) == set(self.defaults)
+        assert set(self.arguments) == set(self.defaults), (self.arguments, self.defaults)
 
     def _get_constant_edges(self, arguments: dict):
         for name, value in arguments.items():
-            yield ValueEdge(self.arguments[name], value)
+            yield BoundEdge(ValueEdge(value), [], self.arguments[name])
 
         # if no __init__ was provided there is an identity edge from args to constants
         if not self.has_init():
             for name in self.constants:
-                yield IdentityEdge(self.arguments[name], self.constants[name])
+                yield BoundEdge(IdentityEdge(), [self.arguments[to_argument(name)]], self.constants[name])
 
         # otherwise the constants are extracted from self
         else:
@@ -224,7 +228,7 @@ class GraphFactory:
 
     def get_init_signature(self):
         return inspect.Signature([
-            inspect.Parameter(name.lstrip('_'), inspect.Parameter.KEYWORD_ONLY, default=value)
+            inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=value)
             for name, value in self.defaults.items()
         ])
 
@@ -234,15 +238,14 @@ class GraphFactory:
         self.edges.extend(self._get_constant_edges(arguments))
 
     def get_layer(self):
-        return CustomLayer(
+        return EdgesBag(
             list(self.inputs.values()), list(self.outputs.values()), self.edges,
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
         )
 
 
 class SourceFactory(GraphFactory):
-    def __init__(self, scope):
-        super().__init__(scope)
+    def _init(self):
         self.ID = self.inputs['id']
         self.inputs.freeze()
 
@@ -250,36 +253,36 @@ class SourceFactory(GraphFactory):
         # TODO: ids, id, magic
         pass
 
-    def _process_forward(self, name, value) -> FunctionEdge:
+    def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         first, *names = extract_signature(value)
         inputs = [self._get_private(first) if is_private(first) else self.ID]
         inputs.extend(map(self._get_private, names))
-        return FunctionEdge(value, inputs, self.outputs[name])
+        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
 
-    def _process_parameter(self, name, value) -> FunctionEdge:
+    def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         first, *names = extract_signature(value)
         inputs = [self._get_private(first) if is_private(first) else self.ID]
         inputs.extend(map(self._get_private, names))
-        return FunctionEdge(value, inputs, self.parameters[name])
+        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.parameters[name])
 
 
 class TransformFactory(GraphFactory):
     def _validate(self):
         pass
 
-    def _process_forward(self, name, value) -> FunctionEdge:
+    def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         first, *names = extract_signature(value)
         inputs = [self._get_private(first) if is_private(first) else self.inputs[name]]
         inputs.extend(map(self._get_private, names))
-        return FunctionEdge(value, inputs, self.outputs[name])
+        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
 
-    def _process_parameter(self, name, value) -> FunctionEdge:
+    def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         inputs = [
             self._get_private(arg) if is_private(arg) else self.inputs[arg]
             for arg in extract_signature(value)
         ]
-        return FunctionEdge(value, inputs, self.parameters[name])
+        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.parameters[name])

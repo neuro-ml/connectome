@@ -43,15 +43,8 @@ class EdgesBag(Attachable):
         self.inputs = inputs
         self.outputs = outputs
         self.edges = edges
-
-        if backward_inputs is None:
-            backward_inputs = []
-
-        if backward_outputs is None:
-            backward_outputs = []
-
-        self.backward_inputs = backward_inputs
-        self.backward_outputs = backward_outputs
+        self.backward_inputs = backward_inputs = backward_inputs or []
+        self.backward_outputs = backward_outputs = backward_outputs or []
 
         node_to_tree_node = TreeNode.from_edges(edges)
         inputs = [node_to_tree_node[x] for x in inputs]
@@ -66,7 +59,7 @@ class EdgesBag(Attachable):
 
         self._backward_methods = {}
         for node in backward_outputs:
-            self._backward_methods[node.name] = compile_graph(backward_inputs, node)
+            self._backward_methods[node.name] = compile_graph(backward_inputs + inputs, node)
 
     def get_forward_method(self, name):
         return self._forward_methods[name]
