@@ -96,10 +96,10 @@ class SwitchEdge(Edge):
         self.selector = selector
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        value, = arguments
-        if self.selector(node_hash.data):
-            return value
-        return Nothing
+        if node_hash.data is Nothing:
+            return Nothing
+
+        return arguments[0]
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         node_hash, = hashes

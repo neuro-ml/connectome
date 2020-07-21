@@ -37,7 +37,7 @@ class ProductLayer(EdgesBag):
 
             output = Node(name)
             outputs.append(output)
-            all_edges.append(BoundEdge(ProductEdge(arity), inputs, output))
+            all_edges.append(BoundEdge(ProductEdge(arity), nodes, output))
 
         assert outputs
 

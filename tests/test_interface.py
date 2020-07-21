@@ -147,6 +147,3 @@ def test_backward():
 
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
-
-
-test_merge()
