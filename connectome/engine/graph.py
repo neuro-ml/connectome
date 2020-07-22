@@ -58,8 +58,7 @@ def validate_graph(inputs, outputs):
 
             # no edges - must be an input
             if not node.edges:
-                # assert node in inputs, (node, inputs)
-                continue
+                assert node in inputs, (node, inputs)
 
             else:
                 group, = node.edges.values()
