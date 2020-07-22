@@ -2,7 +2,7 @@ import re
 import pytest
 
 from connectome.interface.base import Source, Transform
-from connectome.interface.decorators import inverse
+from connectome.interface.decorators import inverse, optional
 
 
 class FirstDS(Source):
@@ -79,6 +79,39 @@ class Zoom(Transform):
         return int(x) - _spacing
 
 
+class Optional(Transform):
+    @staticmethod
+    def image(x):
+        return x
+
+    spacing = lungs = image
+
+    @staticmethod
+    @optional
+    def first_optional(x):
+        return x + 1
+
+    @staticmethod
+    @optional
+    def second_optional(x):
+        return str(x)
+
+    @staticmethod
+    @inverse
+    def first_optional(x):
+        return x - 1
+
+    @staticmethod
+    @inverse
+    def second_optional(x):
+        return int(x)
+
+    @staticmethod
+    @inverse
+    def image(x):
+        return x
+
+
 class BlockBuilder:
     @staticmethod
     def first_ds(**kwargs):
@@ -95,6 +128,10 @@ class BlockBuilder:
     @staticmethod
     def crop(**kwargs):
         return Crop(**kwargs)
+
+    @staticmethod
+    def optional():
+        return Optional()
 
 
 @pytest.fixture(scope='module')

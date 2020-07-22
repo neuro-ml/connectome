@@ -19,15 +19,14 @@ class ProductLayer(EdgesBag):
         all_edges = []
         output_groups = defaultdict(list)
         for layer in self.layers:
-            inp, = layer.inputs
-            edges, mapping = layer.prepare()
-            inputs.append(mapping[inp])
+            layer_params = layer.prepare()
+            inp, = layer_params.inputs
+            inputs.append(inp)
 
-            for output in layer.outputs:
-                output = mapping[output]
+            for output in layer_params.outputs:
                 output_groups[output.name].append(output)
 
-            all_edges.extend(edges)
+            all_edges.extend(layer_params.edges)
 
         arity = len(self.layers)
         outputs = []

@@ -70,3 +70,27 @@ def test_backward(block_builder):
 
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
+
+
+def test_optional(block_builder):
+    pipeline = Chain(
+        block_builder.first_ds(first_constant=2, ids_arg=15),
+        block_builder.optional(),
+        block_builder.zoom(spacing=123),
+        block_builder.optional(),
+        block_builder.crop(),
+        block_builder.optional(),
+    )
+
+    identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
+    double = pipeline[1:].wrap_predict(lambda x: 2 * x, ['image'], 'image')
+
+    assert identity(100500) == 100500
+    assert double(100500) == 100623100500
+
+    optional = block_builder.optional()
+    assert optional.first_optional(10) == 11
+    assert optional.second_optional(10) == '10'
+
+    layer = optional._layer
+    assert layer.get_backward_method('first_optional')(layer.get_forward_method('first_optional')(100500)) == 100500

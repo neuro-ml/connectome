@@ -1,21 +1,28 @@
+from ..utils import node_to_dict
 from .base import EdgesBag, Attachable
 
 
 class PipelineLayer(EdgesBag):
     def __init__(self, head: EdgesBag, *tail: Attachable):
-        edges, node_map = head.prepare()
+        head_params = head.prepare()
 
-        forward_inputs = self.update_map(head.inputs, node_map)
-        forward_outputs = self.update_map(head.outputs, node_map)
+        edges = head_params.edges
+        forward_inputs = head_params.inputs
+        forward_outputs = head_params.outputs
 
-        backward_inputs = self.update_map(head.backward_inputs, node_map)
-        backward_outputs = self.update_map(head.backward_outputs, node_map)
+        backward_inputs = head_params.backward_inputs
 
         for layer in tail:
             forward_outputs, backward_inputs, new_edges = layer.attach(forward_outputs, backward_inputs)
             for edge in new_edges:
                 assert edge not in edges
                 edges.append(edge)
+
+        backward_outputs = []
+        # drop inactive outputs
+        for name, value in node_to_dict(head_params.backward_outputs).items():
+            if name in node_to_dict(backward_inputs):
+                backward_outputs.append(value)
 
         self.layers = [head, *tail]
         super().__init__(forward_inputs, forward_outputs, edges, backward_inputs, backward_outputs)

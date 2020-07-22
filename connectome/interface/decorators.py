@@ -20,5 +20,13 @@ class InverseDecoratorAdapter(DecoratorAdapter):
     name = 'inverse'
 
 
+class OptionalDecoratorAdapter(DecoratorAdapter):
+    name = 'optional'
+
+
 def inverse(func: Callable):
     return wraps(func)(InverseDecoratorAdapter(func))
+
+
+def optional(func: Callable):
+    return wraps(func)(OptionalDecoratorAdapter(func))

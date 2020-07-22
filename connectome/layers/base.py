@@ -1,7 +1,7 @@
-from typing import Sequence, Callable, Tuple
+from typing import Sequence, Callable, Tuple, NamedTuple, List
 
 from connectome.engine.edges import IdentityEdge, FunctionEdge
-from ..engine.graph import compile_graph
+from ..engine.graph import compile_graph, count_entries
 from ..utils import check_for_duplicates, node_to_dict
 from ..engine import TreeNode, BoundEdge, Node
 
@@ -13,45 +13,62 @@ class Layer:
     pass
 
 
+class LayerParams(NamedTuple):
+    edges: List[BoundEdge]
+    inputs: Sequence[Node]
+    outputs: Sequence[Node]
+
+    backward_inputs: Sequence[Node]
+    backward_outputs: Sequence[Node]
+
+
 class Attachable(Layer):
     def attach(self, forward_outputs: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
         """
         Returns new forward and backward nodes, as well as additional edges.
         """
-        edges, node_map = self.prepare()
-        forward_outputs, new = self._attach_forward(forward_outputs, node_map)
-        edges.extend(new)
+        graph_params = self.prepare()
+        forward_outputs, new = self._attach_forward(forward_outputs, graph_params)
+        graph_params.edges.extend(new)
 
-        backward_inputs, new = self._attach_backward(backward_inputs, node_map)
-        edges.extend(new)
-        return forward_outputs, backward_inputs, edges
+        backward_inputs, new = self._attach_backward(backward_inputs, graph_params)
+        graph_params.edges.extend(new)
+        return forward_outputs, backward_inputs, graph_params.edges
 
-    def prepare(self) -> Tuple[list, dict]:
-        return [], {}
-
-    def _attach_forward(self, nodes: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
+    # TODO set defaults somewhere else
+    def prepare(self) -> LayerParams:
         raise NotImplementedError
 
-    def _attach_backward(self, nodes: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
+    def _attach_forward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
+        raise NotImplementedError
+
+    def _attach_backward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
         raise NotImplementedError
 
 
 class EdgesBag(Attachable):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges, backward_inputs: Nodes = None,
-                 backward_outputs: Nodes = None):
+                 backward_outputs: Nodes = None, optional_nodes: Sequence[str] = None):
+
+        check_for_duplicates(node_to_dict(inputs).keys())
 
         self.inputs = inputs
         self.outputs = outputs
         self.edges = edges
+
         self.backward_inputs = backward_inputs = backward_inputs or []
         self.backward_outputs = backward_outputs = backward_outputs or []
+        check_for_duplicates(node_to_dict(backward_inputs))
 
-        node_to_tree_node = TreeNode.from_edges(edges)
-        inputs = [node_to_tree_node[x] for x in inputs]
-        outputs = [node_to_tree_node[x] for x in outputs]
+        # TODO check for duplicates
+        self.optional_nodes = optional_nodes or []
 
-        backward_inputs = [node_to_tree_node[x] for x in backward_inputs]
-        backward_outputs = [node_to_tree_node[x] for x in backward_outputs]
+        tree_node_map = TreeNode.from_edges(edges)
+        inputs = [tree_node_map[x] for x in inputs]
+        outputs = [tree_node_map[x] for x in outputs]
+
+        backward_inputs = [tree_node_map[x] for x in backward_inputs]
+        backward_outputs = [tree_node_map[x] for x in backward_outputs]
 
         self._forward_methods = {}
         for node in outputs:
@@ -71,47 +88,71 @@ class EdgesBag(Attachable):
         """
         Prepares a copy of edges and nodes for connection.
         """
-        node_map = {}
-
         # TODO: layer inputs and outputs may not be among the edges
+        node_map = {}
         edges_copy = []
+
         for edge in self.edges:
             inputs = self.update_map(edge.inputs, node_map)
             output = self.update_map([edge.output], node_map)[0]
             edges_copy.append(BoundEdge(edge.edge, inputs, output))
 
-        return edges_copy, node_map
+        params = LayerParams(
+            edges_copy,
+            self.update_map(self.inputs, node_map),
+            self.update_map(self.outputs, node_map),
+            self.update_map(self.backward_inputs, node_map),
+            self.update_map(self.backward_outputs, node_map),
+        )
+        return params
 
-    # TODO remove duplicated code
-    def _attach_forward(self, forwards: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
-        check_for_duplicates([x.name for x in forwards])
-
+    def _attach_forward(self, prev_outputs: Nodes, params: LayerParams) -> Tuple[Nodes, Edges]:
+        check_for_duplicates([x.name for x in prev_outputs])
+        prev_outputs = node_to_dict(prev_outputs)
         new_edges = []
-        inputs = self.update_map(self.inputs, node_map)
-        outputs = self.update_map(self.outputs, node_map)
 
-        forwards = node_to_dict(forwards)
-        for i in inputs:
-            new_edges.append(BoundEdge(IdentityEdge(), [forwards[i.name]], i))
+        inactive_input_names = []
+        for i in params.inputs:
+            if i.name in prev_outputs:
+                new_edges.append(BoundEdge(IdentityEdge(), [prev_outputs[i.name]], i))
+            elif i.name in self.optional_nodes:
+                inactive_input_names.append(i.name)
+            else:
+                raise RuntimeError(f"Previous layer must contain '{i.name}' node.")
+
+        essential_input_names = self.get_essential_input_names(params.inputs, params.outputs, params.edges)
+        outputs = []
+        for o in params.outputs:
+            # drop nodes that depend on inactive inputs
+            if not any(name in inactive_input_names for name in essential_input_names[o]):
+                outputs.append(o)
         return outputs, new_edges
 
-    # TODO remove duplicated code
-    def _attach_backward(self, backwards: Nodes, node_map: dict) -> Tuple[Nodes, Edges]:
+    def _attach_backward(self, prev_inputs: Nodes, params: LayerParams) -> Tuple[Nodes, Edges]:
         # TODO is it bad?
         # means that this is the last backward layer
-        if len(backwards) == 0:
-            return self.update_map(self.backward_inputs, node_map), []
+        if len(prev_inputs) == 0:
+            return params.backward_inputs, []
 
-        check_for_duplicates([x.name for x in backwards])
-
+        check_for_duplicates([x.name for x in prev_inputs])
+        prev_inputs = node_to_dict(prev_inputs)
         new_edges = []
-        backward_inputs = self.update_map(self.backward_inputs, node_map)
-        backward_outputs = self.update_map(self.backward_outputs, node_map)
 
-        backwards = node_to_dict(backwards)
-        for o in backward_outputs:
-            new_edges.append(BoundEdge(IdentityEdge(), [o], backwards[o.name]))
-        return backward_inputs, new_edges
+        active_input_names = []
+        for o in params.backward_outputs:
+            if o.name in prev_inputs:
+                new_edges.append(BoundEdge(IdentityEdge(), [o], prev_inputs[o.name]))
+                active_input_names.append(o.name)
+            elif o.name not in self.optional_nodes:
+                raise RuntimeError(f"Previous layer must contain '{o.name}' node.")
+
+        inputs = []
+        # drop inactive inputs
+        for name, node in node_to_dict(params.backward_inputs).items():
+            if name in active_input_names:
+                inputs.append(node)
+
+        return inputs, new_edges
 
     def get_loopback(self, function: Callable, forward_names: Sequence[str], backward_name: str):
         """
@@ -150,6 +191,21 @@ class EdgesBag(Attachable):
             if node not in node_map:
                 node_map[node] = Node(node.name)
         return [node_map[x] for x in nodes]
+
+    @staticmethod
+    def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: Edges):
+        check_for_duplicates(node_to_dict(inputs).keys())
+
+        tree_node_map = TreeNode.from_edges(edges)
+        inputs = [tree_node_map[x] for x in inputs]
+
+        essential_input_names = {}
+        for o in outputs:
+            output = tree_node_map[o]
+            counts = count_entries(inputs, [output])
+            input_names = [x.name for x in inputs if counts.get(x, 0)]
+            essential_input_names[o] = input_names
+        return essential_input_names
 
 
 class _Layer:

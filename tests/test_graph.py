@@ -103,3 +103,18 @@ def test_loopback(first_backward, second_backward, layer_builder):
     wrapped = layer.get_loopback(lambda x: x * 2, ['prod'], 'prod')
     assert wrapped(4) == 49.
     assert count == 1
+
+
+def test_optional(first_simple, layer_builder):
+    first = layer_builder.build_layer(
+        sum=lambda x, y: x + y,
+        prod=lambda x, y: x * y,
+    )
+    second = layer_builder.build_layer(
+        first_out=lambda sum, prod: sum * prod,
+        second_out=lambda sub: 2 * sub,
+        optional_nodes=['sub']
+    )
+
+    layer = PipelineLayer(first, second)
+    assert layer.get_forward_method('first_out')(4, 3) == 84

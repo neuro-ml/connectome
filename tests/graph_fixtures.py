@@ -11,7 +11,7 @@ from connectome.utils import extract_signature
 
 class LayerBuilder:
     @staticmethod
-    def build_layer(**kwargs):
+    def build_layer(optional_nodes=None, **kwargs):
 
         parameters = {}
         forward_methods = {}
@@ -67,7 +67,7 @@ class LayerBuilder:
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 
         return EdgesBag(list(inputs.values()), list(outputs.values()), edges,
-                        list(backward_inputs.values()), list(backward_outputs.values()))
+                        list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes)
 
 
 @pytest.fixture(scope='module')
@@ -121,3 +121,11 @@ def second_backward(layer_builder):
         prod=lambda prod: str(prod + 1),
         inverse_prod=lambda prod: int(prod) - 1,
     )
+
+
+@pytest.fixture
+def all_optional(layer_builder):
+    return layer_builder.build_layer(sum=lambda x, y: x + y,
+                                     prod=lambda x, y: x * y,
+                                     sub=lambda x, y: x - y,
+                                     optional_nodes=['sub'])

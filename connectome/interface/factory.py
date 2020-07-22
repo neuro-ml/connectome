@@ -4,7 +4,7 @@ from ..engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, Item
 from ..engine import Node, BoundEdge
 from ..layers import EdgesBag
 from ..utils import extract_signature, MultiDict
-from .decorators import DecoratorAdapter, InverseDecoratorAdapter
+from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter
 
 
 class NodeStorage(dict):
@@ -105,7 +105,8 @@ class GraphFactory:
         self.parameters = NodeStorage()
         # placeholders for constant parameters
         self.constants = NodeStorage()
-
+        # names of optional nodes
+        self.optional_node_names = []
         self._init()
         self._validate()
         self._collect_nodes()
@@ -155,6 +156,9 @@ class GraphFactory:
 
             elif is_forward(name, value):
                 self.edges.append(self._process_forward(name, value))
+
+                if OptionalDecoratorAdapter in get_decorators(value):
+                    self.optional_node_names.append(name)
 
             elif is_backward(name, value):
                 self.edges.append(self._process_backward(name, value))
@@ -241,6 +245,7 @@ class GraphFactory:
         return EdgesBag(
             list(self.inputs.values()), list(self.outputs.values()), self.edges,
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
+            self.optional_node_names
         )
 
 
