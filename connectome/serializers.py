@@ -9,10 +9,15 @@ class SerializerError(Exception):
 
 
 class Serializer:
-    def save(self, value, path: Path):
+    def save(self, value, folder: Path) -> int:
+        """
+        Saves the ``value`` to ``folder``.
+        Returns the occupied space in bytes.
+        """
         raise NotImplementedError
 
-    def load(self, path):
+    def load(self, folder: Path):
+        """Loads the value from ``folder``."""
         raise NotImplementedError
 
 
@@ -20,25 +25,26 @@ class ChainSerializer(Serializer):
     def __init__(self, *serializers: Serializer):
         self.serializers = serializers
 
-    def save(self, value, path: Path):
+    def save(self, value, folder: Path) -> int:
         for serializer in self.serializers:
             with suppress(SerializerError):
-                serializer.save(value, path)
-                return
+                return serializer.save(value, folder)
 
-        raise SerializerError(f'No serializer was able to save to {path}.')
+        raise SerializerError(f'No serializer was able to save to {folder}.')
 
-    def load(self, path: Path):
+    def load(self, folder: Path):
         for serializer in self.serializers:
             with suppress(SerializerError):
-                return serializer.load(path)
+                return serializer.load(folder)
 
-        raise SerializerError(f'No serializer was able to load from {path}.')
+        raise SerializerError(f'No serializer was able to load from {folder}.')
 
 
+# TODO: gzip
 class NumpySerializer(Serializer):
-    def save(self, value, path: Path):
-        np.save(path / 'value.npy', value)
+    def save(self, value, folder: Path) -> int:
+        np.save(folder / 'value.npy', value)
+        return value.nbytes
 
-    def load(self, path):
-        return np.load(path / 'value.npy')
+    def load(self, folder: Path):
+        return np.load(folder / 'value.npy')

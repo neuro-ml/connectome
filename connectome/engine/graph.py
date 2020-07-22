@@ -101,7 +101,7 @@ def prune(inputs_map, outputs, arguments):
     masks = {}
     cache = {}
     for name, n in inputs_map.items():
-        cache[n] = NodeHash(data=arguments[name])
+        cache[n] = NodeHash.from_leaf(arguments[name])
     for n in outputs:
         visitor(n)
 

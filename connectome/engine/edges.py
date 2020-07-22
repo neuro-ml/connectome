@@ -36,9 +36,11 @@ class FunctionEdge(Edge):
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         if Nothing.in_hashes(hashes):
-            return NodeHash(data=Nothing, prev_edge=self), FULL_MASK
+            return NodeHash.from_leaf(Nothing), FULL_MASK
 
-        return NodeHash.from_hash_nodes([NodeHash(data=self.function)] + list(hashes), prev_edge=self), FULL_MASK
+        return NodeHash.from_hash_nodes(
+            NodeHash.from_leaf(self.function), *hashes, prev_edge=self
+        ), FULL_MASK
 
 
 class IdentityEdge(Edge):
@@ -85,7 +87,7 @@ class ProductEdge(Edge):
         return arguments
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return NodeHash.from_hash_nodes(hashes, prev_edge=self), FULL_MASK
+        return NodeHash.from_hash_nodes(*hashes, prev_edge=self), FULL_MASK
 
 
 # TODO: are Switch and Projection the only edges that need Nothing?
@@ -105,7 +107,7 @@ class SwitchEdge(Edge):
         node_hash, = hashes
         if not self.selector(node_hash.data):
             # TODO: need a special type for hash of nothing
-            node_hash = NodeHash(data=Nothing, prev_edge=self)
+            node_hash = NodeHash.from_leaf(Nothing)
         return node_hash, FULL_MASK
 
 
@@ -149,7 +151,7 @@ class ValueEdge(Edge):
         return self.value
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return NodeHash(data=self.value, prev_edge=self), FULL_MASK
+        return NodeHash.from_leaf(self.value), FULL_MASK
 
 
 class InitEdge(FunctionEdge):

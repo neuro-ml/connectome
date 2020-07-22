@@ -1,29 +1,50 @@
+from enum import unique, IntEnum
 from typing import Sequence, Tuple, Dict, Union, NamedTuple
 
 
-# TODO: hashes should also store a type
+@unique
+class HashType(IntEnum):
+    LEAF = 0
+    COMPOUND = 1
+
+
 class NodeHash:
-    def __init__(self, *, prev_edge=None, data=None, children=None):
+    def __init__(self, *data, kind: HashType, prev_edge=None):
+        if kind == HashType.LEAF:
+            data, = data
+            children = ()
+            assert not isinstance(data, NodeHash)
+        else:
+            for entry in data:
+                assert isinstance(entry, NodeHash), type(entry)
+            children, data = data, None
+
         self.prev_edge = prev_edge
-        self.children = children
+        self._kind = kind
         self._data = data
+        self.children: Sequence[NodeHash] = children
 
     def __hash__(self):
-        return hash(self.data)
+        return hash(self.value)
 
     @classmethod
-    def from_hash_nodes(cls, hashes: Sequence, prev_edge=None):
-        for h in hashes:
-            assert isinstance(h, NodeHash), type(h)
-        return NodeHash(children=hashes, prev_edge=prev_edge)
+    def from_leaf(cls, data):
+        return NodeHash(data, kind=HashType.LEAF)
+
+    @classmethod
+    def from_hash_nodes(cls, *hashes: 'NodeHash', prev_edge=None):
+        return NodeHash(*hashes, kind=HashType.COMPOUND, prev_edge=prev_edge)
 
     @property
     def data(self):
-        if self.children is None:
+        if self._kind == HashType.LEAF:
             return self._data
         else:
-            merged = (*[h.data for h in self.children],)
-            return merged
+            return tuple(h._data for h in self.children)
+
+    @property
+    def value(self):
+        return self._kind.value, self.data
 
 
 FULL_MASK = None
@@ -77,10 +98,6 @@ class TreeNode:
             mapping[edge.output].add(edge.edge, [mapping[x] for x in edge.inputs])
 
         return mapping
-
-    @staticmethod
-    def to_edges(nodes: Sequence['TreeNode']) -> dict:
-        pass
 
     def __str__(self):
         return f'<Node: {self.name}>'
