@@ -111,6 +111,9 @@ class GraphFactory:
         self.optional_node_names = []
         # names of inherited nodes
         self.inherited_node_names = []
+        # names of persistent nodes
+        # TODO move it somewhere
+        self.persistent_node_names = ['ids']
         self._init()
         self._validate()
         self._collect_nodes()
@@ -256,7 +259,8 @@ class GraphFactory:
             list(self.inputs.values()), list(self.outputs.values()), self.edges,
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
             self.optional_node_names,
-            self.inherited_node_names
+            self.inherited_node_names,
+            self.persistent_node_names
         )
 
 

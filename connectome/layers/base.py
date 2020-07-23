@@ -1,4 +1,4 @@
-from typing import Sequence, Callable, Tuple, NamedTuple, List
+from typing import Sequence, Callable, Tuple, NamedTuple, List, Set
 
 from ..engine.edges import IdentityEdge, FunctionEdge
 from ..engine.graph import compile_graph, count_entries
@@ -24,13 +24,19 @@ class LayerParams(NamedTuple):
     backward_inputs: List[Node]
     backward_outputs: List[Node]
 
+    persistent_nodes: Set[str]
+
 
 class Attachable(Layer):
-    def attach(self, forward_outputs: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+    def attach(self, forward_outputs: Nodes, backward_inputs: Nodes,
+               persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, Edges]:
         """
         Returns new forward and backward nodes, as well as additional edges.
         """
         graph_params = self.prepare()
+        persistent_nodes = persistent_nodes or []
+        graph_params.persistent_nodes.update(persistent_nodes)
+
         forward_outputs, new = self._attach_forward(forward_outputs, graph_params)
         graph_params.edges.extend(new)
 
@@ -50,9 +56,9 @@ class Attachable(Layer):
 
 
 class EdgesBag(Attachable):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges,
-                 backward_inputs: Nodes = None, backward_outputs: Nodes = None,
-                 optional_nodes: Sequence[str] = None, inherit_nodes: Sequence[str] = None):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges, backward_inputs: Nodes = None,
+                 backward_outputs: Nodes = None, optional_nodes: Sequence[str] = None,
+                 inherit_nodes: Sequence[str] = None, persistent_nodes: Sequence[str] = None):
 
         check_for_duplicates(node_to_dict(inputs).keys())
 
@@ -67,6 +73,7 @@ class EdgesBag(Attachable):
         # TODO check for duplicates
         self.inherit_nodes = inherit_nodes or []
         self.optional_nodes = optional_nodes or []
+        self.persistent_nodes = set(persistent_nodes or [])
 
         tree_node_map = TreeNode.from_edges(edges)
         inputs = [tree_node_map[x] for x in inputs]
@@ -108,6 +115,7 @@ class EdgesBag(Attachable):
             self.update_map(self.outputs, node_map),
             self.update_map(self.backward_inputs, node_map),
             self.update_map(self.backward_outputs, node_map),
+            self.persistent_nodes
         )
         return params
 
@@ -120,7 +128,7 @@ class EdgesBag(Attachable):
         if self.inherit_nodes == INHERIT_ALL:
             inherit_nodes = list(prev_outputs.keys())
         else:
-            inherit_nodes = self.inherit_nodes
+            inherit_nodes = self.inherit_nodes + list(params.persistent_nodes)
 
         outputs = []
         new_edges = []

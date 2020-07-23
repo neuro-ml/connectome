@@ -9,7 +9,6 @@ class PipelineLayer(EdgesBag):
         edges = head_params.edges
         forward_inputs = head_params.inputs
         forward_outputs = head_params.outputs
-
         backward_inputs = head_params.backward_inputs
 
         for layer in tail:

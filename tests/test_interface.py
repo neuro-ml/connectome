@@ -1,3 +1,5 @@
+from collections import Counter
+
 from connectome.interface.base import Source, Chain
 from connectome.interface.blocks import Merge
 
@@ -83,7 +85,10 @@ def test_optional(block_builder):
         block_builder.zoom(spacing=123),
         block_builder.optional(),
         block_builder.identity(),
+        block_builder.optional(),
+        block_builder.optional(),
         block_builder.crop(),
+        block_builder.optional(),
         block_builder.optional(),
         block_builder.identity(),
     )
@@ -100,3 +105,19 @@ def test_optional(block_builder):
 
     layer = optional._layer
     assert layer.get_backward_method('first_optional')(layer.get_forward_method('first_optional')(100500)) == 100500
+
+
+def test_persistent(block_builder):
+    pipeline = Chain(
+        block_builder.first_ds(first_constant=2, ids_arg=4)
+    )
+    assert Counter(pipeline.ids()) == Counter([0, 1, 2, 3])
+
+    pipeline = Chain(
+        block_builder.first_ds(first_constant=2, ids_arg=4),
+        block_builder.zoom(spacing=123),
+        block_builder.optional(),
+        block_builder.optional(),
+        block_builder.zoom(spacing=123),
+    )
+    assert Counter(pipeline.ids()) == Counter([0, 1, 2, 3])

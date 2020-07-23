@@ -15,7 +15,9 @@ class CacheLayer(Attachable):
     def get_storage(self):
         raise NotImplementedError
 
-    def attach(self, forward_outputs: Nodes, backward_inputs: Nodes) -> Tuple[Nodes, Nodes, Edges]:
+    def attach(self, forward_outputs: Nodes, backward_inputs: Nodes,
+               persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, Edges]:
+
         # TODO: add backward support
         assert not backward_inputs
 
