@@ -2,7 +2,7 @@ import inspect
 
 from ..engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
 from ..engine import Node, BoundEdge
-from ..layers import EdgesBag
+from ..layers import EdgesBag, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter
 
@@ -81,7 +81,7 @@ def unwrap_transform(value):
 
 
 INIT_NAME = '__init__'
-ALLOWED_MAGIC = {'__module__', '__qualname__'}
+ALLOWED_MAGIC = {'__module__', '__qualname__', '__inherit__'}
 
 
 class GraphFactory:
@@ -107,6 +107,8 @@ class GraphFactory:
         self.constants = NodeStorage()
         # names of optional nodes
         self.optional_node_names = []
+        # names of inherited nodes
+        self.inherited_node_names = []
         self._init()
         self._validate()
         self._collect_nodes()
@@ -117,6 +119,9 @@ class GraphFactory:
     def _validate(self):
         # e.g. check allowed magic here
         # or names and values
+        raise NotImplementedError
+
+    def _process_inherit(self, value):
         raise NotImplementedError
 
     def _process_parameter(self, name, value) -> BoundEdge:
@@ -148,18 +153,16 @@ class GraphFactory:
         # gather, inputs, outputs and their edges
         for name, value in self.scope.items():
             # TODO: func
+            # TODO: move to validate?
             if name.startswith('__'):
-                continue
+                if name == '__inherit__':
+                    self._process_inherit(value)
 
-            if is_parameter(name, value):
+            elif is_parameter(name, value):
                 self.edges.append(self._process_parameter(name, value))
 
             elif is_forward(name, value):
                 self.edges.append(self._process_forward(name, value))
-
-                # TODO: move to _process_forward
-                if OptionalDecoratorAdapter in get_decorators(value):
-                    self.optional_node_names.append(name)
 
             elif is_backward(name, value):
                 self.edges.append(self._process_backward(name, value))
@@ -250,7 +253,8 @@ class GraphFactory:
         return EdgesBag(
             list(self.inputs.values()), list(self.outputs.values()), self.edges,
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            self.optional_node_names
+            self.optional_node_names,
+            self.inherited_node_names
         )
 
 
@@ -262,6 +266,9 @@ class SourceFactory(GraphFactory):
     def _validate(self):
         # TODO: ids, id, magic
         pass
+
+    def _process_inherit(self, value):
+        raise ValueError
 
     def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
@@ -282,7 +289,24 @@ class TransformFactory(GraphFactory):
     def _validate(self):
         pass
 
+    def _process_inherit(self, value):
+        if isinstance(value, list):
+            for node_name in value:
+                # TODO exception
+                assert isinstance(node_name, str)
+                self.inherited_node_names.append(node_name)
+
+        elif isinstance(value, str):
+            self.inherited_node_names.append(value)
+        elif value == INHERIT_ALL:
+            self.inherited_node_names = INHERIT_ALL
+        else:
+            raise ValueError("Expected 'str' or 'List[str] in __inherit__'")
+
     def _process_forward(self, name, value) -> BoundEdge:
+        if OptionalDecoratorAdapter in get_decorators(value):
+            self.optional_node_names.append(name)
+
         value = unwrap_transform(value)
         first, *names = extract_signature(value)
         inputs = [self._get_private(first) if is_private(first) else self.inputs[name]]

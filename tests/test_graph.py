@@ -45,7 +45,7 @@ def test_cache(layer_builder):
     assert first.get_forward_method('x')(1) == 1
     assert count == 1
 
-    chain = PipelineLayer(first, MemoryCacheLayer(names=['x']))
+    chain = PipelineLayer(first, MemoryCacheLayer(size=None, names=['x']))
     assert chain.get_forward_method('x')(1) == 1
     assert count == 2
     assert chain.get_forward_method('x')(1) == 1

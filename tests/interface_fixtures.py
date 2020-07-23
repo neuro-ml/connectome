@@ -1,6 +1,7 @@
 import re
 import pytest
 
+from connectome.layers import INHERIT_ALL
 from connectome.interface.base import Source, Transform
 from connectome.interface.decorators import inverse, optional
 
@@ -80,11 +81,7 @@ class Zoom(Transform):
 
 
 class Optional(Transform):
-    @staticmethod
-    def image(x):
-        return x
-
-    spacing = lungs = image
+    __inherit__ = ['image', 'spacing', 'lungs']
 
     @staticmethod
     @optional
@@ -106,10 +103,9 @@ class Optional(Transform):
     def second_optional(x):
         return int(x)
 
-    @staticmethod
-    @inverse
-    def image(x):
-        return x
+
+class Identity(Transform):
+    __inherit__ = INHERIT_ALL
 
 
 class BlockBuilder:
@@ -132,6 +128,10 @@ class BlockBuilder:
     @staticmethod
     def optional():
         return Optional()
+
+    @staticmethod
+    def identity():
+        return Identity()
 
 
 @pytest.fixture(scope='module')

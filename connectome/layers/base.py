@@ -8,6 +8,9 @@ from ..engine import TreeNode, BoundEdge, Node
 Nodes = Sequence[Node]
 Edges = Sequence[BoundEdge]
 
+# TODO replace by object?
+INHERIT_ALL = 66
+
 
 class Layer:
     pass
@@ -15,11 +18,11 @@ class Layer:
 
 class LayerParams(NamedTuple):
     edges: List[BoundEdge]
-    inputs: Sequence[Node]
-    outputs: Sequence[Node]
+    inputs: List[Node]
+    outputs: List[Node]
 
-    backward_inputs: Sequence[Node]
-    backward_outputs: Sequence[Node]
+    backward_inputs: List[Node]
+    backward_outputs: List[Node]
 
 
 class Attachable(Layer):
@@ -47,8 +50,9 @@ class Attachable(Layer):
 
 
 class EdgesBag(Attachable):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges, backward_inputs: Nodes = None,
-                 backward_outputs: Nodes = None, optional_nodes: Sequence[str] = None):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges,
+                 backward_inputs: Nodes = None, backward_outputs: Nodes = None,
+                 optional_nodes: Sequence[str] = None, inherit_nodes: Sequence[str] = None):
 
         check_for_duplicates(node_to_dict(inputs).keys())
 
@@ -61,6 +65,7 @@ class EdgesBag(Attachable):
         check_for_duplicates(node_to_dict(backward_inputs))
 
         # TODO check for duplicates
+        self.inherit_nodes = inherit_nodes or []
         self.optional_nodes = optional_nodes or []
 
         tree_node_map = TreeNode.from_edges(edges)
@@ -108,48 +113,86 @@ class EdgesBag(Attachable):
 
     def _attach_forward(self, prev_outputs: Nodes, params: LayerParams) -> Tuple[Nodes, Edges]:
         check_for_duplicates([x.name for x in prev_outputs])
-        prev_outputs = node_to_dict(prev_outputs)
-        new_edges = []
 
-        inactive_input_names = []
+        prev_outputs = node_to_dict(prev_outputs)
+        cur_inputs = node_to_dict(params.inputs)
+
+        if self.inherit_nodes == INHERIT_ALL:
+            inherit_nodes = list(prev_outputs.keys())
+        else:
+            inherit_nodes = self.inherit_nodes
+
+        outputs = []
+        new_edges = []
+        active_input_names = []
+
+        # connect common nodes
         for i in params.inputs:
             if i.name in prev_outputs:
+                active_input_names.append(i.name)
                 new_edges.append(BoundEdge(IdentityEdge(), [prev_outputs[i.name]], i))
-            elif i.name in self.optional_nodes:
-                inactive_input_names.append(i.name)
-            else:
-                raise RuntimeError(f"Previous layer must contain '{i.name}' node.")
+
+        # check for inherited nodes
+        for name, prev_output in prev_outputs.items():
+            if name not in active_input_names and name in inherit_nodes:
+                output = Node(name)
+                outputs.append(output)
+                active_input_names.append(name)
+                new_edges.append(BoundEdge(IdentityEdge(), [prev_output], output))
+
+        # check that unused nodes are @optional
+        unused_names = set(cur_inputs.keys()).difference(set(active_input_names))
+        for name in unused_names:
+            if name not in self.optional_nodes:
+                raise RuntimeError(f"Previous layer must contain '{name}' node.")
 
         essential_input_names = self.get_essential_input_names(params.inputs, params.outputs, params.edges)
-        outputs = []
         for o in params.outputs:
             # drop nodes that depend on inactive inputs
-            if not any(name in inactive_input_names for name in essential_input_names[o]):
+            if all(name in active_input_names for name in essential_input_names[o]):
                 outputs.append(o)
+
         return outputs, new_edges
 
     def _attach_backward(self, prev_inputs: Nodes, params: LayerParams) -> Tuple[Nodes, Edges]:
-        # TODO is it bad?
         # means that this is the last backward layer
         if len(prev_inputs) == 0:
             return params.backward_inputs, []
 
         check_for_duplicates([x.name for x in prev_inputs])
         prev_inputs = node_to_dict(prev_inputs)
-        new_edges = []
 
-        active_input_names = []
-        for o in params.backward_outputs:
-            if o.name in prev_inputs:
-                new_edges.append(BoundEdge(IdentityEdge(), [o], prev_inputs[o.name]))
-                active_input_names.append(o.name)
-            elif o.name not in self.optional_nodes:
-                raise RuntimeError(f"Previous layer must contain '{o.name}' node.")
+        if self.inherit_nodes == INHERIT_ALL:
+            inherit_node_names = list(prev_inputs.keys())
+        else:
+            inherit_node_names = self.inherit_nodes
 
         inputs = []
+        new_edges = []
+        active_output_names = []
+        cur_outputs = node_to_dict(params.backward_outputs)
+
+        for o in params.backward_outputs:
+            if o.name in prev_inputs:
+                active_output_names.append(o.name)
+                new_edges.append(BoundEdge(IdentityEdge(), [o], prev_inputs[o.name]))
+
+        for name, prev_input in prev_inputs.items():
+            if name not in active_output_names and name in inherit_node_names:
+                inp = Node(name)
+                inputs.append(inp)
+                active_output_names.append(name)
+                new_edges.append(BoundEdge(IdentityEdge(), [inp], prev_input))
+
+        # check that unused nodes are @optional
+        unused_names = set(cur_outputs.keys()).difference(set(active_output_names))
+        for name in unused_names:
+            if name not in self.optional_nodes:
+                raise RuntimeError(f"Previous layer must contain '{name}' node.")
+
         # drop inactive inputs
         for name, node in node_to_dict(params.backward_inputs).items():
-            if name in active_input_names:
+            if name in active_output_names:
                 inputs.append(node)
 
         return inputs, new_edges

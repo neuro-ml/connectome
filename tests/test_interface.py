@@ -79,11 +79,12 @@ def test_backward(block_builder):
 def test_optional(block_builder):
     pipeline = Chain(
         block_builder.first_ds(first_constant=2, ids_arg=15),
-        block_builder.optional(),
         block_builder.zoom(spacing=123),
         block_builder.optional(),
+        block_builder.identity(),
         block_builder.crop(),
         block_builder.optional(),
+        block_builder.identity(),
     )
 
     identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
