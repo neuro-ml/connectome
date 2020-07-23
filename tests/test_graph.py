@@ -8,8 +8,8 @@ def test_single(first_simple):
     assert first_simple.get_forward_method('squared')(9) == 81
 
 
-def test_duplicates(layer_builder):
-    double = layer_builder.build_layer(x=lambda x: 2 * x)
+def test_duplicates(layer_maker):
+    double = layer_maker.build_layer(x=lambda x: 2 * x)
     assert double.get_forward_method('x')(4) == 8
     eight = PipelineLayer(
         double, double, double,
@@ -33,14 +33,14 @@ def test_chain(first_simple, second_simple, third_simple):
     assert chain.get_forward_method('original')(x=9, y=10) == 9
 
 
-def test_cache(layer_builder):
+def test_cache(layer_maker):
     def counter(x):
         nonlocal count
         count += 1
         return x
 
     count = 0
-    first = layer_builder.build_layer(x=counter)
+    first = layer_maker.build_layer(x=counter, inverse_x=lambda x: x)
     assert first.get_forward_method('x')(1) == 1
     assert count == 1
 
@@ -54,6 +54,8 @@ def test_cache(layer_builder):
     assert count == 3
     assert chain.get_forward_method('x')(2) == 2
     assert count == 3
+    assert chain.get_forward_method('x')(chain.get_backward_method('x')(3)) == 3
+    assert count == 4
 
 
 def test_slicing(first_simple, second_simple, third_simple):
@@ -77,7 +79,7 @@ def test_backward_methods(first_backward, second_backward):
     assert chain.get_backward_method('prod')(chain.get_forward_method('prod')(15)) == 15.0
 
 
-def test_loopback(first_backward, second_backward, layer_builder):
+def test_loopback(first_backward, second_backward, layer_maker):
     layer = PipelineLayer(first_backward, second_backward)
 
     wrapped = layer.get_loopback(lambda x: x, ['prod'], 'prod')
@@ -92,7 +94,7 @@ def test_loopback(first_backward, second_backward, layer_builder):
         return 5
 
     count = 0
-    cross_pipes_checker = layer_builder.build_layer(
+    cross_pipes_checker = layer_maker.build_layer(
         prod=lambda prod, _counter: prod,
         inverse_prod=lambda prod, _counter: prod,
         _counter=counter
@@ -104,12 +106,12 @@ def test_loopback(first_backward, second_backward, layer_builder):
     assert count == 1
 
 
-def test_optional(first_simple, layer_builder):
-    first = layer_builder.build_layer(
+def test_optional(first_simple, layer_maker):
+    first = layer_maker.build_layer(
         sum=lambda x, y: x + y,
         prod=lambda x, y: x * y,
     )
-    second = layer_builder.build_layer(
+    second = layer_maker.build_layer(
         first_out=lambda sum, prod: sum * prod,
         second_out=lambda sub: 2 * sub,
         optional_nodes=['sub']

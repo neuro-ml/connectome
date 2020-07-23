@@ -108,7 +108,7 @@ class Identity(Transform):
     __inherit__ = INHERIT_ALL
 
 
-class BlockBuilder:
+class BlockMaker:
     @staticmethod
     def first_ds(**kwargs):
         return FirstDS(**kwargs)
@@ -135,5 +135,5 @@ class BlockBuilder:
 
 
 @pytest.fixture(scope='module')
-def block_builder():
-    return BlockBuilder
+def block_maker():
+    return BlockMaker

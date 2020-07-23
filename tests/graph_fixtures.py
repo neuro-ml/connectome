@@ -9,7 +9,7 @@ from connectome.engine.edges import FunctionEdge
 from connectome.utils import extract_signature
 
 
-class LayerBuilder:
+class LayerMaker:
     @staticmethod
     def build_layer(optional_nodes=None, **kwargs):
 
@@ -71,13 +71,13 @@ class LayerBuilder:
 
 
 @pytest.fixture(scope='module')
-def layer_builder():
-    return LayerBuilder
+def layer_maker():
+    return LayerMaker
 
 
 @pytest.fixture
-def first_simple(layer_builder):
-    return PipelineLayer(layer_builder.build_layer(
+def first_simple(layer_maker):
+    return PipelineLayer(layer_maker.build_layer(
         sum=lambda x, y: x + y,
         sub=lambda x, y: x - y,
         squared=lambda x: x ** 2,
@@ -88,8 +88,8 @@ def first_simple(layer_builder):
 
 
 @pytest.fixture
-def second_simple(layer_builder):
-    return layer_builder.build_layer(
+def second_simple(layer_maker):
+    return layer_maker.build_layer(
         prod=lambda squared, cube: squared * cube,
         min=lambda squared, cube: min(squared, cube),
         x=lambda x: x,
@@ -99,16 +99,16 @@ def second_simple(layer_builder):
 
 
 @pytest.fixture
-def third_simple(layer_builder):
-    return layer_builder.build_layer(
+def third_simple(layer_maker):
+    return layer_maker.build_layer(
         div=lambda prod, x: prod / x,
         original=lambda sub, y: sub + y,
     )
 
 
 @pytest.fixture
-def first_backward(layer_builder):
-    return layer_builder.build_layer(
+def first_backward(layer_maker):
+    return layer_maker.build_layer(
         prod=lambda x, _spacing: x * _spacing,
         inverse_prod=lambda prod, _spacing: prod / _spacing,
         _spacing=lambda: 2
@@ -116,16 +116,16 @@ def first_backward(layer_builder):
 
 
 @pytest.fixture
-def second_backward(layer_builder):
-    return layer_builder.build_layer(
+def second_backward(layer_maker):
+    return layer_maker.build_layer(
         prod=lambda prod: str(prod + 1),
         inverse_prod=lambda prod: int(prod) - 1,
     )
 
 
 @pytest.fixture
-def all_optional(layer_builder):
-    return layer_builder.build_layer(sum=lambda x, y: x + y,
-                                     prod=lambda x, y: x * y,
-                                     sub=lambda x, y: x - y,
-                                     optional_nodes=['sub'])
+def all_optional(layer_maker):
+    return layer_maker.build_layer(sum=lambda x, y: x + y,
+                                   prod=lambda x, y: x * y,
+                                   sub=lambda x, y: x - y,
+                                   optional_nodes=['sub'])

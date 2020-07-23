@@ -8,8 +8,7 @@ from ..utils import check_for_duplicates, node_to_dict
 Nodes = Sequence[Node]
 Edges = Sequence[BoundEdge]
 
-# TODO replace by object?
-INHERIT_ALL = 66
+INHERIT_ALL = object()
 
 
 class Layer:

@@ -33,24 +33,24 @@ def test_single_with_params():
     assert explicit.output_method('666') == defaults.output_method('666')
 
 
-def test_single(block_builder):
-    pipeline = block_builder.first_ds(first_constant=2, ids_arg=15)
-    cc = block_builder.crop()
+def test_single(block_maker):
+    pipeline = block_maker.first_ds(first_constant=2, ids_arg=15)
+    cc = block_maker.crop()
     assert pipeline.image(id='123123') == 'image, 2: 123123'
     assert cc.image(image='input') == f'input transformed 5'
 
 
-def test_chain(block_builder):
+def test_chain(block_maker):
     pipeline = Chain(
-        block_builder.first_ds(first_constant=2, ids_arg=15),
-        block_builder.crop(),
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        block_maker.crop(),
     )
     assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 16'
 
 
-def test_merge(block_builder):
-    first_ds = block_builder.first_ds(first_constant=1, ids_arg=15)
-    second_ds = block_builder.second_ds(second_constant=2, ids_arg=15)
+def test_merge(block_maker):
+    first_ds = block_maker.first_ds(first_constant=1, ids_arg=15)
+    second_ds = block_maker.second_ds(second_constant=2, ids_arg=15)
 
     merged = Merge(first_ds, second_ds)
     assert merged.image(8) == f'image, 1: 8'
@@ -58,18 +58,18 @@ def test_merge(block_builder):
 
     pipeline = Chain(
         merged,
-        block_builder.crop(),
+        block_maker.crop(),
     )
 
     assert pipeline.image(8) == f'image, 1: 8 transformed 11'
     assert pipeline.image('8') == f'second_ds_2_8 transformed 13'
 
 
-def test_backward(block_builder):
+def test_backward(block_maker):
     pipeline = Chain(
-        block_builder.first_ds(first_constant=2, ids_arg=15),
-        block_builder.zoom(spacing=123),
-        block_builder.crop()
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        block_maker.zoom(spacing=123),
+        block_maker.crop()
     )
 
     identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
@@ -79,18 +79,18 @@ def test_backward(block_builder):
     assert double(100500) == 100623100500
 
 
-def test_optional(block_builder):
+def test_optional(block_maker):
     pipeline = Chain(
-        block_builder.first_ds(first_constant=2, ids_arg=15),
-        block_builder.zoom(spacing=123),
-        block_builder.optional(),
-        block_builder.identity(),
-        block_builder.optional(),
-        block_builder.optional(),
-        block_builder.crop(),
-        block_builder.optional(),
-        block_builder.optional(),
-        block_builder.identity(),
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        block_maker.zoom(spacing=123),
+        block_maker.optional(),
+        block_maker.identity(),
+        block_maker.optional(),
+        block_maker.optional(),
+        block_maker.crop(),
+        block_maker.optional(),
+        block_maker.optional(),
+        block_maker.identity(),
     )
 
     identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
@@ -99,7 +99,7 @@ def test_optional(block_builder):
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
 
-    optional = block_builder.optional()
+    optional = block_maker.optional()
     assert optional.first_optional(10) == 11
     assert optional.second_optional(10) == '10'
 
@@ -107,17 +107,17 @@ def test_optional(block_builder):
     assert layer.get_backward_method('first_optional')(layer.get_forward_method('first_optional')(100500)) == 100500
 
 
-def test_persistent(block_builder):
+def test_persistent(block_maker):
     pipeline = Chain(
-        block_builder.first_ds(first_constant=2, ids_arg=4)
+        block_maker.first_ds(first_constant=2, ids_arg=4)
     )
     assert Counter(pipeline.ids()) == Counter([0, 1, 2, 3])
 
     pipeline = Chain(
-        block_builder.first_ds(first_constant=2, ids_arg=4),
-        block_builder.zoom(spacing=123),
-        block_builder.optional(),
-        block_builder.optional(),
-        block_builder.zoom(spacing=123),
+        block_maker.first_ds(first_constant=2, ids_arg=4),
+        block_maker.zoom(spacing=123),
+        block_maker.optional(),
+        block_maker.optional(),
+        block_maker.zoom(spacing=123),
     )
     assert Counter(pipeline.ids()) == Counter([0, 1, 2, 3])

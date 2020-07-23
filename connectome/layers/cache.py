@@ -1,10 +1,10 @@
 from pathlib import Path
 from typing import Sequence
 
+from .base import Attachable, Nodes, Tuple, Edges, LayerParams
 from ..engine.base import BoundEdge, Node
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..utils import check_for_duplicates, node_to_dict
-from .base import Attachable, Nodes, Tuple, Edges
 from ..cache import DiskStorage, MemoryStorage
 
 
@@ -12,15 +12,14 @@ class CacheLayer(Attachable):
     def __init__(self, names):
         self.cache_names = names
 
+    def prepare(self) -> LayerParams:
+        # TODO: do it better
+        return LayerParams([], [], [], [], [], set())
+
     def get_storage(self):
         raise NotImplementedError
 
-    def attach(self, forward_outputs: Nodes, backward_inputs: Nodes,
-               persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, Edges]:
-
-        # TODO: add backward support
-        assert not backward_inputs
-
+    def _attach_forward(self, forward_outputs: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
         check_for_duplicates([x.name for x in forward_outputs])
         forward_outputs = node_to_dict(forward_outputs)
 
@@ -33,7 +32,17 @@ class CacheLayer(Attachable):
             else:
                 edges.append(BoundEdge(IdentityEdge(), [forward_outputs[node.name]], node))
 
-        return outputs, [], edges
+        return outputs, edges
+
+    def _attach_backward(self, prev_inputs: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
+        check_for_duplicates([x.name for x in prev_inputs])
+        prev_inputs = node_to_dict(prev_inputs)
+
+        edges = []
+        inputs = [Node(name) for name in prev_inputs]
+        for node in inputs:
+            edges.append(BoundEdge(IdentityEdge(), [node], prev_inputs[node.name]))
+        return inputs, edges
 
 
 class MemoryCacheLayer(CacheLayer):
