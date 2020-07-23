@@ -1,10 +1,9 @@
 from pathlib import Path
 from typing import Sequence
 
-from connectome.engine.base import BoundEdge, Node
-from connectome.engine.edges import CacheEdge, IdentityEdge
-from connectome.utils import check_for_duplicates, node_to_dict
-
+from ..engine.base import BoundEdge, Node
+from ..engine.edges import CacheEdge, IdentityEdge
+from ..utils import check_for_duplicates, node_to_dict
 from .base import Attachable, Nodes, Tuple, Edges
 from ..cache import DiskStorage, MemoryStorage
 
@@ -27,7 +26,7 @@ class CacheLayer(Attachable):
         outputs = [Node(name) for name in forward_outputs]
 
         for node in outputs:
-            if node.name in self.cache_names:
+            if self.cache_names is None or node.name in self.cache_names:
                 edges.append(BoundEdge(CacheEdge(self.get_storage()), [forward_outputs[node.name]], node))
             else:
                 edges.append(BoundEdge(IdentityEdge(), [forward_outputs[node.name]], node))
@@ -41,12 +40,16 @@ class CacheLayer(Attachable):
 
 
 class MemoryCacheLayer(CacheLayer):
+    def __init__(self, names, size):
+        super().__init__(names)
+        self.size = size
+
     def get_storage(self):
-        return MemoryStorage()
+        return MemoryStorage(self.size)
 
 
 class DiskCacheLayer(CacheLayer):
-    def __init__(self, storage, names):
+    def __init__(self, names, storage):
         super().__init__(names)
         self.storage = Path(storage)
 

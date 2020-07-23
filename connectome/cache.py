@@ -5,8 +5,9 @@ from threading import RLock
 from typing import Union, Sequence
 
 import cloudpickle
-from diskcache import Disk
-from diskcache.core import MODE_BINARY, UNKNOWN, Cache
+import pylru
+from diskcache import Disk, Cache
+from diskcache.core import MODE_BINARY, UNKNOWN
 
 from .engine import NodeHash
 from .serializers import NumpySerializer, ChainSerializer, Serializer
@@ -25,9 +26,9 @@ class CacheStorage:
 
 
 class MemoryStorage(CacheStorage):
-    def __init__(self):
+    def __init__(self, size: int):
         super().__init__()
-        self._cache = {}
+        self._cache = {} if size is None else pylru.lrucache(size)
         self._lock = RLock()
 
     @atomize()

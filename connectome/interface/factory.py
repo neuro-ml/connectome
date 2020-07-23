@@ -157,6 +157,7 @@ class GraphFactory:
             elif is_forward(name, value):
                 self.edges.append(self._process_forward(name, value))
 
+                # TODO: move to _process_forward
                 if OptionalDecoratorAdapter in get_decorators(value):
                     self.optional_node_names.append(name)
 

@@ -21,6 +21,9 @@ class CallableBlock(BaseBlock):
     def __getattr__(self, name):
         return self._layer.get_forward_method(name)
 
+    def __dir__(self):
+        return tuple(x.name for x in self._layer.inputs)
+
 
 class Chain(CallableBlock):
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
@@ -28,6 +31,7 @@ class Chain(CallableBlock):
         self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
 
     def __getitem__(self, index):
+        # FIXME: must return a Chain instead
         return FromLayer(self._layer.slice(index.start, index.stop))
 
 
@@ -83,6 +87,7 @@ class Source(CallableBlock, metaclass=SourceBase):
     pass
 
 
+# TODO: move to blocks
 class Merge(CallableBlock):
     def __init__(self, *blocks: CallableBlock):
         super().__init__()
