@@ -1,11 +1,11 @@
 from pathlib import Path
 from typing import Sequence
 
-from .base import Attachable, Nodes, Tuple, Edges, LayerParams
+from .base import LayerParams, Attachable, Nodes, Tuple, Edges
 from ..engine.base import BoundEdge, Node
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..utils import check_for_duplicates, node_to_dict
-from ..cache import DiskStorage, MemoryStorage
+from ..storage.cache import DiskStorage, MemoryStorage
 
 
 class CacheLayer(Attachable):

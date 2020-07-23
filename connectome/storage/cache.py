@@ -4,14 +4,14 @@ from pathlib import Path
 from threading import RLock
 from typing import Union, Sequence
 
-import cloudpickle
 import pylru
 from diskcache import Disk, Cache
 from diskcache.core import MODE_BINARY, UNKNOWN
 
-from .engine.base import NodeHash
-from .serializers import NumpySerializer, ChainSerializer, Serializer
-from .utils import atomize
+from ..engine.base import NodeHash
+from ..serializers import NumpySerializer, ChainSerializer, Serializer
+from ..utils import atomize
+from .pickler import dumps
 
 
 class CacheStorage:
@@ -88,7 +88,7 @@ class SerializedDisk(Disk):
     @staticmethod
     def _pickle(key) -> bytes:
         # TODO: how slow is this?
-        return cloudpickle.dumps(key)
+        return dumps(key)
 
     def _digest(self, pickled: bytes):
         return blake2b(pickled, digest_size=self.name_size * self.folder_levels).hexdigest()
