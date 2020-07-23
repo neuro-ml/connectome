@@ -238,6 +238,10 @@ class GraphFactory:
         ])
 
     def build(self, arguments: dict):
+        diff = list(set(self.arguments) - set(arguments))
+        if diff:
+            raise ValueError(f'Missing required arguments: {diff}.')
+
         if self.has_init():
             self.scope[INIT_NAME](self.get_self(), **arguments)
         self.edges.extend(self._get_constant_edges(arguments))
