@@ -4,6 +4,7 @@ from typing import Union, Sequence
 from .base import FromLayer, CallableBlock
 from ..layers.cache import MemoryCacheLayer, DiskCacheLayer
 from ..layers.merge import SwitchLayer
+from ..layers.shortcuts import ApplyLayer
 
 PathLike = Union[Path, str]
 
@@ -25,6 +26,11 @@ class Merge(CallableBlock):
             raise ValueError(identifier)
 
         self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))
+
+
+class Apply(FromLayer):
+    def __init__(self, **transform):
+        super().__init__(ApplyLayer(transform))
 
 
 class CacheToRam(FromLayer):
