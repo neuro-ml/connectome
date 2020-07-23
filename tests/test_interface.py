@@ -25,6 +25,10 @@ def test_single_with_params():
     pipeline = ParameterizedObj(some_constant=2, ids_arg=15)
     assert pipeline.output_method(id='666') == '<output>_666_2_<second>_666_2_<first>_666_2'
 
+    defaults = ParameterizedObj()
+    explicit = ParameterizedObj(some_constant=1, ids_arg=4)
+    assert explicit.output_method('666') == defaults.output_method('666')
+
 
 def test_single(block_builder):
     pipeline = block_builder.first_ds(first_constant=2, ids_arg=15)

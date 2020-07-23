@@ -45,10 +45,10 @@ class SourceBase(type):
             # TODO: split into two objects: the first one holds the scope
             #  the second one compiles the layer
             factory = SourceFactory(namespace)
-            signature = factory.get_init_signature()
-            kwargs = signature.bind(**kwargs).kwargs
+            scope = factory.get_init_signature().bind_partial(**kwargs)
+            scope.apply_defaults()
             # TODO: should only build if not called from super
-            factory.build(kwargs)
+            factory.build(scope.kwargs)
             self._layer = factory.get_layer()
 
         return super().__new__(mcs, class_name, bases, {'__init__': __init__})
@@ -66,9 +66,10 @@ class TransformBase(type):
             # TODO: split into two objects: the first one holds the scope
             #  the second one compiles the layer
             factory = TransformFactory(namespace)
-            signature = factory.get_init_signature()
-            kwargs = signature.bind(**kwargs).kwargs
-            factory.build(kwargs)
+            scope = factory.get_init_signature().bind_partial(**kwargs)
+            scope.apply_defaults()
+            # TODO: should only build if not called from super
+            factory.build(scope.kwargs)
             self._layer = factory.get_layer()
 
         return super().__new__(mcs, class_name, bases, {'__init__': __init__})
