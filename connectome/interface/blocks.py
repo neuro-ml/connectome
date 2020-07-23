@@ -1,10 +1,30 @@
 from pathlib import Path
-from typing import Union
+from typing import Union, Sequence
 
-from .base import FromLayer
-from ..layers import MemoryCacheLayer, Sequence, DiskCacheLayer
+from .base import FromLayer, CallableBlock
+from ..layers.cache import MemoryCacheLayer, DiskCacheLayer
+from ..layers.merge import SwitchLayer
 
 PathLike = Union[Path, str]
+
+
+class Merge(CallableBlock):
+    def __init__(self, *blocks: CallableBlock):
+        super().__init__()
+
+        # FIXME: hope this works :)
+        idx_union = set.union(*[set(layer.ids()) for layer in blocks])
+        if sum(len(layer.ids()) for layer in blocks) != len(idx_union):
+            raise RuntimeError('Datasets have same indices')
+
+        def branch_selector(identifier):
+            for idx, ds in enumerate(blocks):
+                if identifier in ds.ids():
+                    return idx
+
+            raise ValueError(identifier)
+
+        self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))
 
 
 class CacheToRam(FromLayer):

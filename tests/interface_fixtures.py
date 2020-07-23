@@ -1,7 +1,7 @@
 import re
 import pytest
 
-from connectome.layers import INHERIT_ALL
+from connectome.layers.base import INHERIT_ALL
 from connectome.interface.base import Source, Transform
 from connectome.interface.decorators import inverse, optional
 

@@ -6,8 +6,6 @@ from typing import Sequence, Union
 from .base import TreeNode, NodeHash
 from .utils import ExpirationCache
 
-__all__ = 'compile_graph',
-
 
 def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[TreeNode]]):
     squeeze = isinstance(outputs, TreeNode)

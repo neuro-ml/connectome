@@ -1,8 +1,9 @@
 import inspect
 
-from ..engine.edges import FunctionEdge, ValueEdge, IdentityEdge, InitEdge, ItemGetterEdge
-from ..engine import Node, BoundEdge
-from ..layers import EdgesBag, INHERIT_ALL
+from ..engine.edges import FunctionEdge, IdentityEdge
+from ..engine.base import Node, BoundEdge
+from ..engine.interface import ValueEdge, InitEdge, ItemGetterEdge
+from ..layers.base import EdgesBag, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter
 
@@ -44,6 +45,7 @@ def is_parameter(name: str, value):
 def is_forward(name: str, value):
     return (
             not is_private(name)
+            # TODO: enforce staticmethod
             and isinstance(value, staticmethod)
             and InverseDecoratorAdapter not in get_decorators(value)
     )
@@ -265,6 +267,7 @@ class SourceFactory(GraphFactory):
 
     def _validate(self):
         # TODO: ids, id, magic
+        # require docstring
         pass
 
     def _process_inherit(self, value):

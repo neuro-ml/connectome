@@ -51,13 +51,9 @@ def atomize(attribute: str = '_lock'):
     return decorator
 
 
-def count_duplicates(sequence):
-    return Counter(sequence)
-
-
 # TODO add error message
 def check_for_duplicates(collection):
-    counts: dict = count_duplicates([x for x in collection])
+    counts: dict = Counter(list(collection))
     assert not any(v > 1 for k, v in counts.items())
 
 

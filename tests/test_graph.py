@@ -1,6 +1,5 @@
-import pytest
-
-from connectome.layers import PipelineLayer, MemoryCacheLayer
+from connectome.layers.cache import MemoryCacheLayer
+from connectome.layers.pipeline import PipelineLayer
 
 
 def test_single(first_simple):

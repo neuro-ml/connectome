@@ -1,4 +1,5 @@
-from connectome.interface.base import Source, Chain, Merge
+from connectome.interface.base import Source, Chain
+from connectome.interface.blocks import Merge
 
 
 def test_single_with_params():

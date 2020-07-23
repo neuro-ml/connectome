@@ -1,9 +1,9 @@
 import pytest
 
-from connectome.layers import PipelineLayer
-from connectome.layers import EdgesBag, BoundEdge
+from connectome.layers.pipeline import PipelineLayer
+from connectome.layers.base import EdgesBag
 
-from connectome.engine.base import Node
+from connectome.engine.base import Node, BoundEdge
 from connectome.engine.edges import FunctionEdge
 
 from connectome.utils import extract_signature

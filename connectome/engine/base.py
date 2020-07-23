@@ -40,7 +40,7 @@ class NodeHash:
         if self._kind == HashType.LEAF:
             return self._data
         else:
-            return tuple(h._data for h in self.children)
+            return tuple(h.value for h in self.children)
 
     @property
     def value(self):

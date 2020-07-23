@@ -9,7 +9,7 @@ import pylru
 from diskcache import Disk, Cache
 from diskcache.core import MODE_BINARY, UNKNOWN
 
-from .engine import NodeHash
+from .engine.base import NodeHash
 from .serializers import NumpySerializer, ChainSerializer, Serializer
 from .utils import atomize
 
@@ -57,7 +57,9 @@ class DiskStorage(CacheStorage):
         serializer = ChainSerializer(*serializers)
 
         # TODO: multiple storage
-        self.storage = Cache(str(storage), disk=SerializedDisk, disk_serializer=serializer)
+        # this is the only way to pass a custom serializer with non-json params
+        disk_type = type('SerializedChild', (SerializedDisk,), {'serializer': serializer})
+        self.storage = Cache(str(storage), disk=disk_type)
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:
@@ -76,16 +78,19 @@ class SerializedDisk(Disk):
     """Adapts diskcache to our needs."""
 
     PARAMETER_FILENAME = '.parameter'
+    serializer: Serializer
 
-    def __init__(self, directory, serializer: Serializer):
-        super().__init__(directory)
-        self.serializer = serializer
+    def __init__(self, directory, **kwargs):
+        super().__init__(str(directory), **kwargs)
         self.folder_levels = 2
         self.name_size = 32
 
-    def _digest(self, key):
+    @staticmethod
+    def _pickle(key) -> bytes:
         # TODO: how slow is this?
-        pickled = cloudpickle.dumps(key)
+        return cloudpickle.dumps(key)
+
+    def _digest(self, pickled: bytes):
         return blake2b(pickled, digest_size=self.name_size * self.folder_levels).hexdigest()
 
     def _filename(self, digest: str):
@@ -99,8 +104,8 @@ class SerializedDisk(Disk):
         return str(relative), root
 
     def put(self, key):
-        # TODO: reduce to one pickling
-        digest = self._digest(key)
+        pickled = self._pickle(key)
+        digest = self._digest(pickled)
         filename, full_path = self._filename(digest)
         full_path.mkdir(parents=True, exist_ok=True)
         path = full_path / self.PARAMETER_FILENAME
@@ -108,19 +113,20 @@ class SerializedDisk(Disk):
         if path.exists():
             # check consistency
             with open(path, 'rb') as file:
-                assert cloudpickle.load(file) == key
+                dumped = file.read()
+                assert dumped == pickled, (dumped, pickled)
 
         else:
             # or save
             with open(path, 'wb') as file:
-                cloudpickle.dump(key, file)
+                file.write(pickled)
 
         return super().put(digest)
 
     def store(self, value, read, key=UNKNOWN):
         assert key != UNKNOWN
         assert not read
-        filename, full_path = self._filename(self._digest(key))
+        filename, full_path = self._filename(self._digest(self._pickle(key)))
 
         try:
             # TODO: save timestamps, current user, user-defined meta, and other useful info

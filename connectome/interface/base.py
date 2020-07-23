@@ -1,6 +1,7 @@
 from typing import Callable, Sequence
 
-from ..layers import PipelineLayer, Layer, EdgesBag, SwitchLayer
+from ..layers.base import Layer, EdgesBag
+from ..layers.pipeline import PipelineLayer
 from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory
 
@@ -22,7 +23,7 @@ class CallableBlock(BaseBlock):
         return self._layer.get_forward_method(name)
 
     def __dir__(self):
-        return tuple(x.name for x in self._layer.inputs)
+        return tuple(x.name for x in self._layer.outputs)
 
 
 class Chain(CallableBlock):
@@ -86,23 +87,3 @@ class Transform(CallableBlock, metaclass=TransformBase):
 # TODO add inheritance
 class Source(CallableBlock, metaclass=SourceBase):
     pass
-
-
-# TODO: move to blocks
-class Merge(CallableBlock):
-    def __init__(self, *blocks: CallableBlock):
-        super().__init__()
-
-        # FIXME: hope this works :)
-        idx_union = set.union(*[set(layer.ids()) for layer in blocks])
-        if sum(len(layer.ids()) for layer in blocks) != len(idx_union):
-            raise RuntimeError('Datasets have same indices')
-
-        def branch_selector(identifier):
-            for idx, ds in enumerate(blocks):
-                if identifier in ds.ids():
-                    return idx
-
-            raise ValueError(identifier)
-
-        self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))

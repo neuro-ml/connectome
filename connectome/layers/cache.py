@@ -33,11 +33,6 @@ class CacheLayer(Attachable):
 
         return outputs, [], edges
 
-    def get_backward_params(self, other_inputs: Sequence[Node]):
-        this_inputs = [Node(o.name) for o in other_inputs]
-        edges = list(map(IdentityEdge, this_inputs, other_inputs))
-        return this_inputs, edges
-
 
 class MemoryCacheLayer(CacheLayer):
     def __init__(self, names, size):
