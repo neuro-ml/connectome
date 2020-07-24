@@ -63,7 +63,7 @@ class RemoteDict:
                 username = host.get('user', username)
 
         # TODO: context manager
-        ssh.connect(hostname, port, username, password)
+        ssh.connect(hostname, port, username, password, auth_timeout=10)
         self.ssh = ssh
         self.storage = Path(storage)
         self.serializer = serializer
@@ -87,7 +87,7 @@ class RemoteDict:
     def __getitem__(self, key):
         _, _, relative = key_to_relative(key)
         try:
-            self._load(self.serializer.load, relative / DATA_FOLDER)
+            return self._load(self.serializer.load, relative / DATA_FOLDER)
         except SCPException:
             raise KeyError from None
 

@@ -32,7 +32,7 @@ class DiskStorage(CacheStorage):
         self.options = {}
         for entry in options:
             cache = Cache(entry.path, size_limit=float('inf'), cull_limit=0, disk=disk_type)
-            storage.append(entry)
+            storage.append(cache)
             self.options[cache] = entry
 
         self.storage = ChainDict(storage, self._select_storage)
@@ -41,7 +41,7 @@ class DiskStorage(CacheStorage):
         options = self.options[cache]
         free_space = shutil.disk_usage(cache.directory).free
         # TODO: add volume check
-        return free_space <= options.min_free_space
+        return free_space >= options.min_free_space
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:
