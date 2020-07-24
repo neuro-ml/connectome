@@ -1,11 +1,12 @@
-from pathlib import Path
 from typing import Sequence
 
 from .base import LayerParams, Attachable, Nodes, Tuple, Edges
 from ..engine.base import BoundEdge, Node
 from ..engine.edges import CacheEdge, IdentityEdge
+from ..storage.remote import RemoteStorage
 from ..utils import check_for_duplicates, node_to_dict
-from ..storage.cache import DiskStorage, MemoryStorage
+from ..storage.base import MemoryStorage, CacheStorage
+from ..storage.disk import DiskStorage
 
 
 class CacheLayer(Attachable):
@@ -16,7 +17,7 @@ class CacheLayer(Attachable):
         # TODO: do it better
         return LayerParams([], [], [], [], [], set())
 
-    def get_storage(self):
+    def get_storage(self) -> CacheStorage:
         raise NotImplementedError
 
     def _attach_forward(self, forward_outputs: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
@@ -55,9 +56,20 @@ class MemoryCacheLayer(CacheLayer):
 
 
 class DiskCacheLayer(CacheLayer):
-    def __init__(self, names, storage):
+    def __init__(self, names, options, serializer):
         super().__init__(names)
-        self.storage = Path(storage)
+        self.serializer = serializer
+        self.options = options
 
     def get_storage(self):
-        return DiskStorage(self.storage)
+        return DiskStorage(self.options, self.serializer)
+
+
+class RemoteStorageLayer(CacheLayer):
+    def __init__(self, names, options, serializer):
+        super().__init__(names)
+        self.serializer = serializer
+        self.options = options
+
+    def get_storage(self):
+        return RemoteStorage(self.options, self.serializer)

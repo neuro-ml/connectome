@@ -1,4 +1,6 @@
 numpy
-cloudpickle
-diskcache~=4.1.0
+cloudpickle==1.2.*
+diskcache==4.1.*
 pylru
+paramiko
+scp

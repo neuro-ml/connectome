@@ -1,7 +1,7 @@
 from typing import Sequence, Tuple, Callable
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK
-from ..storage.cache import CacheStorage
+from ..storage.disk import CacheStorage
 
 
 # TODO: maybe the engine itself should deal with these

@@ -52,7 +52,7 @@ class PortablePickler(CloudPickler):
         return code, f_globals, defaults, closure_values, dct, base_globals
 
 
-def dumps(obj, protocol=None):
+def dumps(obj, protocol: int = None) -> bytes:
     with BytesIO() as file:
         PortablePickler(file, protocol=protocol).dump(obj)
         return file.getvalue()

@@ -1,6 +1,10 @@
 import inspect
 from functools import wraps
 from collections import Counter
+from pathlib import Path
+from typing import Union
+
+PathLike = Union[Path, str]
 
 
 class MultiDict(dict):

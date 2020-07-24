@@ -2,11 +2,13 @@ from pathlib import Path
 from typing import Union, Sequence
 
 from .base import FromLayer, CallableBlock
-from ..layers.cache import MemoryCacheLayer, DiskCacheLayer
+from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
-
-PathLike = Union[Path, str]
+from ..serializers import Serializer, resolve_serializer
+from ..storage.disk import DiskOptions
+from ..storage.remote import RemoteOptions, SSH_PORT
+from ..utils import PathLike
 
 
 class Merge(CallableBlock):
@@ -39,5 +41,19 @@ class CacheToRam(FromLayer):
 
 
 class CacheToDisk(FromLayer):
-    def __init__(self, storage: PathLike, names: Sequence[str] = None):
-        super().__init__(DiskCacheLayer(names, storage))
+    def __init__(self, *storage: Union[PathLike, DiskOptions],
+                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 names: Sequence[str] = None):
+        storage = [s if isinstance(s, DiskOptions) else DiskOptions(s) for s in storage]
+        super().__init__(DiskCacheLayer(names, storage, resolve_serializer(serializers)))
+
+
+class RemoteStorage(FromLayer):
+    def __init__(self, hostname: str, storage: Union[PathLike, Sequence[PathLike]], port: int = SSH_PORT,
+                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 username: str = None, password: str = None, names: Sequence[str] = None):
+        if isinstance(storage, (str, Path)):
+            storage = [storage]
+
+        options = [RemoteOptions(hostname, Path(path), port, username, password) for path in storage]
+        super().__init__(RemoteStorageLayer(names, options, resolve_serializer(serializers)))
