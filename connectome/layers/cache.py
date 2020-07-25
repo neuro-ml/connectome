@@ -56,20 +56,18 @@ class MemoryCacheLayer(CacheLayer):
 
 
 class DiskCacheLayer(CacheLayer):
-    def __init__(self, names, options, serializer):
+    def __init__(self, names, options, serializer, metadata):
         super().__init__(names)
-        self.serializer = serializer
-        self.options = options
+        self.storage = DiskStorage(options, serializer, metadata)
 
     def get_storage(self):
-        return DiskStorage(self.options, self.serializer)
+        return self.storage
 
 
 class RemoteStorageLayer(CacheLayer):
     def __init__(self, names, options, serializer):
         super().__init__(names)
-        self.serializer = serializer
-        self.options = options
+        self.storage = RemoteStorage(options, serializer)
 
     def get_storage(self):
-        return RemoteStorage(self.options, self.serializer)
+        return self.storage

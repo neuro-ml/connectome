@@ -43,9 +43,9 @@ class CacheToRam(FromLayer):
 class CacheToDisk(FromLayer):
     def __init__(self, *storage: Union[PathLike, DiskOptions],
                  serializers: Union[Serializer, Sequence[Serializer]] = None,
-                 names: Sequence[str] = None):
-        storage = [s if isinstance(s, DiskOptions) else DiskOptions(s) for s in storage]
-        super().__init__(DiskCacheLayer(names, storage, resolve_serializer(serializers)))
+                 names: Sequence[str] = None, metadata: dict = None):
+        storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
+        super().__init__(DiskCacheLayer(names, storage, resolve_serializer(serializers), metadata or {}))
 
 
 class RemoteStorage(FromLayer):

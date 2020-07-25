@@ -9,10 +9,9 @@ class SerializerError(Exception):
 
 
 class Serializer:
-    def save(self, value, folder: Path) -> int:
+    def save(self, value, folder: Path):
         """
         Saves the ``value`` to ``folder``.
-        Returns the occupied space in bytes.
         """
         raise NotImplementedError
 
@@ -33,7 +32,7 @@ class ChainSerializer(Serializer):
     def __init__(self, *serializers: Serializer):
         self.serializers = serializers
 
-    def save(self, value, folder: Path) -> int:
+    def save(self, value, folder: Path):
         for serializer in self.serializers:
             with suppress(SerializerError):
                 return serializer.save(value, folder)
@@ -50,9 +49,8 @@ class ChainSerializer(Serializer):
 
 # TODO: gzip
 class NumpySerializer(Serializer):
-    def save(self, value, folder: Path) -> int:
+    def save(self, value, folder: Path):
         np.save(folder / 'value.npy', value)
-        return value.nbytes
 
     def load(self, folder: Path):
         return np.load(folder / 'value.npy')
