@@ -52,8 +52,9 @@ NodesMask = Union[Sequence[int], FULL_MASK]
 
 
 class Edge:
-    def __init__(self, arity: int):
+    def __init__(self, arity: int, uses_hash: bool):
         self.arity = arity
+        self._uses_hash = uses_hash
 
     def evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         assert len(arguments) == len(mask)
@@ -73,6 +74,10 @@ class Edge:
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         raise NotImplementedError
+
+    @property
+    def uses_hash(self):
+        return self._uses_hash
 
 
 class TreeNode:

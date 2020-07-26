@@ -9,7 +9,7 @@ def test_single(first_simple):
 
 
 def test_duplicates(layer_maker):
-    double = layer_maker.build_layer(x=lambda x: 2 * x)
+    double = layer_maker.make_layer(x=lambda x: 2 * x)
     assert double.get_forward_method('x')(4) == 8
     eight = PipelineLayer(
         double, double, double,
@@ -40,7 +40,7 @@ def test_cache(layer_maker):
         return x
 
     count = 0
-    first = layer_maker.build_layer(x=counter, inverse_x=lambda x: x)
+    first = layer_maker.make_layer(x=counter, inverse_x=lambda x: x)
     assert first.get_forward_method('x')(1) == 1
     assert count == 1
 
@@ -94,7 +94,7 @@ def test_loopback(first_backward, second_backward, layer_maker):
         return 5
 
     count = 0
-    cross_pipes_checker = layer_maker.build_layer(
+    cross_pipes_checker = layer_maker.make_layer(
         prod=lambda prod, _counter: prod,
         inverse_prod=lambda prod, _counter: prod,
         _counter=counter
@@ -107,11 +107,11 @@ def test_loopback(first_backward, second_backward, layer_maker):
 
 
 def test_optional(first_simple, layer_maker):
-    first = layer_maker.build_layer(
+    first = layer_maker.make_layer(
         sum=lambda x, y: x + y,
         prod=lambda x, y: x * y,
     )
-    second = layer_maker.build_layer(
+    second = layer_maker.make_layer(
         first_out=lambda sum, prod: sum * prod,
         second_out=lambda sub: 2 * sub,
         optional_nodes=['sub']

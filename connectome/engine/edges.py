@@ -25,7 +25,7 @@ class Nothing:
 
 class FunctionEdge(Edge):
     def __init__(self, function: Callable, arity: int):
-        super().__init__(arity)
+        super().__init__(arity, uses_hash=False)
         self.function = function
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
@@ -45,7 +45,7 @@ class FunctionEdge(Edge):
 
 class IdentityEdge(Edge):
     def __init__(self):
-        super().__init__(arity=1)
+        super().__init__(arity=1, uses_hash=False)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return arguments[0]
@@ -56,7 +56,7 @@ class IdentityEdge(Edge):
 
 class CacheEdge(Edge):
     def __init__(self, storage: CacheStorage):
-        super().__init__(arity=1)
+        super().__init__(arity=1, uses_hash=True)
         self.storage = storage
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
@@ -83,6 +83,9 @@ class CacheEdge(Edge):
 
 
 class ProductEdge(Edge):
+    def __init__(self, arity: int):
+        super().__init__(arity, uses_hash=True)
+
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return arguments
 
@@ -94,7 +97,7 @@ class ProductEdge(Edge):
 # TODO: does Nothing live only in hashes?
 class SwitchEdge(Edge):
     def __init__(self, selector: Callable):
-        super().__init__(arity=1)
+        super().__init__(arity=1, uses_hash=True)
         self.selector = selector
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
@@ -113,7 +116,7 @@ class SwitchEdge(Edge):
 
 class ProjectionEdge(Edge):
     def __init__(self):
-        super().__init__(arity=1)
+        super().__init__(arity=1, uses_hash=True)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # take the only non-Nothing value

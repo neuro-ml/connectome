@@ -1,5 +1,6 @@
 from ..utils import node_to_dict
 from .base import EdgesBag, Attachable
+from .cache import CacheLayer
 
 
 class PipelineLayer(EdgesBag):
@@ -25,6 +26,13 @@ class PipelineLayer(EdgesBag):
 
         self.layers = [head, *tail]
         super().__init__(forward_inputs, forward_outputs, edges, backward_inputs, backward_outputs)
+
+    def remove_cache_layers(self):
+        not_cache_layers = []
+        for layer in self.layers:
+            if not isinstance(layer, CacheLayer):
+                not_cache_layers.append(layer)
+        return PipelineLayer(*not_cache_layers)
 
     def index(self, index):
         return self.slice(index, index + 1)

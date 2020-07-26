@@ -10,7 +10,7 @@ class ValueEdge(Edge):
     """
 
     def __init__(self, value):
-        super().__init__(arity=0)
+        super().__init__(arity=0, uses_hash=False)
         self.value = value
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):

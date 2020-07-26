@@ -7,7 +7,7 @@ from .base import TreeNode, NodeHash
 from .utils import ExpirationCache
 
 
-def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[TreeNode]]):
+def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[TreeNode]], use_hash=True):
     squeeze = isinstance(outputs, TreeNode)
     if squeeze:
         outputs = [outputs]
@@ -25,7 +25,7 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
     def caller(*args, **kwargs):
         scope = signature.bind(*args, **kwargs)
         # drop unnecessary branches
-        masks, hashes = prune(inputs_map, outputs, scope.arguments)
+        masks, hashes = prune(inputs_map, outputs, scope.arguments, use_hash=use_hash)
         # prepare for render
         local_counts = counts.copy()
         hashes = ExpirationCache(local_counts, hashes)
@@ -85,7 +85,7 @@ def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks
     return dict(entry_counts)
 
 
-def prune(inputs_map, outputs, arguments):
+def prune(inputs_map, outputs, arguments, use_hash=True):
     def visitor(node: TreeNode):
         if node in cache:
             return cache[node]
@@ -99,7 +99,9 @@ def prune(inputs_map, outputs, arguments):
     masks = {}
     cache = {}
     for name, n in inputs_map.items():
-        cache[n] = NodeHash.from_leaf(arguments[name])
+        # put objects into inputs if hashes are not required
+        hash_data = arguments[name] if use_hash else object()
+        cache[n] = NodeHash.from_leaf(hash_data)
     for n in outputs:
         visitor(n)
 
