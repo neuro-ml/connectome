@@ -26,20 +26,23 @@ class CallableBlock(BaseBlock):
         return tuple(x.name for x in self._layer.outputs)
 
 
+class FromLayer(BaseBlock):
+    def __init__(self, layer):
+        super().__init__()
+        self._layer = layer
+
+
 class Chain(CallableBlock):
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
         super().__init__()
         self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
 
     def __getitem__(self, index):
-        # FIXME: must return a Chain instead
-        return FromLayer(self._layer.slice(index.start, index.stop))
+        return Chain.from_pipeline(self._layer.slice(index.start, index.stop))
 
-
-class FromLayer(BaseBlock):
-    def __init__(self, layer):
-        super().__init__()
-        self._layer = layer
+    @classmethod
+    def from_pipeline(cls, pipeline: PipelineLayer):
+        return cls(*map(FromLayer, pipeline.layers))
 
 
 class SourceBase(type):
