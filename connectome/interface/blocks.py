@@ -15,9 +15,11 @@ class Merge(CallableBlock):
     def __init__(self, *blocks: CallableBlock):
         super().__init__()
 
-        # FIXME: hope this works :)
-        idx_union = set.union(*[set(layer.ids()) for layer in blocks])
-        if sum(len(layer.ids()) for layer in blocks) != len(idx_union):
+        idx_sum = []
+        for layer in blocks:
+            idx_sum.extend(layer.ids())
+
+        if len(idx_sum) != len(set(idx_sum)):
             raise RuntimeError('Datasets have same indices')
 
         def branch_selector(identifier):

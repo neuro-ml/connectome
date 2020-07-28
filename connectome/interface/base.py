@@ -40,6 +40,9 @@ class Chain(CallableBlock):
     def __getitem__(self, index):
         return Chain.from_pipeline(self._layer.slice(index.start, index.stop))
 
+    def remove_cache(self):
+        return Chain.from_pipeline(self._layer.remove_cache_layers())
+
     @classmethod
     def from_pipeline(cls, pipeline: PipelineLayer):
         return cls(*map(FromLayer, pipeline.layers))
