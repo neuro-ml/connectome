@@ -1,3 +1,4 @@
+from contextlib import suppress
 from typing import Sequence, Callable
 
 
@@ -6,7 +7,7 @@ class InsertError(KeyError):
 
 
 class ChainDict:
-    def __init__(self, dicts: Sequence, selector: Callable):
+    def __init__(self, dicts: Sequence, selector: Callable = None):
         self.dicts = dicts
         self.selector = selector
 
@@ -14,18 +15,16 @@ class ChainDict:
         return any(key in d for d in self.dicts)
 
     def __getitem__(self, key):
-        # small optimization
-        if len(self.dicts) == 1:
-            return self.dicts[0][key]
-
         for d in self.dicts:
-            # TODO: should better suppress?
-            if key in d:
+            with suppress(KeyError):
                 return d[key]
 
         raise KeyError(key)
 
     def __setitem__(self, key, value):
+        if self.selector is None:
+            raise ValueError('Insertion is not supported.')
+
         for d in self.dicts:
             if self.selector(d):
                 d[key] = value

@@ -6,117 +6,70 @@ import time
 from hashlib import blake2b
 from pathlib import Path
 from threading import RLock
-from typing import Sequence, NamedTuple
+from typing import Sequence
 
-from diskcache import Disk, Cache
-from diskcache.core import MODE_BINARY, UNKNOWN, DBNAME
-
-from .utils import ChainDict
+from .local import DiskOptions, Storage, digest_to_relative, FOLDER_LEVELS, LEVEL_SIZE, PERMISSIONS, \
+    copy_group_permissions
 from ..engine.base import NodeHash
 from ..serializers import Serializer
 from ..utils import atomize
 from .base import CacheStorage
 from .pickler import dumps
 
-
-class DiskOptions(NamedTuple):
-    path: Path
-    min_free_space: int = 0
-    max_volume: int = float('inf')
-
-
-class DiskStorage(CacheStorage):
-    def __init__(self, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict):
-        super().__init__()
-        self._lock = RLock()
-
-        # this is the only way to pass a custom serializer with non-json params
-        disk_type = type('SerializedChild', (SerializedDisk,), {'serializer': serializer, 'meta': metadata})
-        storage = []
-        self.options = {}
-        for entry in options:
-            cache = Cache(str(entry.path), size_limit=float('inf'), cull_limit=0, disk=disk_type)
-            copy_group_permissions(entry.path / DBNAME, entry.path)
-
-            storage.append(cache)
-            self.options[cache] = entry
-
-        self.storage = ChainDict(storage, self._select_storage)
-
-    def _select_storage(self, cache: Cache):
-        options = self.options[cache]
-        free_space = shutil.disk_usage(cache.directory).free
-        return free_space >= options.min_free_space and cache.volume() <= options.max_volume
-
-    @atomize()
-    def contains(self, param: NodeHash) -> bool:
-        return param.value in self.storage
-
-    @atomize()
-    def set(self, param: NodeHash, value):
-        self.storage[param.value] = value
-
-    @atomize()
-    def get(self, param: NodeHash):
-        return self.storage[param.value]
-
-
-PERMISSIONS = 0o770
-LEVEL_SIZE = 32
-FOLDER_LEVELS = 2
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
 META_FILENAME = 'meta.json'
 
 
-def digest_bytes(pickled: bytes) -> str:
-    return blake2b(pickled, digest_size=FOLDER_LEVELS * LEVEL_SIZE).hexdigest()
+class DiskStorage(CacheStorage):
+    def __init__(self, root: Path, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict):
+        super().__init__()
+        self._lock = RLock()
+        self.metadata = metadata
+        self.serializer = serializer
+        self.storage = Storage(options)
+        self.root = root
 
+    @atomize()
+    def contains(self, param: NodeHash) -> bool:
+        _, _, relative = key_to_relative(param.value)
+        local = self.root / relative
+        return local.exists()
 
-def key_to_relative(key):
-    pickled = dumps(key)
-    digest = digest_bytes(pickled)
+    @atomize()
+    def set(self, param: NodeHash, value):
+        local = self._key_to_path(param.value)
 
-    parts = []
-    for i in range(FOLDER_LEVELS):
-        i *= LEVEL_SIZE
-        parts.append(digest[i:i + LEVEL_SIZE])
+        try:
+            # data
+            self.serializer.save(value, local / DATA_FOLDER)
+            # meta
+            meta = self.metadata.copy()
+            meta.update({
+                'time': time.time(),
+                # TODO: this can possibly fail
+                'user': getpass.getuser(),
+            })
+            with open(local / META_FILENAME, 'w') as file:
+                json.dump(meta, file)
 
-    return pickled, digest, Path(*parts)
+            copy_group_permissions(local, self.root, recursive=True)
+            self._mirror_to_storage(local)
 
+        except BaseException as e:
+            shutil.rmtree(local)
+            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
-def check_consistency(hash_path, pickled):
-    with open(hash_path, 'rb') as file:
-        dumped = file.read()
-        assert dumped == pickled, (dumped, pickled)
+    @atomize()
+    def get(self, param: NodeHash):
+        # TODO: check consistency?
+        _, _, relative = key_to_relative(param.value)
+        data_folder = self.root / relative / DATA_FOLDER
+        return self.serializer.load(data_folder)
 
-
-def copy_group_permissions(target, reference, recursive=False):
-    shutil.chown(target, group=reference.group())
-    os.chmod(target, PERMISSIONS)
-    if recursive and target.is_dir():
-        for child in target.iterdir():
-            copy_group_permissions(child, reference, recursive)
-
-
-def get_folder_size(path):
-    size = 0
-    for root, _, files in os.walk(path):
-        for name in files:
-            size += os.path.getsize(os.path.join(root, name))
-
-    return size
-
-
-class SerializedDisk(Disk):
-    """Adapts diskcache to our needs."""
-    serializer: Serializer
-    meta = {}
-
-    def put(self, key):
-        # find the right folder
+    def _key_to_path(self, key):
         pickled, digest, relative = key_to_relative(key)
-        local = Path(self._directory) / relative
+        local = self.root / relative
         hash_path = local / HASH_FILENAME
         data_folder = local / DATA_FOLDER
 
@@ -129,48 +82,31 @@ class SerializedDisk(Disk):
             with open(hash_path, 'wb') as file:
                 file.write(pickled)
 
-        return super().put(digest)
+        return local
 
-    def store(self, value, read, key=UNKNOWN):
-        assert key != UNKNOWN
-        assert not read
-        _, _, relative = key_to_relative(key)
-        root = Path(self._directory)
-        local = root / relative
-        data_folder = local / DATA_FOLDER
+    def _mirror_to_storage(self, folder: Path):
+        for file in folder.glob('**/*'):
+            if file.is_dir():
+                continue
 
-        try:
-            # data
-            self.serializer.save(value, data_folder)
-            # meta
-            meta = self.meta.copy()
-            meta.update({
-                'time': time.time(),
-                # TODO: this can possibly fail
-                'user': getpass.getuser(),
-            })
-            with open(local / META_FILENAME, 'w') as file:
-                json.dump(meta, file)
+            key, path = self.storage.store(file)
+            assert path.exists()
+            os.remove(file)
+            file.symlink_to(path)
 
-            copy_group_permissions(local, root, recursive=True)
-            size = get_folder_size(local)
-            return size, MODE_BINARY, str(relative), None
 
-        except BaseException as e:
-            self.remove(relative)
-            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
+def digest_bytes(pickled: bytes) -> str:
+    return blake2b(pickled, digest_size=FOLDER_LEVELS * LEVEL_SIZE).hexdigest()
 
-    def fetch(self, mode, relative, value, read):
-        assert mode == MODE_BINARY, mode
-        assert not read
-        return self.serializer.load(Path(self._directory) / relative / DATA_FOLDER)
 
-    def remove(self, relative):
-        shutil.rmtree(Path(self._directory) / relative)
+def key_to_relative(key):
+    pickled = dumps(key)
+    digest = digest_bytes(pickled)
+    relative = digest_to_relative(digest)
+    return pickled, digest, relative
 
-    # don't need this
-    def filename(self, key=UNKNOWN, value=UNKNOWN):
-        raise NotImplementedError
 
-    def get(self, key, raw):
-        raise NotImplementedError
+def check_consistency(hash_path, pickled):
+    with open(hash_path, 'rb') as file:
+        dumped = file.read()
+        assert dumped == pickled, (dumped, pickled)
