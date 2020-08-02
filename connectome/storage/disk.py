@@ -8,8 +8,8 @@ from pathlib import Path
 from threading import RLock
 from typing import Sequence
 
-from .local import DiskOptions, Storage, digest_to_relative, FOLDER_LEVELS, LEVEL_SIZE, PERMISSIONS, \
-    copy_group_permissions
+from .local import DiskOptions, Storage, digest_to_relative, FOLDER_LEVELS, LEVEL_SIZE, copy_group_permissions, \
+    create_folders
 from ..engine.base import NodeHash
 from ..serializers import Serializer
 from ..utils import atomize
@@ -73,7 +73,7 @@ class DiskStorage(CacheStorage):
         hash_path = local / HASH_FILENAME
         data_folder = local / DATA_FOLDER
 
-        data_folder.mkdir(parents=True, exist_ok=True, mode=PERMISSIONS)
+        create_folders(data_folder, self.root)
         if hash_path.exists():
             check_consistency(hash_path, pickled)
 

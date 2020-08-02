@@ -109,7 +109,7 @@ class FileDisk(Disk):
         relative = digest_to_relative(key)
         folder = root / relative
         file = folder / FILENAME
-        folder.mkdir(parents=True, exist_ok=True, mode=PERMISSIONS)
+        create_folders(folder, root)
 
         try:
             shutil.copyfile(path, file)
@@ -144,6 +144,15 @@ def copy_group_permissions(target, reference, recursive=False):
     if recursive and target.is_dir():
         for child in target.iterdir():
             copy_group_permissions(child, reference, recursive)
+
+
+def create_folders(path: Path, root: Path):
+    if path != root:
+        create_folders(path.parent, root)
+
+    if not path.exists():
+        path.mkdir(mode=PERMISSIONS)
+        os.chmod(path, PERMISSIONS)
 
 
 def get_file_size(path):

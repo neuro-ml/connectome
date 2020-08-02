@@ -2,5 +2,5 @@ numpy
 cloudpickle==1.2.*
 diskcache==4.1.*
 pylru
-paramiko
+paramiko==2.*
 scp
