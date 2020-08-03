@@ -39,10 +39,11 @@ class DiskStorage(CacheStorage):
     @atomize()
     def set(self, param: NodeHash, value):
         local = self._key_to_path(param.value)
+        data_folder = local / DATA_FOLDER
 
         try:
             # data
-            self.serializer.save(value, local / DATA_FOLDER)
+            self.serializer.save(value, data_folder)
             # meta
             meta = self.metadata.copy()
             meta.update({
@@ -54,7 +55,7 @@ class DiskStorage(CacheStorage):
                 json.dump(meta, file)
 
             copy_group_permissions(local, self.root, recursive=True)
-            self._mirror_to_storage(local)
+            self._mirror_to_storage(data_folder)
 
         except BaseException as e:
             shutil.rmtree(local)

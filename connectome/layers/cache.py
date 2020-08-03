@@ -56,9 +56,9 @@ class MemoryCacheLayer(CacheLayer):
 
 
 class DiskCacheLayer(CacheLayer):
-    def __init__(self, names, options, serializer, metadata):
+    def __init__(self, names, root, options, serializer, metadata):
         super().__init__(names)
-        self.storage = DiskStorage(options, serializer, metadata)
+        self.storage = DiskStorage(root, options, serializer, metadata)
 
     def get_storage(self):
         return self.storage

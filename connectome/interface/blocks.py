@@ -7,7 +7,7 @@ from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, resolve_serializer
 from ..storage.disk import DiskOptions
-from ..storage.remote import RemoteOptions, SSH_PORT
+from ..storage.relative_remote import RemoteOptions, SSH_PORT
 from ..utils import PathLike
 
 
@@ -43,14 +43,21 @@ class CacheToRam(FromLayer):
 
 
 class CacheToDisk(FromLayer):
-    def __init__(self, *storage: Union[PathLike, DiskOptions],
+    def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
                  serializers: Union[Serializer, Sequence[Serializer]] = None,
                  names: Sequence[str] = None, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
-        super().__init__(DiskCacheLayer(names, storage, resolve_serializer(serializers), metadata or {}))
+        super().__init__(DiskCacheLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))
 
 
-class RemoteStorage(FromLayer):
+class RemoteStorageBase(FromLayer):
+    def __init__(self, options: Sequence[RemoteOptions],
+                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 names: Sequence[str] = None):
+        super().__init__(RemoteStorageLayer(names, options, resolve_serializer(serializers)))
+
+
+class RemoteStorage(RemoteStorageBase):
     def __init__(self, hostname: str, storage: Union[PathLike, Sequence[PathLike]], port: int = SSH_PORT,
                  serializers: Union[Serializer, Sequence[Serializer]] = None,
                  username: str = None, password: str = None, names: Sequence[str] = None):
@@ -58,4 +65,4 @@ class RemoteStorage(FromLayer):
             storage = [storage]
 
         options = [RemoteOptions(hostname, Path(path), port, username, password) for path in storage]
-        super().__init__(RemoteStorageLayer(names, options, resolve_serializer(serializers)))
+        super().__init__(options, serializers, names)

@@ -4,7 +4,7 @@ import os
 import shutil
 from hashlib import blake2b
 from pathlib import Path
-from typing import Sequence, NamedTuple
+from typing import Sequence, NamedTuple, Union
 
 from diskcache import Disk, Cache
 from diskcache.core import MODE_BINARY, UNKNOWN, DBNAME
@@ -17,10 +17,11 @@ PERMISSIONS = 0o770
 FILENAME = 'data'
 
 
-class DiskOptions(NamedTuple):
-    path: Path
-    min_free_space: int = 0
-    max_volume: int = float('inf')
+class DiskOptions:
+    def __init__(self, path: Union[Path, str], min_free_space: int = 0, max_volume: int = float('inf')):
+        self.path = Path(path)
+        self.max_volume = max_volume
+        self.min_free_space = min_free_space
 
 
 class GroupCache(Cache):
