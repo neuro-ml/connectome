@@ -1,4 +1,5 @@
 from contextlib import suppress
+from gzip import GzipFile
 from pathlib import Path
 
 import numpy as np
@@ -47,10 +48,29 @@ class ChainSerializer(Serializer):
         raise SerializerError(f'No serializer was able to load from {folder}.')
 
 
-# TODO: gzip
 class NumpySerializer(Serializer):
+    def __init__(self, compression: int = None):
+        self.compression = compression
+
     def save(self, value, folder: Path):
-        np.save(folder / 'value.npy', value)
+        if self.compression is not None:
+            with GzipFile(folder / 'value.npy.gz', 'wb', compresslevel=self.compression) as file:
+                np.save(file, value)
+
+        else:
+            np.save(folder / 'value.npy', value)
 
     def load(self, folder: Path):
-        return np.load(folder / 'value.npy')
+        paths = list(folder.iterdir())
+        if len(paths) != 1:
+            raise SerializerError
+
+        path, = paths
+        if path.name == 'value.npy':
+            return np.load(folder / 'value.npy')
+
+        if path.name == 'value.npy.gz':
+            with GzipFile(folder / 'value.npy.gz', 'rb') as file:
+                return np.load(file)
+
+        raise SerializerError
