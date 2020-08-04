@@ -4,7 +4,7 @@ import os
 import shutil
 from hashlib import blake2b
 from pathlib import Path
-from typing import Sequence, NamedTuple, Union
+from typing import Sequence, Union
 
 from diskcache import Disk, Cache
 from diskcache.core import MODE_BINARY, UNKNOWN, DBNAME
@@ -115,6 +115,7 @@ class FileDisk(Disk):
         try:
             shutil.copyfile(path, file)
             copy_group_permissions(folder, root, recursive=True)
+            adjust_parents(folder, root)
             size = get_file_size(file)
             return size, MODE_BINARY, str(relative), None
 
@@ -145,6 +146,14 @@ def copy_group_permissions(target, reference, recursive=False):
     if recursive and target.is_dir():
         for child in target.iterdir():
             copy_group_permissions(child, reference, recursive)
+
+
+def adjust_parents(target, root):
+    if target == root:
+        return
+
+    adjust_parents(target.parent, root)
+    copy_group_permissions(target, root)
 
 
 def create_folders(path: Path, root: Path):

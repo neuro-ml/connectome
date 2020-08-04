@@ -9,7 +9,7 @@ from threading import RLock
 from typing import Sequence
 
 from .local import DiskOptions, Storage, digest_to_relative, FOLDER_LEVELS, LEVEL_SIZE, copy_group_permissions, \
-    create_folders
+    create_folders, adjust_parents
 from ..engine.base import NodeHash
 from ..serializers import Serializer
 from ..utils import atomize
@@ -55,6 +55,7 @@ class DiskStorage(CacheStorage):
                 json.dump(meta, file)
 
             copy_group_permissions(local, self.root, recursive=True)
+            adjust_parents(local, self.root)
             self._mirror_to_storage(data_folder)
 
         except BaseException as e:
