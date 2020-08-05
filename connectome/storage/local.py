@@ -26,8 +26,11 @@ class DiskOptions:
 
 class GroupCache(Cache):
     def __init__(self, path: Path, disk: type):
+        db_path = path / DBNAME
+        setup = not db_path.exists()
         super().__init__(str(path), size_limit=float('inf'), cull_limit=0, disk=disk)
-        copy_group_permissions(path / DBNAME, path)
+        if setup:
+            copy_group_permissions(db_path, path)
 
 
 class Storage:
