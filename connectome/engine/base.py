@@ -29,6 +29,7 @@ class NodeHash:
 
     @classmethod
     def from_leaf(cls, data):
+        assert not isinstance(data, NodeHash)
         return NodeHash(data, kind=HashType.LEAF)
 
     @classmethod

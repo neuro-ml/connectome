@@ -135,5 +135,5 @@ class ProjectionEdge(Edge):
             if v.data is not Nothing:
                 real.append(v)
 
-        assert len(real) == 1
+        assert len(real) == 1, real
         return real[0], FULL_MASK

@@ -6,9 +6,6 @@ from hashlib import blake2b
 from pathlib import Path
 from typing import Sequence, Union
 
-from diskcache import Disk, Cache
-from diskcache.core import MODE_BINARY, UNKNOWN, DBNAME
-
 from .relative_remote import RelativeRemote, RemoteOptions
 from .utils import ChainDict
 
@@ -24,20 +21,11 @@ class DiskOptions:
         self.min_free_space = min_free_space
 
 
-class GroupCache(Cache):
-    def __init__(self, path: Path, disk: type):
-        db_path = path / DBNAME
-        setup = not db_path.exists()
-        super().__init__(str(path), size_limit=float('inf'), cull_limit=0, disk=disk)
-        if setup:
-            copy_group_permissions(db_path, path)
-
-
 class Storage:
     def __init__(self, options: Sequence[DiskOptions]):
         self.options = OrderedDict()
         for entry in options:
-            cache = GroupCache(entry.path, disk=FileDisk)
+            cache = GroupCache(entry.path)
             self.options[cache] = entry
 
         self.local = ChainDict(list(self.options), self._select_storage)
@@ -61,10 +49,19 @@ class Storage:
 
         return link
 
-    def _select_storage(self, cache: GroupCache):
+    def _select_storage(self, cache: 'GroupCache'):
         options = self.options[cache]
-        free_space = shutil.disk_usage(cache.directory).free
-        return free_space >= options.min_free_space and cache.volume() <= options.max_volume
+        matches = True
+
+        if options.min_free_space > 0:
+            free_space = shutil.disk_usage(cache.root).free
+            matches = matches and free_space >= options.min_free_space
+
+        if options.max_volume < float('inf'):
+            volume = get_folder_size(cache.root)
+            matches = matches and volume <= options.max_volume
+
+        return matches
 
 
 class BackupStorage(Storage):
@@ -93,54 +90,6 @@ class BackupStorage(Storage):
                     return
 
         raise KeyError(key)
-
-
-class FileDisk(Disk):
-    """
-    Stores files directly on disk. The path is obtained by simply splitting the key.
-
-    d[key] contains the relative path
-    """
-
-    def store(self, path: str, read, key=UNKNOWN):
-        path = Path(path)
-
-        assert path.is_file(), path
-        assert key != UNKNOWN
-        assert not read
-
-        root = Path(self._directory)
-        relative = digest_to_relative(key)
-        folder = root / relative
-        file = folder / FILENAME
-        create_folders(folder, root)
-
-        try:
-            shutil.copyfile(path, file)
-            copy_group_permissions(folder, root, recursive=True)
-            adjust_parents(folder, root)
-            size = get_file_size(file)
-            return size, MODE_BINARY, str(relative), None
-
-        except BaseException as e:
-            self.remove(relative)
-            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
-
-    def fetch(self, mode, relative, value, read):
-        assert mode == MODE_BINARY, mode
-        assert not read
-        return Path(self._directory) / relative / FILENAME
-
-    def remove(self, relative):
-        shutil.rmtree(Path(self._directory) / relative)
-
-    def filename(self, key=UNKNOWN, value=UNKNOWN):
-        assert key != UNKNOWN
-        return str(digest_to_relative(key))
-
-    # don't need this
-    def get(self, key, raw):
-        raise NotImplementedError
 
 
 def copy_group_permissions(target, reference, recursive=False):
@@ -209,3 +158,40 @@ def digest_to_relative(key):
 def match_files(first: Path, second: Path):
     # TODO
     return True
+
+
+# TODO: keep track of volume?
+class GroupCache:
+    def __init__(self, root: Path):
+        self.root = root
+        if not root.exists():
+            create_folders(root, root)
+
+    def _key_to_path(self, key):
+        return self.root / digest_to_relative(key) / FILENAME
+
+    def __contains__(self, key):
+        return self._key_to_path(key).exists()
+
+    def __getitem__(self, key):
+        return self._key_to_path(key)
+
+    def __setitem__(self, key, path):
+        path = Path(path)
+        assert path.is_file(), path
+
+        file = self._key_to_path(key)
+        folder = file.parent
+        create_folders(folder, self.root)
+
+        try:
+            shutil.copyfile(path, file)
+            copy_group_permissions(folder, self.root, recursive=True)
+            adjust_parents(folder, self.root)
+
+        except BaseException as e:
+            del self[key]
+            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
+
+    def __delitem__(self, key):
+        shutil.rmtree(self._key_to_path(key).parent)
