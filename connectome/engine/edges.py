@@ -108,7 +108,7 @@ class SwitchEdge(Edge):
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         node_hash, = hashes
-        if not self.selector(node_hash.data):
+        if not self.selector(node_hash):
             # TODO: need a special type for hash of nothing
             node_hash = NodeHash.from_leaf(Nothing)
         return node_hash, FULL_MASK

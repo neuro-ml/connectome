@@ -47,6 +47,10 @@ class NodeHash:
     def value(self):
         return self._kind.value, self.data
 
+    @property
+    def kind(self):
+        return self._kind
+
 
 FULL_MASK = None
 NodesMask = Union[Sequence[int], FULL_MASK]

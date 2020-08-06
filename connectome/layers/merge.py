@@ -3,7 +3,7 @@ from typing import Callable
 
 from .pipeline import PipelineLayer
 from ..engine.edges import ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge
-from ..engine.base import Node, BoundEdge
+from ..engine.base import Node, BoundEdge, NodeHash, HashType
 from .base import EdgesBag
 
 
@@ -63,9 +63,18 @@ class SwitchLayer(PipelineLayer):
         super().__init__(self.make_switch(), self.core, self.make_projector())
 
     def make_switch(self):
+        def find_leaves(nh: NodeHash):
+            if nh.kind == HashType.LEAF:
+                yield nh.data
+
+            else:
+                for child in nh.children:
+                    yield from find_leaves(child)
+
         def selector(idx):
-            def func(value):
-                selected = self.selector(value)
+            def func(value: NodeHash):
+                leaf, = find_leaves(value)
+                selected = self.selector(leaf)
                 assert 0 <= selected < len(self.core.inputs), selected
                 return selected == idx
 
