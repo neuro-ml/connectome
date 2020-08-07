@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Callable
 
 from .pipeline import PipelineLayer
-from ..engine.edges import ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge
+from ..engine.edges import ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge, FunctionEdge
 from ..engine.base import Node, BoundEdge, NodeHash, HashType
 from .base import EdgesBag
 
@@ -47,6 +47,11 @@ class ProductLayer(EdgesBag):
             all_edges.append(BoundEdge(IdentityEdge(), [inp], node))
 
         return unique_inputs, outputs, all_edges
+
+
+def merge_tuple(x: tuple):
+    assert isinstance(x, tuple)
+    return sum(map(tuple, x), ())
 
 
 class SwitchLayer(PipelineLayer):
@@ -95,6 +100,12 @@ class SwitchLayer(PipelineLayer):
             inp, out = Node(node.name), Node(node.name)
             inputs.append(inp)
             outputs.append(out)
-            edges.append(BoundEdge(ProjectionEdge(), [inp], out))
+            # FIXME: this is a dirty hack for now
+            if node.name == 'ids':
+                edge = FunctionEdge(merge_tuple, arity=1)
+            else:
+                edge = ProjectionEdge()
+
+            edges.append(BoundEdge(edge, [inp], out))
 
         return EdgesBag(inputs, outputs, edges)
