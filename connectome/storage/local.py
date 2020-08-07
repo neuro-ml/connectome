@@ -95,8 +95,10 @@ class BackupStorage(Storage):
                     relative = digest_to_relative(key) / FILENAME
                     with tempfile.TemporaryDirectory() as temp_dir:
                         file = Path(temp_dir) / relative.name
-                        with suppress(FileNotFoundError):
+                        try:
                             remote.get(relative, file)
+                        except FileNotFoundError:
+                            continue
 
                         self.local[key] = file
                         missing.remove(key)
