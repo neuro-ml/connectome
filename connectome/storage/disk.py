@@ -91,7 +91,7 @@ class DiskStorage(CacheStorage):
             if file.is_dir():
                 continue
 
-            key, path = self.storage.store(file)
+            path = self.storage.get(self.storage.store(file))
             assert path.exists()
             os.remove(file)
             file.symlink_to(path)

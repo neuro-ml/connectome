@@ -2,9 +2,12 @@ import tempfile
 from collections import OrderedDict
 import os
 import shutil
+from contextlib import suppress
 from hashlib import blake2b
 from pathlib import Path
 from typing import Sequence, Union
+
+from tqdm import tqdm
 
 from .relative_remote import RelativeRemote, RemoteOptions
 from .utils import ChainDict
@@ -30,15 +33,15 @@ class Storage:
 
         self.local = ChainDict(list(self.options), self._select_storage)
 
-    def store(self, path: Path):
+    def store(self, path: Path) -> str:
         key = _digest_file(path)
         if key in self.local:
             assert match_files(path, self.local[key])
         else:
             self.local[key] = path
-        return key, self.local[key]
+        return key
 
-    def get(self, key: str, name: str = None):
+    def get(self, key: str, name: str = None) -> Path:
         path: Path = self.local[key]
         if name is None:
             return path
@@ -70,26 +73,37 @@ class BackupStorage(Storage):
         self.remotes = [RelativeRemote(**options._asdict()) for options in remote]
 
     def get(self, key: str, name: str = None):
-        if key not in self.local:
-            self._download(key)
+        self.fetch(key)
         return super().get(key, name)
 
-    # called only if the file is not present
-    def _download(self, key):
-        relative = digest_to_relative(key) / FILENAME
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file = Path(temp_dir) / relative.name
-            for remote in self.remotes:
-                with remote:
-                    try:
-                        remote.get(relative, file)
-                    except FileNotFoundError:
-                        continue
+    def fetch(self, *keys: str, verbose: bool = False):
+        bar = tqdm(disable=not verbose, total=len(keys))
+        missing = set()
+        for key in keys:
+            if key in self.local:
+                bar.update()
+            else:
+                missing.add(key)
 
-                    self.local[key] = file
-                    return
+        # extract as much as we can from each remote
+        for remote in self.remotes:
+            if not missing:
+                break
 
-        raise KeyError(key)
+            with remote:
+                for key in list(missing):
+                    relative = digest_to_relative(key) / FILENAME
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        file = Path(temp_dir) / relative.name
+                        with suppress(FileNotFoundError):
+                            remote.get(relative, file)
+
+                        self.local[key] = file
+                        missing.remove(key)
+                        bar.update()
+
+        if missing:
+            raise FileNotFoundError(f'Could not fetch the following keys from remote: {tuple(missing)}.')
 
 
 def copy_group_permissions(target, reference, recursive=False):
