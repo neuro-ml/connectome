@@ -116,14 +116,7 @@ def copy_group_permissions(target, reference, recursive=False):
             copy_group_permissions(child, reference, recursive)
 
 
-def adjust_parents(target, root):
-    if target == root:
-        return
-
-    adjust_parents(target.parent, root)
-    copy_group_permissions(target, root)
-
-
+# FIXME: this became a mess
 def create_folders(path: Path, root: Path):
     if path != root:
         create_folders(path.parent, root)
@@ -131,6 +124,8 @@ def create_folders(path: Path, root: Path):
     if not path.exists():
         path.mkdir(mode=PERMISSIONS)
         os.chmod(path, PERMISSIONS)
+        if path != root:
+            shutil.chown(path, group=root.group())
 
 
 def get_file_size(path):
@@ -203,7 +198,6 @@ class GroupCache:
         try:
             shutil.copyfile(path, file)
             copy_group_permissions(folder, self.root, recursive=True)
-            adjust_parents(folder, self.root)
 
         except BaseException as e:
             del self[key]
