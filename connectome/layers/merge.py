@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Sequence
 
 from .pipeline import PipelineLayer
 from ..engine.edges import ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge, FunctionEdge
@@ -7,10 +7,50 @@ from ..engine.base import Node, BoundEdge, NodeHash, HashType
 from .base import EdgesBag
 
 
-class ProductLayer(EdgesBag):
-    def __init__(self, *layers: EdgesBag):
+def merge_tuple(x: Sequence[tuple]):
+    return sum(map(tuple, x), ())
+
+
+class SwitchLayer(PipelineLayer):
+    """
+    Parameters
+    ----------
+    selector
+        returns the index of the branch to be evaluated
+    """
+
+    def __init__(self, selector: Callable, *layers: EdgesBag):
+        self.selector = selector
         self.layers = layers
-        super().__init__(*self.create_graph())
+        self.core = EdgesBag(*self.create_graph())
+        super().__init__(self.make_switch(), self.core, self.make_projector())
+
+    def make_switch(self):
+        def find_leaves(nh: NodeHash):
+            if nh.kind == HashType.LEAF:
+                yield nh.data
+
+            else:
+                for child in nh.children:
+                    yield from find_leaves(child)
+
+        def selector(idx):
+            def func(value: NodeHash):
+                leaf, = find_leaves(value)
+                selected = self.selector(leaf)
+                assert 0 <= selected < len(self.core.inputs), selected
+                return selected == idx
+
+            return func
+
+        inputs = [Node('input')]
+        edges, outputs = [], []
+        for i, output in enumerate(self.core.inputs):
+            output = Node(output.name)
+            outputs.append(output)
+            edges.append(BoundEdge(SwitchEdge(selector(i)), inputs, output))
+
+        return EdgesBag(inputs, outputs, edges)
 
     def create_graph(self):
         # TODO: backwards support?
@@ -47,52 +87,6 @@ class ProductLayer(EdgesBag):
             all_edges.append(BoundEdge(IdentityEdge(), [inp], node))
 
         return unique_inputs, outputs, all_edges
-
-
-def merge_tuple(x: tuple):
-    assert isinstance(x, tuple)
-    return sum(map(tuple, x), ())
-
-
-class SwitchLayer(PipelineLayer):
-    """
-    Parameters
-    ----------
-    selector
-        returns the index of the branch to be evaluated
-    """
-
-    def __init__(self, selector: Callable, *layers: EdgesBag):
-        self.selector = selector
-        self.core = ProductLayer(*layers)
-        super().__init__(self.make_switch(), self.core, self.make_projector())
-
-    def make_switch(self):
-        def find_leaves(nh: NodeHash):
-            if nh.kind == HashType.LEAF:
-                yield nh.data
-
-            else:
-                for child in nh.children:
-                    yield from find_leaves(child)
-
-        def selector(idx):
-            def func(value: NodeHash):
-                leaf, = find_leaves(value)
-                selected = self.selector(leaf)
-                assert 0 <= selected < len(self.core.inputs), selected
-                return selected == idx
-
-            return func
-
-        inputs = [Node('input')]
-        edges, outputs = [], []
-        for i, output in enumerate(self.core.inputs):
-            output = Node(output.name)
-            outputs.append(output)
-            edges.append(BoundEdge(SwitchEdge(selector(i)), inputs, output))
-
-        return EdgesBag(inputs, outputs, edges)
 
     def make_projector(self):
         inputs, outputs, edges = [], [], []

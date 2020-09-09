@@ -279,8 +279,14 @@ class SourceFactory(GraphFactory):
 
     def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
-        first, *names = extract_signature(value)
-        inputs = [self._get_private(first) if is_private(first) else self.ID]
+        names = extract_signature(value)
+
+        inputs = []
+        # FIXME: for now only ids is allowed to have no arguments
+        if name != 'ids':
+            first, *names = names
+            inputs.append(self._get_private(first) if is_private(first) else self.ID)
+
         inputs.extend(map(self._get_private, names))
         return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
 

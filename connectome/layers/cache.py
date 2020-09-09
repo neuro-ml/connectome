@@ -1,6 +1,6 @@
 from typing import Sequence
 
-from .base import LayerParams, Attachable, Nodes, Tuple, Edges
+from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges
 from ..engine.base import BoundEdge, Node
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..storage.remote import RemoteStorage
@@ -20,7 +20,7 @@ class CacheLayer(Attachable):
     def get_storage(self) -> CacheStorage:
         raise NotImplementedError
 
-    def _attach_forward(self, forward_outputs: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
+    def _attach_forward(self, forward_outputs: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         check_for_duplicates([x.name for x in forward_outputs])
         forward_outputs = node_to_dict(forward_outputs)
 
@@ -35,7 +35,7 @@ class CacheLayer(Attachable):
 
         return outputs, edges
 
-    def _attach_backward(self, prev_inputs: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
+    def _attach_backward(self, prev_inputs: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         check_for_duplicates([x.name for x in prev_inputs])
         prev_inputs = node_to_dict(prev_inputs)
 

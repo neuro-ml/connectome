@@ -6,7 +6,7 @@ from ..engine.base import TreeNode, BoundEdge, Node
 from ..utils import check_for_duplicates, node_to_dict
 
 Nodes = Sequence[Node]
-Edges = Sequence[BoundEdge]
+BoundEdges = Sequence[BoundEdge]
 
 INHERIT_ALL = object()
 
@@ -28,7 +28,7 @@ class LayerParams(NamedTuple):
 
 class Attachable(Layer):
     def attach(self, forward_outputs: Nodes, backward_inputs: Nodes,
-               persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, Edges]:
+               persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, BoundEdges]:
         """
         Returns new forward and backward nodes, as well as additional edges.
         """
@@ -47,15 +47,15 @@ class Attachable(Layer):
     def prepare(self) -> LayerParams:
         raise NotImplementedError
 
-    def _attach_forward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
+    def _attach_forward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         raise NotImplementedError
 
-    def _attach_backward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, Edges]:
+    def _attach_backward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         raise NotImplementedError
 
 
 class EdgesBag(Attachable):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: Edges, backward_inputs: Nodes = None,
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = None,
                  backward_outputs: Nodes = None, optional_nodes: Sequence[str] = None,
                  inherit_nodes: Sequence[str] = None, persistent_nodes: Sequence[str] = None):
 
@@ -118,7 +118,7 @@ class EdgesBag(Attachable):
         )
         return params
 
-    def _attach_forward(self, prev_outputs: Nodes, params: LayerParams) -> Tuple[Nodes, Edges]:
+    def _attach_forward(self, prev_outputs: Nodes, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         check_for_duplicates([x.name for x in prev_outputs])
 
         prev_outputs = node_to_dict(prev_outputs)
@@ -161,7 +161,7 @@ class EdgesBag(Attachable):
 
         return outputs, new_edges
 
-    def _attach_backward(self, prev_inputs: Nodes, params: LayerParams) -> Tuple[Nodes, Edges]:
+    def _attach_backward(self, prev_inputs: Nodes, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         # means that this is the last backward layer
         if len(prev_inputs) == 0:
             return params.backward_inputs, []
@@ -246,7 +246,7 @@ class EdgesBag(Attachable):
         return [node_map[x] for x in nodes]
 
     @staticmethod
-    def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: Edges):
+    def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: BoundEdges):
         check_for_duplicates(node_to_dict(inputs).keys())
 
         tree_node_map = TreeNode.from_edges(edges)
