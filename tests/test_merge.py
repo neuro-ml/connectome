@@ -23,7 +23,7 @@ class Two(Source):
 
 def test_simple():
     merged = Merge(One(), Two())
-    assert set(merged.ids()) == set('123456')
+    assert set(merged.ids) == set('123456')
     assert merged.image('1') == 'One: 1'
     assert merged.image('5') == 'Two: 5'
 
@@ -35,7 +35,7 @@ def test_nested():
             return f'_{x}'
 
     merged = Merge(One(), Chain(Two(), Underscore()))
-    assert set(merged.ids()) == set('123456')
+    assert set(merged.ids) == set('123456')
     assert merged.image('1') == 'One: 1'
     assert merged.image('5') == '_Two: 5'
 
@@ -47,6 +47,6 @@ def test_nested():
         Two(),
         Underscore(),
     ))
-    assert set(merged.ids()) == set('123456')
+    assert set(merged.ids) == set('123456')
     assert merged.image('1') == '__One: 1'
     assert merged.image('5') == '_Two: 5'

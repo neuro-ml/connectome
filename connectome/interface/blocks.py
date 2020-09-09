@@ -17,14 +17,14 @@ class Merge(CallableBlock):
 
         idx_sum = []
         for layer in blocks:
-            idx_sum.extend(layer.ids())
+            idx_sum.extend(layer.ids)
 
         if len(idx_sum) != len(set(idx_sum)):
             raise RuntimeError('Datasets have same indices')
 
         def branch_selector(identifier):
             for idx, ds in enumerate(blocks):
-                if identifier in ds.ids():
+                if identifier in ds.ids:
                     return idx
 
             raise ValueError(identifier)

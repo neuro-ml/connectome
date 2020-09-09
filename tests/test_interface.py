@@ -72,8 +72,8 @@ def test_backward(block_maker):
         block_maker.crop()
     )
 
-    identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
-    double = pipeline[1:].wrap_predict(lambda x: 2 * x, ['image'], 'image')
+    identity = pipeline[1:]._wrap_predict(lambda x: x, ['image'], 'image')
+    double = pipeline[1:]._wrap_predict(lambda x: 2 * x, ['image'], 'image')
 
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
@@ -93,8 +93,8 @@ def test_optional(block_maker):
         block_maker.identity(),
     )
 
-    identity = pipeline[1:].wrap_predict(lambda x: x, ['image'], 'image')
-    double = pipeline[1:].wrap_predict(lambda x: 2 * x, ['image'], 'image')
+    identity = pipeline[1:]._wrap_predict(lambda x: x, ['image'], 'image')
+    double = pipeline[1:]._wrap_predict(lambda x: 2 * x, ['image'], 'image')
 
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
@@ -111,7 +111,7 @@ def test_persistent(block_maker):
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=4)
     )
-    assert Counter(pipeline.ids()) == Counter([0, 1, 2, 3])
+    assert Counter(pipeline.ids) == Counter([0, 1, 2, 3])
 
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=4),
@@ -120,4 +120,4 @@ def test_persistent(block_maker):
         block_maker.optional(),
         block_maker.zoom(spacing=123),
     )
-    assert Counter(pipeline.ids()) == Counter([0, 1, 2, 3])
+    assert Counter(pipeline.ids) == Counter([0, 1, 2, 3])

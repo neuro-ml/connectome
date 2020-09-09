@@ -9,7 +9,8 @@ from .factory import SourceFactory, TransformFactory
 class BaseBlock:
     _layer: Layer
 
-    def wrap_predict(self, function: Callable, forward_names: Sequence[str], backward_name: str):
+    # TODO: think of a better interface for loopback
+    def _wrap_predict(self, function: Callable, forward_names: Sequence[str], backward_name: str):
         if isinstance(self._layer, EdgesBag):
             return self._layer.get_loopback(function, forward_names, backward_name)
         else:
@@ -20,7 +21,11 @@ class CallableBlock(BaseBlock):
     _layer: EdgesBag
 
     def __getattr__(self, name):
-        return self._layer.get_forward_method(name)
+        method = self._layer.get_forward_method(name)
+        # FIXME: hardcoded
+        if name == 'ids':
+            return method()
+        return method
 
     def __dir__(self):
         return tuple(x.name for x in self._layer.outputs)
