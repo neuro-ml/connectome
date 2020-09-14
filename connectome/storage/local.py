@@ -2,7 +2,6 @@ import tempfile
 from collections import OrderedDict
 import os
 import shutil
-from contextlib import suppress
 from hashlib import blake2b
 from pathlib import Path
 from typing import Sequence, Union
@@ -185,7 +184,10 @@ class GroupCache:
         return self._key_to_path(key).exists()
 
     def __getitem__(self, key):
-        return self._key_to_path(key)
+        path = self._key_to_path(key)
+        if not path.exists():
+            raise KeyError
+        return path
 
     def __setitem__(self, key, path):
         path = Path(path)
