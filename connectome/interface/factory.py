@@ -332,7 +332,10 @@ class TransformFactory(GraphFactory):
             inputs.append(self.inputs[name])
             names = names[1:]
 
-        inputs.extend(map(self._get_private, names))
+        inputs.extend(
+            self._get_private(arg) if is_private(arg) else self.inputs[arg]
+            for arg in names
+        )
         return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
