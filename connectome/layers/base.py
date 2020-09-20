@@ -118,6 +118,7 @@ class EdgesBag(Attachable):
         )
         return params
 
+    # TODO: it would be much simpler if edges would get overwritten
     def _attach_forward(self, prev_outputs: Nodes, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
         check_for_duplicates([x.name for x in prev_outputs])
 
@@ -140,8 +141,11 @@ class EdgesBag(Attachable):
                 new_edges.append(BoundEdge(IdentityEdge(), [prev_outputs[i.name]], i))
 
         # check for inherited nodes
+        defined_outputs = [o.name for o in params.outputs]
         for name, prev_output in prev_outputs.items():
-            if name not in active_input_names and name in inherit_nodes:
+            if name in inherit_nodes and (
+                    name not in active_input_names or
+                    name not in defined_outputs):
                 output = Node(name)
                 outputs.append(output)
                 active_input_names.append(name)
