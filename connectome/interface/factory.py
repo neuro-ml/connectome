@@ -5,7 +5,7 @@ from ..engine.base import Node, BoundEdge
 from ..engine.interface import ValueEdge, InitEdge, ItemGetterEdge
 from ..layers.base import EdgesBag, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
-from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter
+from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter
 
 
 class NodeStorage(dict):
@@ -317,12 +317,21 @@ class TransformFactory(GraphFactory):
             raise ValueError("Expected 'str' or 'List[str] in __inherit__'")
 
     def _process_forward(self, name, value) -> BoundEdge:
-        if OptionalDecoratorAdapter in get_decorators(value):
+        decorators = get_decorators(value)
+        if OptionalDecoratorAdapter in decorators:
             self.optional_node_names.append(name)
 
         value = unwrap_transform(value)
-        first, *names = extract_signature(value)
-        inputs = [self._get_private(first) if is_private(first) else self.inputs[name]]
+
+        inputs = []
+        names = extract_signature(value)
+        if InsertDecoratorAdapter not in decorators:
+            if not names:
+                raise ValueError('Non-insert transform methods require at least one argument')
+
+            inputs.append(self.inputs[name])
+            names = names[1:]
+
         inputs.extend(map(self._get_private, names))
         return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
 

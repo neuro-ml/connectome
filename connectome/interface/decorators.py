@@ -24,9 +24,17 @@ class OptionalDecoratorAdapter(DecoratorAdapter):
     name = 'optional'
 
 
+class InsertDecoratorAdapter(DecoratorAdapter):
+    name = 'insert'
+
+
 def inverse(func: Callable):
     return wraps(func)(InverseDecoratorAdapter(func))
 
 
 def optional(func: Callable):
     return wraps(func)(OptionalDecoratorAdapter(func))
+
+
+def insert(func: Callable):
+    return wraps(func)(InsertDecoratorAdapter(func))
