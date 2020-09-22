@@ -37,9 +37,10 @@ class PortablePickler(CloudPickler):
             )
         else:
             args = (
-                obj.co_argcount, obj.co_kwonlyargcount, obj.co_nlocals,
-                obj.co_stacksize, obj.co_flags, obj.co_code, obj.co_consts,
-                obj.co_names, obj.co_varnames,  # obj.co_filename,
+                obj.co_argcount,
+                obj.co_kwonlyargcount, obj.co_nlocals, obj.co_stacksize,
+                obj.co_flags, obj.co_code, obj.co_consts, obj.co_names,
+                obj.co_varnames,  # obj.co_filename,
                 obj.co_name,  # obj.co_firstlineno,
                 obj.co_lnotab, obj.co_freevars, obj.co_cellvars
             )
@@ -92,8 +93,9 @@ class PortablePickler(CloudPickler):
         }
         if hasattr(func, '__qualname__'):
             state['qualname'] = func.__qualname__
-        if getattr(func, '__annotations__', False):
-            state['annotations'] = sort_dict(func.__annotations__)
+        # don't need annotations
+        # if getattr(func, '__annotations__', False):
+        #     state['annotations'] = sort_dict(func.__annotations__)
         if getattr(func, '__kwdefaults__', False):
             state['kwdefaults'] = func.__kwdefaults__
 

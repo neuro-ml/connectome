@@ -32,6 +32,7 @@ class DiskStorage(CacheStorage):
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:
+        # TODO: `Nothing` should not come in here
         _, _, relative = key_to_relative(param.value)
         local = self.root / relative
         return local.exists()
