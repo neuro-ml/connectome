@@ -63,6 +63,8 @@ class PortablePickler(CloudPickler):
 
         code, f_globals, defaults, closure_values, dct, base_globals = self.extract_func_data(func)
         f_globals, dct, base_globals = map(sort_dict, [f_globals, dct, base_globals])
+        if '__file__' in base_globals:
+            base_globals.pop('__file__')
 
         save(_fill_function)
         write(pickle.MARK)

@@ -53,8 +53,16 @@ class NumpySerializer(Serializer):
         self.compression = compression
 
     def save(self, value, folder: Path):
-        if self.compression is not None:
-            with GzipFile(folder / 'value.npy.gz', 'wb', compresslevel=self.compression) as file:
+        value = np.asarray(value)
+        compression = self.compression
+        if isinstance(compression, dict):
+            for dtype in compression:
+                if np.issubdtype(value.dtype, dtype):
+                    compression = compression[dtype]
+                    break
+
+        if compression is not None:
+            with GzipFile(folder / 'value.npy.gz', 'wb', compresslevel=compression, mtime=0) as file:
                 np.save(file, value)
 
         else:
