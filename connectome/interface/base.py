@@ -25,7 +25,7 @@ class CallableBlock(BaseBlock):
         # FIXME: hardcoded
         if name == 'ids':
             ids = method()
-            if not isinstance(ids, tuple) or not all(isinstance(x, str) for x in ids):
+            if not isinstance(ids, (tuple, list)) or not all(isinstance(x, str) for x in ids):
                 raise ValueError('The ids must be a tuple of strings')
 
             return ids
