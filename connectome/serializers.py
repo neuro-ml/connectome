@@ -60,6 +60,8 @@ class NumpySerializer(Serializer):
                 if np.issubdtype(value.dtype, dtype):
                     compression = compression[dtype]
                     break
+            else:
+                compression = None
 
         if compression is not None:
             with GzipFile(folder / 'value.npy.gz', 'wb', compresslevel=compression, mtime=0) as file:
