@@ -1,3 +1,4 @@
+import socket
 from pathlib import Path
 from typing import NamedTuple, Union, Sequence
 
@@ -47,7 +48,7 @@ class RelativeRemote:
         with SCPClient(self.ssh.get_transport()) as scp:
             try:
                 return scp.get(str(self.root / remote), str(local), recursive=True)
-            except SCPException:
+            except (SCPException, socket.timeout):
                 raise FileNotFoundError from None
 
     def __enter__(self):

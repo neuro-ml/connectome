@@ -1,3 +1,4 @@
+import filecmp
 import tempfile
 from collections import OrderedDict
 import os
@@ -9,7 +10,7 @@ from typing import Sequence, Union
 from tqdm import tqdm
 
 from .relative_remote import RelativeRemote, RemoteOptions
-from .utils import ChainDict
+from .utils import ChainDict, InsertError
 
 LEVEL_SIZE, FOLDER_LEVELS = 32, 2
 PERMISSIONS = 0o770
@@ -37,7 +38,10 @@ class Storage:
         if key in self.local:
             assert match_files(path, self.local[key])
         else:
-            self.local[key] = path
+            try:
+                self.local[key] = path
+            except InsertError:
+                raise InsertError('No appropriate storage was found.') from None
         return key
 
     def get(self, key: str, name: str = None) -> Path:
@@ -104,7 +108,7 @@ class BackupStorage(Storage):
                         bar.update()
 
         if missing:
-            raise FileNotFoundError(f'Could not fetch the following keys from remote: {tuple(missing)}.')
+            raise FileNotFoundError(f'Could not fetch {len(missing)} keys from remote.')
 
 
 def copy_group_permissions(target, reference, recursive=False):
@@ -166,8 +170,7 @@ def digest_to_relative(key):
 
 
 def match_files(first: Path, second: Path):
-    # TODO
-    return True
+    return filecmp.cmp(first, second, shallow=False)
 
 
 # TODO: keep track of volume?
