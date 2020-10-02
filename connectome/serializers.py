@@ -52,18 +52,20 @@ class NumpySerializer(Serializer):
     def __init__(self, compression: int = None):
         self.compression = compression
 
+    def _choose_compression(self, value):
+        if isinstance(self.compression, int) or self.compression is None:
+            return self.compression
+
+        if isinstance(self.compression, dict):
+            for dtype in self.compression:
+                if np.issubdtype(value.dtype, dtype):
+                    return self.compression[dtype]
+
     def save(self, value, folder: Path):
         value = np.asarray(value)
-        compression = self.compression
-        if isinstance(compression, dict):
-            for dtype in compression:
-                if np.issubdtype(value.dtype, dtype):
-                    compression = compression[dtype]
-                    break
-            else:
-                compression = None
-
+        compression = self._choose_compression(value)
         if compression is not None:
+            assert isinstance(compression, int)
             with GzipFile(folder / 'value.npy.gz', 'wb', compresslevel=compression, mtime=0) as file:
                 np.save(file, value)
 
