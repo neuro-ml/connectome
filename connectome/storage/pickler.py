@@ -9,6 +9,7 @@ import itertools
 import pickle
 import types
 from collections import OrderedDict
+from contextlib import suppress
 from io import BytesIO
 
 from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild_tornado_coroutine, _fill_function, \
@@ -104,6 +105,16 @@ class PortablePickler(CloudPickler):
         save(tuple(state.items()))
         write(pickle.TUPLE)
         write(pickle.REDUCE)
+
+    with suppress(ImportError):
+        from _functools import _lru_cache_wrapper
+
+        # caching should not affect pickling
+        def save_lru_cache(self, obj):
+            # lru_cache uses functools.wrap
+            self.save(obj.__wrapped__)
+
+        dispatch[_lru_cache_wrapper] = save_lru_cache
 
 
 def dumps(obj, protocol: int = None) -> bytes:
