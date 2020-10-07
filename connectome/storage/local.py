@@ -36,7 +36,7 @@ class Storage:
     def store(self, path: Path) -> str:
         key = _digest_file(path)
         if key in self.local:
-            assert match_files(path, self.local[key])
+            assert match_files(path, self.local[key]), (path, self.local[key])
         else:
             try:
                 self.local[key] = path

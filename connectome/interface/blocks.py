@@ -15,19 +15,16 @@ class Merge(CallableBlock):
     def __init__(self, *blocks: CallableBlock):
         super().__init__()
 
-        idx_sum = []
-        for layer in blocks:
-            idx_sum.extend(layer.ids)
+        id2dataset_index = {}
+        for index, dataset in enumerate(blocks):
+            intersection = set(dataset.ids) & set(id2dataset_index.keys())
+            if intersection:
+                raise RuntimeError(f'Ids {intersection} are duplicated in merged datasets.')
 
-        if len(idx_sum) != len(set(idx_sum)):
-            raise RuntimeError('Datasets have same indices')
+            id2dataset_index.update({i: index for i in dataset.ids})
 
         def branch_selector(identifier):
-            for idx, ds in enumerate(blocks):
-                if identifier in ds.ids:
-                    return idx
-
-            raise ValueError(identifier)
+            return id2dataset_index[identifier]
 
         self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))
 
