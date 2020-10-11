@@ -113,7 +113,7 @@ class GraphFactory:
         self.inherited_node_names = []
         # names of persistent nodes
         # TODO move it somewhere
-        self.persistent_node_names = ['ids']
+        self.persistent_node_names = ['ids', 'id']
         self._init()
         self._validate()
         self._collect_nodes()
@@ -268,6 +268,7 @@ class SourceFactory(GraphFactory):
     def _init(self):
         self.ID = self.inputs['id']
         self.inputs.freeze()
+        self.edges.append(BoundEdge(IdentityEdge(), [self.ID], self.outputs['id']))
 
     def _validate(self):
         # TODO: ids, id, magic
