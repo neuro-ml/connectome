@@ -12,7 +12,7 @@ class FirstDS(Source):
 
     @staticmethod
     def ids(_ids_arg):
-        return list(range(_ids_arg))
+        return tuple(map(str, range(_ids_arg)))
 
     @staticmethod
     def image(i, _first_constant):
@@ -33,7 +33,7 @@ class SecondDS(Source):
 
     @staticmethod
     def ids(_ids_arg):
-        return [str(i) for i in range(_ids_arg)]
+        return [f'second:{i}' for i in range(_ids_arg)]
 
     @staticmethod
     def image(i, _second_constant):

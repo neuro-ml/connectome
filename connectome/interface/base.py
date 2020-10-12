@@ -25,8 +25,10 @@ class CallableBlock(BaseBlock):
         # FIXME: hardcoded
         if name == 'ids':
             ids = method()
-            if not isinstance(ids, (tuple, list)) or not all(isinstance(x, str) for x in ids):
-                raise ValueError('The ids must be a tuple of strings')
+            if not isinstance(ids, (tuple, list)):
+                raise ValueError(f'The ids must be a tuple of strings, not {type(ids)}')
+            if not all(isinstance(x, str) for x in ids):
+                raise ValueError(f'The ids must be a tuple of strings, not tuple of {type(ids[0])}')
 
             return ids
 
@@ -61,8 +63,11 @@ class Chain(CallableBlock):
 class SourceBase(type):
     def __new__(mcs, class_name, bases, namespace):
         def __init__(*args, **kwargs):
-            # TODO: error message
-            self, = args
+            assert args
+            if len(args) > 1:
+                raise TypeError('This constructor accepts only keyword arguments.')
+            self = args[0]
+
             # TODO: split into two objects: the first one holds the scope
             #  the second one compiles the layer
             factory = SourceFactory(namespace)
@@ -82,8 +87,11 @@ class TransformBase(type):
 
     def __new__(mcs, class_name, bases, namespace):
         def __init__(*args, **kwargs):
-            # TODO: error message
-            self, = args
+            assert args
+            if len(args) > 1:
+                raise TypeError('This constructor accepts only keyword arguments.')
+            self = args[0]
+
             # TODO: split into two objects: the first one holds the scope
             #  the second one compiles the layer
             factory = TransformFactory(namespace)

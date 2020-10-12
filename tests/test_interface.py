@@ -53,16 +53,16 @@ def test_merge(block_maker):
     second_ds = block_maker.second_ds(second_constant=2, ids_arg=15)
 
     merged = Merge(first_ds, second_ds)
-    assert merged.image(8) == f'image, 1: 8'
-    assert merged.image('8') == f'second_ds_2_8'
+    assert merged.image('8') == f'image, 1: 8'
+    assert merged.image('second:8') == f'second_ds_2_second:8'
 
     pipeline = Chain(
         merged,
         block_maker.crop(),
     )
 
-    assert pipeline.image(8) == f'image, 1: 8 transformed 11'
-    assert pipeline.image('8') == f'second_ds_2_8 transformed 13'
+    assert pipeline.image('8') == f'image, 1: 8 transformed 11'
+    assert pipeline.image('second:8') == f'second_ds_2_second:8 transformed 20'
 
 
 def test_backward(block_maker):
@@ -111,7 +111,7 @@ def test_persistent(block_maker):
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=4)
     )
-    assert Counter(pipeline.ids) == Counter([0, 1, 2, 3])
+    assert Counter(pipeline.ids) == Counter('0123')
 
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=4),
@@ -120,4 +120,4 @@ def test_persistent(block_maker):
         block_maker.optional(),
         block_maker.zoom(spacing=123),
     )
-    assert Counter(pipeline.ids) == Counter([0, 1, 2, 3])
+    assert Counter(pipeline.ids) == Counter('0123')

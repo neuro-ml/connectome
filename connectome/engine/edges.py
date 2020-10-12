@@ -23,21 +23,35 @@ class Nothing:
         return any(x.data is Nothing for x in hashes)
 
 
-class FunctionEdge(Edge):
-    def __init__(self, function: Callable, arity: int):
-        super().__init__(arity, uses_hash=False)
-        self.function = function
+class PropagateNothing(Edge):
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        raise NotImplementedError
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        if Nothing.in_data(arguments):
-            return Nothing
-
-        return self.function(*arguments)
+    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        raise NotImplementedError
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         if Nothing.in_hashes(hashes):
             return NodeHash.from_leaf(Nothing), FULL_MASK
 
+        return self._process(hashes)
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        if Nothing.in_data(arguments) or Nothing.in_hashes([node_hash]):
+            return Nothing
+
+        return self._eval(arguments, mask, node_hash)
+
+
+class FunctionEdge(PropagateNothing):
+    def __init__(self, function: Callable, arity: int):
+        super().__init__(arity, uses_hash=False)
+        self.function = function
+
+    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        return self.function(*arguments)
+
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         return NodeHash.from_hash_nodes(
             NodeHash.from_leaf(self.function), *hashes, prev_edge=self
         ), FULL_MASK
@@ -54,12 +68,12 @@ class IdentityEdge(Edge):
         return hashes[0], FULL_MASK
 
 
-class CacheEdge(Edge):
+class CacheEdge(PropagateNothing):
     def __init__(self, storage: CacheStorage):
         super().__init__(arity=1, uses_hash=True)
         self.storage = storage
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         node_hash, = hashes
         if self.storage.contains(node_hash):
             mask = []
@@ -68,7 +82,7 @@ class CacheEdge(Edge):
 
         return node_hash, mask
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # no arguments means that the value is cached
         if not arguments:
             return self.storage.get(node_hash)

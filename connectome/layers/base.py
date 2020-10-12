@@ -27,6 +27,27 @@ class LayerParams(NamedTuple):
 
 
 class Attachable(Layer):
+    def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
+        head_params = layer.prepare()
+
+        edges = head_params.edges
+        forward_inputs = head_params.inputs
+        forward_outputs = head_params.outputs
+        backward_inputs = head_params.backward_inputs
+
+        forward_outputs, backward_inputs, new_edges = self.attach(forward_outputs, backward_inputs)
+        for edge in new_edges:
+            assert edge not in edges
+            edges.append(edge)
+
+        backward_outputs = []
+        # drop inactive outputs
+        for name, value in node_to_dict(head_params.backward_outputs).items():
+            if name in node_to_dict(backward_inputs):
+                backward_outputs.append(value)
+
+        return EdgesBag(forward_inputs, forward_outputs, edges, backward_inputs, backward_outputs)
+
     def attach(self, forward_outputs: Nodes, backward_inputs: Nodes,
                persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, BoundEdges]:
         """
@@ -95,7 +116,7 @@ class EdgesBag(Attachable):
     def get_backward_method(self, name):
         return self._backward_methods[name]
 
-    def prepare(self):
+    def prepare(self) -> LayerParams:
         """
         Prepares a copy of edges and nodes for connection.
         """

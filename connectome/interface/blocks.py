@@ -24,7 +24,10 @@ class Merge(CallableBlock):
             id2dataset_index.update({i: index for i in dataset.ids})
 
         def branch_selector(identifier):
-            return id2dataset_index[identifier]
+            try:
+                return id2dataset_index[identifier]
+            except KeyError:
+                raise ValueError(f'Identifier {identifier} not found.') from None
 
         self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))
 
