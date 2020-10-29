@@ -1,4 +1,5 @@
 from threading import RLock
+from typing import Union
 
 import pylru
 
@@ -18,7 +19,7 @@ class CacheStorage:
 
 
 class MemoryStorage(CacheStorage):
-    def __init__(self, size: int):
+    def __init__(self, size: Union[int, None]):
         super().__init__()
         self._cache = {} if size is None else pylru.lrucache(size)
         self._lock = RLock()

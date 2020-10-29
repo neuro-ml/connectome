@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Union, Sequence
 
 from .base import FromLayer, CallableBlock
-from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer
+from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, resolve_serializer
@@ -48,6 +48,14 @@ class CacheToDisk(FromLayer):
                  names: Sequence[str] = None, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         super().__init__(DiskCacheLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))
+
+
+class CacheRows(FromLayer):
+    def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
+                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 names: Sequence[str] = None, metadata: dict = None):
+        storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
+        super().__init__(CacheRowsLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))
 
 
 class RemoteStorageBase(FromLayer):

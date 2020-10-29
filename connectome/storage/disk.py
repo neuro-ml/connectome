@@ -28,7 +28,7 @@ class DiskStorage(CacheStorage):
         self.metadata = metadata
         self.serializer = serializer
         self.storage = Storage(options)
-        self.root = root
+        self.root = Path(root)
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:

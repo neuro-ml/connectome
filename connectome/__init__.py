@@ -1,2 +1,2 @@
 from .interface.base import Source, Transform, Chain
-from .interface.blocks import CacheToRam, CacheToDisk, Apply, RemoteStorage, Merge
+from .interface.blocks import CacheToRam, CacheToDisk, CacheRows, Apply, RemoteStorage, Merge

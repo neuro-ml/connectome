@@ -79,10 +79,10 @@ class NumpySerializer(Serializer):
 
         path, = paths
         if path.name == 'value.npy':
-            return np.load(folder / 'value.npy')
+            return np.load(folder / 'value.npy', allow_pickle=True)
 
         if path.name == 'value.npy.gz':
             with GzipFile(folder / 'value.npy.gz', 'rb') as file:
-                return np.load(file)
+                return np.load(file, allow_pickle=True)
 
         raise SerializerError

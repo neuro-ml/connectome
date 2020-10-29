@@ -26,7 +26,12 @@ class LayerParams(NamedTuple):
     persistent_nodes: Set[str]
 
 
-class Attachable(Layer):
+class Wrapper(Layer):
+    def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
+        raise NotImplementedError
+
+
+class Attachable(Wrapper):
     def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
         head_params = layer.prepare()
 
@@ -35,19 +40,22 @@ class Attachable(Layer):
         forward_outputs = head_params.outputs
         backward_inputs = head_params.backward_inputs
 
-        forward_outputs, backward_inputs, new_edges = self.attach(forward_outputs, backward_inputs)
+        forward_outputs, backward_inputs, new_edges = self.attach(
+            forward_outputs, backward_inputs, head_params.persistent_nodes)
         for edge in new_edges:
             assert edge not in edges
             edges.append(edge)
 
-        backward_outputs = []
+        # TODO: dropping backward support for now
+        backward_inputs, backward_outputs = [], []
         # drop inactive outputs
-        for name, value in node_to_dict(head_params.backward_outputs).items():
-            if name in node_to_dict(backward_inputs):
-                backward_outputs.append(value)
+        # for name, value in node_to_dict(head_params.backward_outputs).items():
+        #     if name in node_to_dict(backward_inputs):
+        #         backward_outputs.append(value)
 
         return EdgesBag(forward_inputs, forward_outputs, edges, backward_inputs, backward_outputs)
 
+    # TODO: persistent_nodes is out of place here
     def attach(self, forward_outputs: Nodes, backward_inputs: Nodes,
                persistent_nodes: Sequence[str] = None) -> Tuple[Nodes, Nodes, BoundEdges]:
         """
@@ -60,9 +68,10 @@ class Attachable(Layer):
         forward_outputs, new = self._attach_forward(forward_outputs, graph_params)
         graph_params.edges.extend(new)
 
-        backward_inputs, new = self._attach_backward(backward_inputs, graph_params)
-        graph_params.edges.extend(new)
-        return forward_outputs, backward_inputs, graph_params.edges
+        # TODO: dropping backward support for now
+        # backward_inputs, new = self._attach_backward(backward_inputs, graph_params)
+        # graph_params.edges.extend(new)
+        return forward_outputs, [], graph_params.edges
 
     # TODO set defaults somewhere else
     def prepare(self) -> LayerParams:
@@ -115,6 +124,47 @@ class EdgesBag(Attachable):
 
     def get_backward_method(self, name):
         return self._backward_methods[name]
+
+    # def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
+    #     left, right = layer.prepare(), self.prepare()
+    #     edges = (
+    #             list(left.edges) + list(right.edges)
+    #             + list(self._make_bridges(left.outputs, right.inputs))
+    #             + list(self._make_bridges(right.backward_outputs, left.backward_inputs))
+    #     )
+    #     mapping = TreeNode.from_edges(edges)
+    #     inverse = {v: k for k, v in mapping.items()}
+    #
+    #     if self.inherit_nodes == INHERIT_ALL:
+    #         inherit = set(node_to_dict(left.outputs))
+    #     else:
+    #         inherit = (set(self.inherit_nodes) | set(left.persistent_nodes)) & set(node_to_dict(left.outputs))
+    #
+    #     inputs = set()
+    #     outputs = list(right.outputs) + self._extract(left.outputs, inherit - set(node_to_dict(right.outputs)))
+    #     allowed_inputs = set(left.inputs)
+    #     for node in outputs:
+    #         node_inputs = {inverse[x] for x in get_node_inputs(mapping[node])}
+    #         undefined = allowed_inputs - node_inputs
+    #         if not undefined:
+    #             inputs.update(node_inputs)
+    #         elif node.name not in self.optional_nodes:
+    #             raise ValueError(f'The inputs {undefined} are not defined.')
+    #
+    #     backward_inputs = set()
+    #     backward_outputs = list(left.backward_outputs) + self._extract(
+    #         right.backward_outputs, inherit - set(node_to_dict(left.backward_outputs)))
+    #     allowed_inputs = set(left.inputs) | set(right.backward_inputs)
+    #     for node in backward_outputs:
+    #         node_inputs = {inverse[x] for x in get_node_inputs(mapping[node])}
+    #         undefined = allowed_inputs - node_inputs
+    #         if not undefined:
+    #             backward_inputs.update(node_inputs)
+    #
+    #     return EdgesBag(
+    #         list(inputs), outputs, edges, list(backward_inputs), backward_outputs,
+    #         persistent_nodes=left.persistent_nodes
+    #     )
 
     def prepare(self) -> LayerParams:
         """

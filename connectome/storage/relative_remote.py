@@ -3,11 +3,15 @@ from pathlib import Path
 from typing import NamedTuple, Union, Sequence
 
 import paramiko
-from paramiko import SSHClient, AuthenticationException
+from paramiko import SSHClient, AuthenticationException, SSHException
 from paramiko.config import SSH_PORT, SSHConfig
 from scp import SCPClient, SCPException
 
 from ..utils import PathLike
+
+
+class UnknownHostException(SSHException):
+    pass
 
 
 class RemoteOptions(NamedTuple):
@@ -60,6 +64,8 @@ class RelativeRemote:
             return self
         except AuthenticationException:
             raise AuthenticationException(self.hostname) from None
+        except socket.gaierror:
+            raise UnknownHostException(self.hostname) from None
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         return self.ssh.__exit__(exc_type, exc_val, exc_tb)

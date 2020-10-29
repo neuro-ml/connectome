@@ -1,6 +1,6 @@
 from typing import Sequence, Tuple, Callable
 
-from .base import NodeHash, Edge, NodesMask, FULL_MASK
+from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType
 from ..storage.disk import CacheStorage
 
 
@@ -88,10 +88,6 @@ class CacheEdge(PropagateNothing):
             return self.storage.get(node_hash)
 
         value, = arguments
-        # TODO: need a subclass for edges that interact with Nothing
-        if value is Nothing:
-            return value
-
         self.storage.set(node_hash, value)
         return value
 
@@ -151,3 +147,24 @@ class ProjectionEdge(Edge):
 
         assert len(real) == 1, real
         return real[0], FULL_MASK
+
+
+class KeyProjection(PropagateNothing):
+    def __init__(self, keys: Sequence):
+        super().__init__(arity=2, uses_hash=True)
+        self.keys = keys
+        self.mapping = {k: i for i, k in enumerate(keys)}
+
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        key, combined = hashes
+        assert key.kind == HashType.LEAF
+        assert combined.kind == HashType.COMPOUND
+        key = key.data
+        combined = combined.children
+        assert len(combined) == len(self.keys)
+        return combined[self.mapping[key]], FULL_MASK
+
+    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        key, values = arguments
+        assert len(values) == len(self.keys)
+        return values[self.mapping[key]]

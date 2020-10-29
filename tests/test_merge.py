@@ -1,4 +1,5 @@
 from connectome import Source, Merge, Transform, Chain
+from connectome.engine.base import NodeHash
 
 
 class One(Source):
@@ -21,11 +22,34 @@ class Two(Source):
         return f'Two: {i}'
 
 
-def test_simple():
-    merged = Merge(One(), Two())
+def test_simple(hash_layer):
+    one, two = One(), Two()
+    merged = Merge(one, two)
     assert set(merged.ids) == set('123456')
-    assert merged.image('1') == 'One: 1'
-    assert merged.image('5') == 'Two: 5'
+
+    # values
+    for i in one.ids:
+        assert merged.image(i) == one.image(i)
+    for i in two.ids:
+        assert merged.image(i) == two.image(i)
+
+    # hashes
+    hashed = Chain(merged, hash_layer)
+    one_hashed, two_hashed = Chain(one, hash_layer), Chain(two, hash_layer)
+
+    for i in one.ids:
+        value, node_hash = hashed.image(i)
+        assert value == merged.image(i)
+        assert isinstance(node_hash, NodeHash)
+
+        assert hashed.image(i) == one_hashed.image(i)
+
+    for i in two.ids:
+        value, node_hash = hashed.image(i)
+        assert value == merged.image(i)
+        assert isinstance(node_hash, NodeHash)
+
+        assert hashed.image(i) == two_hashed.image(i)
 
 
 def test_nested():

@@ -1,16 +1,18 @@
-from ..utils import node_to_dict
-from .base import EdgesBag, Attachable
+from .base import EdgesBag, Wrapper
 from .cache import CacheLayer
 
 
 class PipelineLayer(EdgesBag):
-    def __init__(self, head: EdgesBag, *tail: Attachable):
+    def __init__(self, head: EdgesBag, *tail: Wrapper):
         self.layers = [head, *tail]
         for layer in tail:
             head = layer.wrap(head)
 
         params = head.prepare()
         super().__init__(params.inputs, params.outputs, params.edges, params.backward_inputs, params.backward_outputs)
+
+    def wrap(self, layer: EdgesBag) -> EdgesBag:
+        return PipelineLayer(layer, *self.layers)
 
     def remove_cache_layers(self):
         not_cache_layers = []

@@ -24,9 +24,6 @@ class NodeHash:
         self._data = data
         self.children: Sequence[NodeHash] = children
 
-    def __hash__(self):
-        return hash(self.value)
-
     @classmethod
     def from_leaf(cls, data):
         assert not isinstance(data, NodeHash)
@@ -50,6 +47,26 @@ class NodeHash:
     @property
     def kind(self):
         return self._kind
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __repr__(self):
+        if self._kind == HashType.LEAF:
+            # FIXME
+            from connectome.engine.edges import Nothing
+
+            if self.data is Nothing:
+                name = 'Nothing'
+            else:
+                name = f'Leaf'
+        else:
+            name = f'Compound'
+
+        return f'<NodeHash: {name}>'
+
+    def __eq__(self, other):
+        return isinstance(other, NodeHash) and self.value == other.value
 
 
 FULL_MASK = None

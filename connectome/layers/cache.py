@@ -1,8 +1,10 @@
+from collections import defaultdict
 from typing import Sequence
 
-from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges
+from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges, EdgesBag, Wrapper
 from ..engine.base import BoundEdge, Node
-from ..engine.edges import CacheEdge, IdentityEdge
+from ..engine.edges import CacheEdge, IdentityEdge, ProductEdge, KeyProjection
+from ..engine.interface import ValueEdge
 from ..storage.remote import RemoteStorage
 from ..utils import check_for_duplicates, node_to_dict
 from ..storage.base import MemoryStorage, CacheStorage
@@ -71,3 +73,60 @@ class RemoteStorageLayer(CacheLayer):
 
     def get_storage(self):
         return self.storage
+
+
+# TODO: caches need a common parent
+class CacheRowsLayer(Wrapper):
+    """
+    CacheRow = Product + CacheToDisk + CacheToRam + Projection
+    """
+
+    def __init__(self, names, root, options, serializer, metadata):
+        self.cache_names = names
+        self.disk = DiskStorage(root, options, serializer, metadata)
+        self.ram = MemoryStorage(None)
+
+    def wrap(self, layer: EdgesBag) -> EdgesBag:
+        # TODO: this is bad
+        keys = sorted(layer.get_forward_method('ids')())
+
+        outputs, edges = [], []
+        main = layer.prepare()
+        real_input, = main.inputs
+        edges.extend(main.edges)
+        for output in main.outputs:
+            if output.name not in self.cache_names:
+                outputs.append(output)
+
+        output_groups = defaultdict(list)
+        for key in keys:
+            params = layer.prepare()
+            inp, = params.inputs
+            edges.extend(params.edges)
+            edges.append(BoundEdge(ValueEdge(key), [], inp))
+
+            for output in params.outputs:
+                if output.name in self.cache_names:
+                    output_groups[output.name].append(output)
+
+        for name, nodes in output_groups.items():
+            new, aux = self._combine(
+                nodes, ProductEdge(len(nodes)), CacheEdge(self.disk), CacheEdge(self.ram),
+                name=name
+            )
+            edges.extend(new)
+            output = Node(name)
+            edges.append(BoundEdge(KeyProjection(keys), [real_input, aux], output))
+            outputs.append(output)
+
+        return EdgesBag([real_input], outputs, edges, [], [])
+
+    @staticmethod
+    def _combine(inputs, *edges, name):
+        results = []
+        for edge in edges:
+            out = Node(name)
+            results.append(BoundEdge(edge, inputs, out))
+            inputs = [out]
+
+        return results, out
