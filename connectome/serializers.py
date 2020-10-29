@@ -2,6 +2,8 @@ from contextlib import suppress
 from gzip import GzipFile
 from pathlib import Path
 
+import os
+import json
 import numpy as np
 
 
@@ -86,3 +88,33 @@ class NumpySerializer(Serializer):
                 return np.load(file, allow_pickle=True)
 
         raise SerializerError
+
+
+class DictSerializer(Serializer):
+    def __init__(self, *args, serializer: Serializer = None, keys_filename=None, **kwargs):
+        serializer = serializer or NumpySerializer(*args, **kwargs)
+        keys_filename = keys_filename or 'dict_keys.json'
+
+        self.keys_filename = keys_filename
+        self.serializer = serializer
+
+    def save(self, data: dict, folder: Path):
+        assert isinstance(data, dict)
+
+        keys_to_folder = {}
+        for sub_folder, (key, value) in enumerate(data.items()):
+            keys_to_folder[sub_folder] = key
+            os.makedirs(folder / str(sub_folder), exist_ok=True)
+            self.serializer.save(value, folder / str(sub_folder))
+
+        with open(folder / self.keys_filename, 'w+') as f:
+            json.dump(keys_to_folder, f)
+
+    def load(self, folder: Path):
+        with open(folder / self.keys_filename, 'r') as f:
+            keys_map = json.load(f)
+
+        data = {}
+        for sub_folder, key in keys_map.items():
+            data[key] = self.serializer.load(folder / sub_folder)
+        return data
