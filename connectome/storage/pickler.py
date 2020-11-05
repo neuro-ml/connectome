@@ -5,19 +5,40 @@ This module contains a relaxed but reproducible version of cloudpickle:
     3. we don't need to restore the pickled object, so we can drop any information
         as long as it helps to achieve (or doesn't impede) 1 and 2
 """
+import importlib
 import itertools
 import pickle
+import sys
 import types
 from collections import OrderedDict
 from contextlib import suppress
 from io import BytesIO
 
 from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild_tornado_coroutine, _fill_function, \
-    _find_imported_submodules, _make_skel_func
+    _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule
 
 
 def sort_dict(d: dict):
     return OrderedDict([(k, d[k]) for k in sorted(d)])
+
+
+def _is_under_development(obj, name):
+    if name is None:
+        name = getattr(obj, '__qualname__', None)
+    if name is None:
+        name = getattr(obj, '__name__', None)
+
+    base_module = _whichmodule(obj, name).split('.', 1)[0]
+    base = sys.modules.get(base_module)
+    if base is None:
+        base = importlib.import_module(base_module)
+
+    try:
+        return base.__development__
+    except AttributeError:
+        pass
+
+    return False
 
 
 class PortablePickler(CloudPickler):
@@ -49,6 +70,21 @@ class PortablePickler(CloudPickler):
         self.save_reduce(types.CodeType, args, obj=obj)
 
     dispatch[types.CodeType] = save_codeobject
+
+    def save_function(self, obj, name=None):
+        """ Registered with the dispatch to handle all function types.
+
+        Determines what kind of function obj is (e.g. lambda, defined at
+        interactive prompt, etc) and handles the pickling appropriately.
+        """
+        if _is_global(obj, name=name) and not _is_under_development(obj, name):
+            return Pickler.save_global(self, obj, name=name)
+        elif PYPY and isinstance(obj.__code__, builtin_code_type):
+            return self.save_pypy_builtin_func(obj)
+        else:
+            return self.save_function_tuple(obj)
+
+    dispatch[types.FunctionType] = save_function
 
     def save_function_tuple(self, func):
         """
