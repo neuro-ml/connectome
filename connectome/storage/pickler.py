@@ -22,7 +22,23 @@ def sort_dict(d: dict):
     return OrderedDict([(k, d[k]) for k in sorted(d)])
 
 
+NO_PICKLE_ATTRIBUTE = '__connectome_no_pickle__'
+
+
+def no_pickle(func):
+    """
+    Decorator that opts out a function from being pickled during node hash calculation.
+    Use it if you are sure that your function will never change in a way that might affect its behaviour.
+    """
+    setattr(func, NO_PICKLE_ATTRIBUTE, True)
+    return func
+
+
 def _is_under_development(obj, name):
+    # the user opted out this function
+    if hasattr(obj, NO_PICKLE_ATTRIBUTE):
+        return False
+
     if name is None:
         name = getattr(obj, '__qualname__', None)
     if name is None:
@@ -33,16 +49,24 @@ def _is_under_development(obj, name):
     if base is None:
         base = importlib.import_module(base_module)
 
-    try:
-        return base.__development__
-    except AttributeError:
-        pass
+    return getattr(base, '__development__', False)
 
-    return False
+
+class PickleError(TypeError):
+    pass
 
 
 class PortablePickler(CloudPickler):
     dispatch = CloudPickler.dispatch.copy()
+
+    def save(self, obj, *args, **kwargs):
+        try:
+            return super().save(obj, *args, **kwargs)
+        except PickleError as e:
+            raise PickleError(str(e)) from None
+        except BaseException as e:
+            raise PickleError(f'Exception "{e.__class__.__name__}: {e}" '
+                              f'while pickling object {obj}') from None
 
     def save_codeobject(self, obj):
         """
