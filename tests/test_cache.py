@@ -11,7 +11,6 @@ def test_hash(block_maker, hash_layer):
         block_maker.crop(),
     )
 
-
     hashed = Chain(pipeline, hash_layer)
     ram = Chain(pipeline, CacheToRam(['image']), hash_layer)
     with TemporaryDirectory() as root, TemporaryDirectory() as storage:

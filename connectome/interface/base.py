@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Callable, Sequence, Union
 
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
@@ -105,7 +105,7 @@ class TransformBase(type):
 
 
 class Transform(CallableBlock, metaclass=TransformBase):
-    pass
+    __inherit__ = ()
 
 
 # TODO add inheritance

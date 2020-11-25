@@ -1,10 +1,9 @@
-from collections import defaultdict
 from typing import Sequence
 
 from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges, EdgesBag, Wrapper
+from .utils import make_static_product
 from ..engine.base import BoundEdge, Node
-from ..engine.edges import CacheEdge, IdentityEdge, ProductEdge, KeyProjection
-from ..engine.interface import ValueEdge
+from ..engine.edges import CacheEdge, IdentityEdge, KeyProjection
 from ..storage.remote import RemoteStorage
 from ..utils import check_for_duplicates, node_to_dict
 from ..storage.base import MemoryStorage, CacheStorage
@@ -98,24 +97,16 @@ class CacheRowsLayer(Wrapper):
             if output.name not in self.cache_names:
                 outputs.append(output)
 
-        output_groups = defaultdict(list)
-        for key in keys:
-            params = layer.prepare()
-            inp, = params.inputs
-            edges.extend(params.edges)
-            edges.append(BoundEdge(ValueEdge(key), [], inp))
+        prod_edges, prod_outputs = make_static_product(layer, keys, self.cache_names)
+        edges.extend(prod_edges)
 
-            for output in params.outputs:
-                if output.name in self.cache_names:
-                    output_groups[output.name].append(output)
-
-        for name, nodes in output_groups.items():
+        for node in prod_outputs.values():
             new, aux = self._combine(
-                nodes, ProductEdge(len(nodes)), CacheEdge(self.disk), CacheEdge(self.ram),
-                name=name
+                [node], CacheEdge(self.disk), CacheEdge(self.ram),
+                name=node.name
             )
             edges.extend(new)
-            output = Node(name)
+            output = Node(node.name)
             edges.append(BoundEdge(KeyProjection(keys), [real_input, aux], output))
             outputs.append(output)
 

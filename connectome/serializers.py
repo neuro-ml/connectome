@@ -23,6 +23,7 @@ class Serializer:
         raise NotImplementedError
 
 
+# TODO: is this necessary?
 def resolve_serializer(serializer):
     if serializer is None:
         serializer = NumpySerializer()
@@ -48,6 +49,29 @@ class ChainSerializer(Serializer):
                 return serializer.load(folder)
 
         raise SerializerError(f'No serializer was able to load from {folder}.')
+
+
+class JsonSerializer(Serializer):
+    def save(self, value, folder: Path):
+        try:
+            value = json.dumps(value)
+        except TypeError as e:
+            raise SerializerError from e
+
+        with open(folder / 'value.json', 'w') as file:
+            file.write(value)
+
+    def load(self, folder: Path):
+        paths = list(folder.iterdir())
+        if len(paths) != 1:
+            raise SerializerError
+
+        path, = paths
+        if path.name != 'value.json':
+            raise SerializerError
+
+        with open(folder / 'value.json', 'r') as file:
+            return json.load(file)
 
 
 class NumpySerializer(Serializer):
