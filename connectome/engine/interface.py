@@ -12,12 +12,13 @@ class ValueEdge(Edge):
     def __init__(self, value):
         super().__init__(arity=0, uses_hash=False)
         self.value = value
+        self.node_hash = NodeHash.from_leaf(self.value)
 
     def _evaluate(self, arguments: Sequence, essential_inputs: Sequence[TreeNode], parameter: NodeHash):
         return self.value
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return NodeHash.from_leaf(self.value), FULL_MASK
+        return self.node_hash, FULL_MASK
 
 
 class InitEdge(FunctionEdge):

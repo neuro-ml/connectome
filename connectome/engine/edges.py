@@ -157,14 +157,14 @@ class KeyProjection(PropagateNothing):
 
     def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         key, combined = hashes
-        assert key.kind == HashType.LEAF
-        assert combined.kind == HashType.COMPOUND
+        # assert key.kind == HashType.LEAF
+        # assert combined.kind == HashType.COMPOUND
         key = key.data
         combined = combined.children
-        assert len(combined) == len(self.keys)
+        # assert len(combined) == len(self.keys)
         return combined[self.mapping[key]], FULL_MASK
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         key, values = arguments
-        assert len(values) == len(self.keys)
+        # assert len(values) == len(self.keys)
         return values[self.mapping[key]]

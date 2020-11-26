@@ -82,7 +82,7 @@ class CacheRowsLayer(Wrapper):
 
     def __init__(self, names, root, options, serializer, metadata):
         self.cache_names = names
-        self.disk = DiskStorage(root, options, serializer, metadata)
+        self.disk = DiskStorage(root, options, serializer, metadata, cache=True)
         self.ram = MemoryStorage(None)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:

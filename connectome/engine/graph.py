@@ -1,6 +1,7 @@
 import inspect
 
 from collections import defaultdict
+from contextlib import suppress
 from typing import Sequence, Union
 
 from .base import TreeNode, NodeHash
@@ -16,6 +17,10 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
     counts = count_entries(inputs, outputs)
     inputs = [x for x in inputs if counts.get(x, 0)]
     inputs_map = {x.name: x for x in inputs}
+    if use_hash:
+        constant_hashes, constant_masks = precompute_hashes(inputs, outputs)
+    else:
+        constant_hashes, constant_masks = {}, {}
 
     signature = inspect.Signature([
         inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
@@ -25,12 +30,12 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
     def caller(*args, **kwargs):
         scope = signature.bind(*args, **kwargs)
         # drop unnecessary branches
-        masks, hashes = prune(inputs_map, outputs, scope.arguments, use_hash=use_hash)
+        hashes, masks = prune(inputs_map, outputs, scope.arguments, constant_hashes, constant_masks, use_hash=use_hash)
         # prepare for render
         local_counts = counts.copy()
         hashes = ExpirationCache(local_counts, hashes)
 
-        local_counts = (count_entries(inputs, outputs, masks))
+        local_counts = count_entries(inputs, outputs, masks)
         cache = ExpirationCache(local_counts)
 
         for name, n in inputs_map.items():
@@ -55,11 +60,11 @@ def validate_graph(inputs, outputs):
                 continue
 
             # no edges - must be an input
-            if not node.edges:
+            if not node.edge:
                 assert node in inputs, (node, inputs)
 
             else:
-                group, = node.edges.values()
+                group = node.edge[1]
                 visitor(group)
 
     visitor(outputs)
@@ -72,7 +77,7 @@ def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks
         if node in inputs:
             return
 
-        group, = node.edges.values()
+        group = node.edge[1]
         if masks is not None:
             group = [group[idx] for idx in masks[node]]
 
@@ -85,32 +90,57 @@ def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks
     return dict(entry_counts)
 
 
-def prune(inputs_map, outputs, arguments, use_hash=True):
+def precompute_hashes(inputs, outputs):
     def visitor(node: TreeNode):
-        if node in cache:
-            return cache[node]
+        if node in hashes:
+            return True
 
-        (edge, group), = node.edges.items()
+        if not node.edge:
+            assert node in inputs
+            return False
+
+        # we visit the root nodes and build a cache of immutable hashes
+        edge, group = node.edge
+        visited = all(visitor(x) for x in group)
+
+        if edge.uses_hash or not visited:
+            # the edge doesn't have a constant hash
+            return False
+
+        hashes[node], masks[node] = edge.process_hashes([hashes[x] for x in group])
+        return True
+
+    hashes, masks = {}, {}
+    for n in outputs:
+        visitor(n)
+    return hashes, masks
+
+
+def prune(inputs_map, outputs, arguments, hashes, masks, use_hash=True):
+    def visitor(node: TreeNode):
+        if node in hashes:
+            return hashes[node]
+
+        edge, group = node.edge
         result, mask = edge.process_hashes([visitor(x) for x in group])
+        hashes[node] = result
         masks[node] = mask
-        cache[node] = result
         return result
 
-    masks = {}
-    cache = {}
+    hashes, masks = hashes.copy(), masks.copy()
     for name, n in inputs_map.items():
         # put objects into inputs if hashes are not required
         hash_data = arguments[name] if use_hash else object()
-        cache[n] = NodeHash.from_leaf(hash_data)
+        hashes[n] = NodeHash.from_leaf(hash_data)
     for n in outputs:
         visitor(n)
 
-    return masks, cache
+    return hashes, masks
 
 
 def render(node, cache, masks, hashes):
     if node not in cache:
-        (edge, inputs), = node.edges.items()
+        edge, inputs = node.edge
         mask = masks[node]
 
         inputs = [inputs[idx] for idx in mask]

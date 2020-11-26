@@ -9,12 +9,16 @@ class ExpirationCache:
         self.cache[key] = value
 
     def __getitem__(self, key):
-        assert self.counts[key]
+        counts = self.counts[key]
         value = self.cache[key]
-        self.counts[key] -= 1
-        if self.counts[key] <= 0:
+
+        assert counts
+        counts -= 1
+        if counts < 0:
             del self.cache[key]
             del self.counts[key]
+        else:
+            self.counts[key] = counts
         return value
 
     def __contains__(self, key):
