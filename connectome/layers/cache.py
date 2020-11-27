@@ -3,7 +3,7 @@ from typing import Sequence
 from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges, EdgesBag, Wrapper
 from .utils import make_static_product
 from ..engine.base import BoundEdge, Node
-from ..engine.edges import CacheEdge, IdentityEdge, KeyProjection
+from ..engine.edges import CacheEdge, IdentityEdge, CachedKeyProjection
 from ..storage.remote import RemoteStorage
 from ..utils import check_for_duplicates, node_to_dict
 from ..storage.base import MemoryStorage, CacheStorage
@@ -82,8 +82,7 @@ class CacheRowsLayer(Wrapper):
 
     def __init__(self, names, root, options, serializer, metadata):
         self.cache_names = names
-        self.disk = DiskStorage(root, options, serializer, metadata, cache=True)
-        self.ram = MemoryStorage(None)
+        self.disk = DiskStorage(root, options, serializer, metadata)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:
         # TODO: this is bad
@@ -93,21 +92,28 @@ class CacheRowsLayer(Wrapper):
         main = layer.prepare()
         real_input, = main.inputs
         edges.extend(main.edges)
+        main_outputs = {}
         for output in main.outputs:
             if output.name not in self.cache_names:
                 outputs.append(output)
+            else:
+                main_outputs[output.name] = output
 
+        # TODO: this is still long for large datasets
+        #  a better solution would be to keep a single copy and run it N times
+        #  when the values are not cached.
+        #  It would also fix the need to compute the ids inside this function.
         prod_edges, prod_outputs = make_static_product(layer, keys, self.cache_names)
         edges.extend(prod_edges)
 
-        for node in prod_outputs.values():
+        for name, node in prod_outputs.items():
             new, aux = self._combine(
-                [node], CacheEdge(self.disk), CacheEdge(self.ram),
-                name=node.name
+                [node], CacheEdge(self.disk),
+                name=name
             )
             edges.extend(new)
-            output = Node(node.name)
-            edges.append(BoundEdge(KeyProjection(keys), [real_input, aux], output))
+            output = Node(name)
+            edges.append(BoundEdge(CachedKeyProjection(keys), [real_input, main_outputs[name], aux], output))
             outputs.append(output)
 
         return EdgesBag([real_input], outputs, edges, [], [])

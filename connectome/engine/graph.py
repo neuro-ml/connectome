@@ -1,7 +1,5 @@
 import inspect
-
 from collections import defaultdict
-from contextlib import suppress
 from typing import Sequence, Union
 
 from .base import TreeNode, NodeHash
@@ -17,11 +15,6 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
     counts = count_entries(inputs, outputs)
     inputs = [x for x in inputs if counts.get(x, 0)]
     inputs_map = {x.name: x for x in inputs}
-    if use_hash:
-        constant_hashes, constant_masks = precompute_hashes(inputs, outputs)
-    else:
-        constant_hashes, constant_masks = {}, {}
-
     signature = inspect.Signature([
         inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
         for name in inputs_map
@@ -30,7 +23,7 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[
     def caller(*args, **kwargs):
         scope = signature.bind(*args, **kwargs)
         # drop unnecessary branches
-        hashes, masks = prune(inputs_map, outputs, scope.arguments, constant_hashes, constant_masks, use_hash=use_hash)
+        hashes, masks = prune(inputs_map, outputs, scope.arguments, use_hash=use_hash)
         # prepare for render
         local_counts = counts.copy()
         hashes = ExpirationCache(local_counts, hashes)
@@ -116,18 +109,45 @@ def precompute_hashes(inputs, outputs):
     return hashes, masks
 
 
-def prune(inputs_map, outputs, arguments, hashes, masks, use_hash=True):
+class LazyHashes:
+    def __init__(self, current_nodes, hashes, masks):
+        self.current_nodes = current_nodes
+        self.hashes = hashes
+        self.masks = masks
+
+    def sync(self, index):
+        return self[index]
+
+    def _render(self, node):
+        if node not in self.hashes:
+            edge, group = node.edge
+            self.hashes[node], self.masks[node] = edge.process_hashes(LazyHashes(group, self.hashes, self.masks))
+
+        return self.hashes[node]
+
+    def __getitem__(self, index):
+        return self._render(self.current_nodes[index])
+
+    def __iter__(self):
+        return map(self._render, self.current_nodes)
+
+    def __len__(self):
+        return len(self.current_nodes)
+
+
+def prune(inputs_map, outputs, arguments, use_hash=True):
     def visitor(node: TreeNode):
-        if node in hashes:
-            return hashes[node]
+        # if node in hashes:
+        #     return hashes[node]
 
         edge, group = node.edge
-        result, mask = edge.process_hashes([visitor(x) for x in group])
-        hashes[node] = result
-        masks[node] = mask
-        return result
+        hashes[node], masks[node] = edge.process_hashes(LazyHashes(group, hashes, masks))
+        # result, mask = edge.process_hashes([visitor(x) for x in group])
+        # hashes[node] = result
+        # masks[node] = mask
+        # return result
 
-    hashes, masks = hashes.copy(), masks.copy()
+    hashes, masks = {}, {}
     for name, n in inputs_map.items():
         # put objects into inputs if hashes are not required
         hash_data = arguments[name] if use_hash else object()

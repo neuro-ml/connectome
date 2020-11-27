@@ -22,30 +22,20 @@ META_FILENAME = 'meta.json'
 
 
 class DiskStorage(CacheStorage):
-    def __init__(self, root: Path, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict,
-                 cache: bool = False):
+    def __init__(self, root: Path, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict):
         super().__init__()
         self._lock = RLock()
         self.metadata = metadata
         self.serializer = serializer
         self.storage = Storage(options)
         self.root = Path(root)
-        self.cache = cache
-        self._visited = set()
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:
-        value = param.value
-        if self.cache and value in self._visited:
-            return True
-
         # TODO: `Nothing` should not come in here
-        _, _, relative = key_to_relative(value)
+        _, _, relative = key_to_relative(param.value)
         local = self.root / relative
-        exists = local.exists()
-        if exists and self.cache:
-            self._visited.add(value)
-        return exists
+        return local.exists()
 
     @atomize()
     def set(self, param: NodeHash, value):

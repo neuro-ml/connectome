@@ -30,3 +30,21 @@ def test_chain():
         Some(),
     )
     assert ds.image('id') == 'id'
+
+
+def test_nested(block_maker, hash_layer):
+    one = block_maker.first_ds(first_constant=2, ids_arg=15)
+    two = block_maker.crop()
+
+    base, *variants = [
+        Chain(one, two, hash_layer),
+        Chain(Chain(one, two), hash_layer),
+        Chain(one, Chain(two, hash_layer)),
+        Chain(Chain(one), Chain(two), Chain(hash_layer)),
+        Chain(Chain(one, two, hash_layer)),
+    ]
+
+    for i in one.ids:
+        value = base.image(i)
+        for variant in variants:
+            assert variant.image(i) == value

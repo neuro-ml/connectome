@@ -23,7 +23,7 @@ class NodeHash:
     # TODO: at this point it looks like 2 different objects
     @classmethod
     def from_leaf(cls, data):
-        # assert not isinstance(data, NodeHash)
+        assert not isinstance(data, NodeHash)
         return cls(data, (), kind=HashType.LEAF)
 
     @classmethod
@@ -62,16 +62,16 @@ class Edge:
         self._uses_hash = uses_hash
 
     def evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        # assert len(arguments) == len(mask)
+        assert len(arguments) == len(mask)
         return self._evaluate(arguments, mask, node_hash)
 
     def process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        # assert len(hashes) == self.arity
+        assert len(hashes) == self.arity
         node_hash, mask = self._process_hashes(hashes)
         if mask == FULL_MASK:
             mask = range(self.arity)
-        # assert all(0 <= x < self.arity for x in mask)
-        # assert len(set(mask)) == len(mask)
+        assert all(0 <= x < self.arity for x in mask)
+        assert len(set(mask)) == len(mask)
         return node_hash, mask
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
@@ -122,6 +122,25 @@ class TreeNode:
 
     def __repr__(self):
         return str(self)
+
+    def visualize(self, path, cache=()):
+        """
+        Useful for visualization during debug. Requires `graphviz` (not the python package) to be installed.
+        """
+        from anytree.exporter import UniqueDotExporter
+        from anytree import Node
+
+        def convert(node):
+            return Node(node.name, original=node, edge=f'label={type(node.edge[0]).__name__}' if node.edge else '',
+                        children=list(map(convert, node.edge[1] if node.edge else [])))
+
+        UniqueDotExporter(
+            convert(self),
+            edgeattrfunc=lambda parent, child: parent.edge,
+            nodeattrfunc=lambda
+                node: f"shape={'box' if node.original not in cache else 'ellipse'}, label=\"{node.name}\"",
+            nodenamefunc=lambda node: hex(id(node.original))
+        ).to_picture(path)
 
 
 class Node:

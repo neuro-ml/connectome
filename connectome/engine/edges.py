@@ -1,6 +1,8 @@
 from typing import Sequence, Tuple, Callable
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType
+from .graph import LazyHashes
+from ..storage.base import MemoryStorage
 from ..storage.disk import CacheStorage
 
 
@@ -20,7 +22,8 @@ class Nothing:
 
     @staticmethod
     def in_hashes(hashes: Sequence[NodeHash]):
-        return any(x.data is Nothing for x in hashes)
+        # TODO: do we want always to evaluate all hashes
+        return any(x.data is Nothing for x in list(hashes))
 
 
 class PropagateNothing(Edge):
@@ -149,22 +152,41 @@ class ProjectionEdge(Edge):
         return real[0], FULL_MASK
 
 
-class KeyProjection(PropagateNothing):
+# TODO: should move this to CachedProduct
+class CachedKeyProjection(PropagateNothing):
     def __init__(self, keys: Sequence):
-        super().__init__(arity=2, uses_hash=True)
+        super().__init__(arity=3, uses_hash=True)
         self.keys = keys
-        self.mapping = {k: i for i, k in enumerate(keys)}
+        self.storage = {}
 
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        key, combined = hashes
-        # assert key.kind == HashType.LEAF
-        # assert combined.kind == HashType.COMPOUND
+    def _process_hashes(self, hashes: LazyHashes) -> Tuple[NodeHash, NodesMask]:
+        """
+        Hashes
+        ------
+        key: a unique key for each entry in the tuple
+        entry: the hash for the entry at ``key``
+        compound: the hash for the entire tuple
+        """
+        key, entry = hashes[0], hashes[1]
+        if Nothing.in_hashes([key, entry]):
+            return NodeHash.from_leaf(Nothing)
+
+        assert key.kind == HashType.LEAF
         key = key.data
-        combined = combined.children
-        # assert len(combined) == len(self.keys)
-        return combined[self.mapping[key]], FULL_MASK
+
+        if key in self.storage:
+            return entry, [0]
+
+        # TODO: maybe move to `process_hashes`
+        hashes.sync(2)  # we need this hash to be calculated
+        return entry, [0, 2]
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        key, values = arguments
-        # assert len(values) == len(self.keys)
-        return values[self.mapping[key]]
+        key = arguments[0]
+        if key not in self.storage:
+            values = arguments[1]
+            assert len(values) == len(self.keys)
+            for k, h in zip(self.keys, values):
+                self.storage[k] = h
+
+        return self.storage[key]
