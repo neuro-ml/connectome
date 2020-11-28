@@ -1,69 +1,83 @@
 import inspect
 from collections import defaultdict
-from typing import Sequence, Union
+from typing import Sequence, Dict
 
-from .base import TreeNode, NodeHash
+from .base import TreeNode, NodeHash, TreeNodes
 from .utils import ExpirationCache
 
 
-def compile_graph(inputs: Sequence[TreeNode], outputs: Union[TreeNode, Sequence[TreeNode]], use_hash=True):
-    squeeze = isinstance(outputs, TreeNode)
-    if squeeze:
-        outputs = [outputs]
+class Graph:
+    def __init__(self, inputs: TreeNodes, output: TreeNode):
+        validate_graph(inputs, output)
+        counts = count_entries(inputs, output)
+        inputs = [x for x in inputs if counts.get(x, 0)]
+        inputs_map = {x.name: x for x in inputs}
+        signature = inspect.Signature([
+            inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            for name in inputs_map
+        ])
+        use_hash = uses_hash(output)
+        self.inputs = inputs
+        self.output = output
 
-    validate_graph(inputs, outputs)
-    counts = count_entries(inputs, outputs)
-    inputs = [x for x in inputs if counts.get(x, 0)]
-    inputs_map = {x.name: x for x in inputs}
-    signature = inspect.Signature([
-        inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-        for name in inputs_map
-    ])
+        def caller(*args, **kwargs):
+            scope = signature.bind(*args, **kwargs)
+            # put objects into inputs if hashes are not required
+            input_hashes = {
+                node: NodeHash.from_leaf(scope.arguments[name] if use_hash else object())
+                for name, node in inputs_map.items()
+            }
+            # drop unnecessary branches
+            hashes, masks = prune(input_hashes, output)
+            # prepare for render
+            local_counts = counts.copy()
+            hashes = ExpirationCache(local_counts, hashes)
 
-    def caller(*args, **kwargs):
-        scope = signature.bind(*args, **kwargs)
-        # drop unnecessary branches
-        hashes, masks = prune(inputs_map, outputs, scope.arguments, use_hash=use_hash)
-        # prepare for render
-        local_counts = counts.copy()
-        hashes = ExpirationCache(local_counts, hashes)
+            local_counts = count_entries(inputs, output, masks)
+            cache = ExpirationCache(local_counts)
 
-        local_counts = count_entries(inputs, outputs, masks)
-        cache = ExpirationCache(local_counts)
+            for name, n in inputs_map.items():
+                if n in local_counts:
+                    cache[n] = scope.arguments[name]
 
-        for name, n in inputs_map.items():
-            if n in local_counts:
-                cache[n] = scope.arguments[name]
+            return render(output, cache, masks, hashes)
 
-        # render
-        result = tuple(render(node, cache, masks, hashes) for node in outputs)
-        if squeeze:
-            result = result[0]
-        return result
+        caller.__signature__ = signature
+        self.eval = caller
 
-    caller.__signature__ = signature
-    return caller
-
-
-def validate_graph(inputs, outputs):
-    def visitor(nodes):
-        for node in nodes:
-            # input doesn't need parents
-            if node in inputs:
-                continue
-
-            # no edges - must be an input
-            if not node.edge:
-                assert node in inputs, (node, inputs)
-
-            else:
-                group = node.edge[1]
-                visitor(group)
-
-    visitor(outputs)
+    def eval_hash(self, hashes: Sequence[NodeHash]):
+        assert len(hashes) == len(self.inputs)
+        hashes, masks = prune(dict(zip(self.inputs, hashes)), self.output)
+        return hashes[self.output]
 
 
-def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks=None):
+# TODO: deprecate?
+def compile_graph(inputs: Sequence[TreeNode], outputs: TreeNode):
+    return Graph(inputs, outputs).eval
+
+
+def uses_hash(node: TreeNode) -> bool:
+    if node.edge is None:
+        return False
+    return node.edge[0].uses_hash or any(map(uses_hash, node.edge[1]))
+
+
+def validate_graph(inputs: TreeNodes, output: TreeNode):
+    def visitor(node):
+        # input doesn't need parents
+        if node in inputs:
+            return
+        # no edges - must be an input
+        if not node.edge:
+            assert node in inputs, (node, inputs)
+        else:
+            for inp in node.edge[1]:
+                visitor(inp)
+
+    visitor(output)
+
+
+def count_entries(inputs: TreeNodes, output: TreeNode, masks=None):
     def visitor(node: TreeNode):
         entry_counts[node] += 1
         # input doesn't need parents
@@ -78,35 +92,34 @@ def count_entries(inputs: Sequence[TreeNode], outputs: Sequence[TreeNode], masks
             visitor(n)
 
     entry_counts = defaultdict(int)
-    for x in outputs:
-        visitor(x)
+    visitor(output)
     return dict(entry_counts)
 
 
-def precompute_hashes(inputs, outputs):
-    def visitor(node: TreeNode):
-        if node in hashes:
-            return True
-
-        if not node.edge:
-            assert node in inputs
-            return False
-
-        # we visit the root nodes and build a cache of immutable hashes
-        edge, group = node.edge
-        visited = all(visitor(x) for x in group)
-
-        if edge.uses_hash or not visited:
-            # the edge doesn't have a constant hash
-            return False
-
-        hashes[node], masks[node] = edge.process_hashes([hashes[x] for x in group])
-        return True
-
-    hashes, masks = {}, {}
-    for n in outputs:
-        visitor(n)
-    return hashes, masks
+# def precompute_hashes(inputs, outputs):
+#     def visitor(node: TreeNode):
+#         if node in hashes:
+#             return True
+#
+#         if not node.edge:
+#             assert node in inputs
+#             return False
+#
+#         # we visit the root nodes and build a cache of immutable hashes
+#         edge, group = node.edge
+#         visited = all(visitor(x) for x in group)
+#
+#         if edge.uses_hash or not visited:
+#             # the edge doesn't have a constant hash
+#             return False
+#
+#         hashes[node], masks[node] = edge.process_hashes([hashes[x] for x in group])
+#         return True
+#
+#     hashes, masks = {}, {}
+#     for n in outputs:
+#         visitor(n)
+#     return hashes, masks
 
 
 class LazyHashes:
@@ -135,7 +148,7 @@ class LazyHashes:
         return len(self.current_nodes)
 
 
-def prune(inputs_map, outputs, arguments, use_hash=True):
+def prune(inputs: Dict[TreeNode, NodeHash], output: TreeNode):
     def visitor(node: TreeNode):
         # if node in hashes:
         #     return hashes[node]
@@ -147,14 +160,9 @@ def prune(inputs_map, outputs, arguments, use_hash=True):
         # masks[node] = mask
         # return result
 
-    hashes, masks = {}, {}
-    for name, n in inputs_map.items():
-        # put objects into inputs if hashes are not required
-        hash_data = arguments[name] if use_hash else object()
-        hashes[n] = NodeHash.from_leaf(hash_data)
-    for n in outputs:
-        visitor(n)
-
+    masks = {}
+    hashes = inputs.copy()
+    visitor(output)
     return hashes, masks
 
 

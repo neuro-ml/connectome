@@ -4,6 +4,11 @@ from connectome import Chain, Filter
 def test_filter(block_maker, hash_layer):
     block = block_maker.first_ds(first_constant=2, ids_arg=15)
     pipeline = Chain(
+        block, Filter(lambda id: id in ['2', '5']),
+    )
+    assert pipeline.ids == ('2', '5')
+
+    pipeline = Chain(
         block, Filter(lambda image: image.endswith('4')),
     )
     ids = pipeline.ids

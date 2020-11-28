@@ -1,9 +1,9 @@
 from typing import Sequence
 
 from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges, EdgesBag, Wrapper
-from .utils import make_static_product
-from ..engine.base import BoundEdge, Node
-from ..engine.edges import CacheEdge, IdentityEdge, CachedKeyProjection
+from ..engine.base import BoundEdge, Node, TreeNode
+from ..engine.edges import CacheEdge, IdentityEdge, CachedRow
+from ..engine.graph import Graph
 from ..storage.remote import RemoteStorage
 from ..utils import check_for_duplicates, node_to_dict
 from ..storage.base import MemoryStorage, CacheStorage
@@ -83,47 +83,31 @@ class CacheRowsLayer(Wrapper):
     def __init__(self, names, root, options, serializer, metadata):
         self.cache_names = names
         self.disk = DiskStorage(root, options, serializer, metadata)
+        self.ram = MemoryStorage(None)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:
-        # TODO: this is bad
-        keys = sorted(layer.get_forward_method('ids')())
-
         outputs, edges = [], []
+
         main = layer.prepare()
-        real_input, = main.inputs
         edges.extend(main.edges)
-        main_outputs = {}
+        key, = main.inputs
+        keys = node_to_dict(main.outputs)['ids']
+
+        copy = layer.prepare()
+        mapping = TreeNode.from_edges(copy.edges)
+        outputs_copy = node_to_dict(copy.outputs)
+        graph_inputs = [mapping[copy.inputs[0]]]
+
         for output in main.outputs:
-            if output.name not in self.cache_names:
+            name = output.name
+            if name not in self.cache_names:
                 outputs.append(output)
+
             else:
-                main_outputs[output.name] = output
+                local = Node(name)
+                # build a graph for each node
+                graph = Graph(graph_inputs, mapping[outputs_copy[name]])
+                edges.append(BoundEdge(CachedRow(self.disk, self.ram, graph), [output, key, keys], local))
+                outputs.append(local)
 
-        # TODO: this is still long for large datasets
-        #  a better solution would be to keep a single copy and run it N times
-        #  when the values are not cached.
-        #  It would also fix the need to compute the ids inside this function.
-        prod_edges, prod_outputs = make_static_product(layer, keys, self.cache_names)
-        edges.extend(prod_edges)
-
-        for name, node in prod_outputs.items():
-            new, aux = self._combine(
-                [node], CacheEdge(self.disk),
-                name=name
-            )
-            edges.extend(new)
-            output = Node(name)
-            edges.append(BoundEdge(CachedKeyProjection(keys), [real_input, main_outputs[name], aux], output))
-            outputs.append(output)
-
-        return EdgesBag([real_input], outputs, edges, [], [])
-
-    @staticmethod
-    def _combine(inputs, *edges, name):
-        results = []
-        for edge in edges:
-            out = Node(name)
-            results.append(BoundEdge(edge, inputs, out))
-            inputs = [out]
-
-        return results, out
+        return EdgesBag([key], outputs, edges, [], [])

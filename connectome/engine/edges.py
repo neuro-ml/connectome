@@ -1,9 +1,9 @@
 from typing import Sequence, Tuple, Callable
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType
-from .graph import LazyHashes
+from .graph import Graph
 from ..storage.base import MemoryStorage
-from ..storage.disk import CacheStorage
+from ..storage.disk import CacheStorage, DiskStorage
 
 
 # TODO: maybe the engine itself should deal with these
@@ -24,6 +24,16 @@ class Nothing:
     def in_hashes(hashes: Sequence[NodeHash]):
         # TODO: do we want always to evaluate all hashes
         return any(x.data is Nothing for x in list(hashes))
+
+
+class Placeholder:
+    """
+    A placeholder used to calculate the graph hash without inputs.
+    """
+
+    # TODO: singleton
+    def __init__(self):
+        raise RuntimeError("Don't init me!")
 
 
 class PropagateNothing(Edge):
@@ -152,41 +162,77 @@ class ProjectionEdge(Edge):
         return real[0], FULL_MASK
 
 
-# TODO: should move this to CachedProduct
-class CachedKeyProjection(PropagateNothing):
-    def __init__(self, keys: Sequence):
+class CachedRow(PropagateNothing):
+    def __init__(self, disk: DiskStorage, ram: MemoryStorage, graph: Graph):
         super().__init__(arity=3, uses_hash=True)
-        self.keys = keys
-        self.storage = {}
+        self.graph = graph
+        self.disk = disk
+        self.ram = ram
 
-    def _process_hashes(self, hashes: LazyHashes) -> Tuple[NodeHash, NodesMask]:
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         """
         Hashes
         ------
-        key: a unique key for each entry in the tuple
         entry: the hash for the entry at ``key``
-        compound: the hash for the entire tuple
+        key: a unique key for each entry in the tuple
+        keys: all available keys
         """
-        key, entry = hashes[0], hashes[1]
-        if Nothing.in_hashes([key, entry]):
-            return NodeHash.from_leaf(Nothing)
+        entry = hashes[0]
+        if self.ram.contains(entry):
+            return entry, []
 
-        assert key.kind == HashType.LEAF
-        key = key.data
-
-        if key in self.storage:
-            return entry, [0]
-
-        # TODO: maybe move to `process_hashes`
-        hashes.sync(2)  # we need this hash to be calculated
-        return entry, [0, 2]
+        return entry, [1, 2]
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        key = arguments[0]
-        if key not in self.storage:
-            values = arguments[1]
-            assert len(values) == len(self.keys)
-            for k, h in zip(self.keys, values):
-                self.storage[k] = h
+        if not arguments:
+            return self.ram.get(node_hash)
 
-        return self.storage[key]
+        key, keys = arguments
+        keys = sorted(keys)
+        assert key in keys
+
+        hashes = []
+        for k in keys:
+            h = self.graph.eval_hash([NodeHash.from_leaf(k)])
+            hashes.append(h)
+            if k == key:
+                assert node_hash == h
+        compound = NodeHash.from_hash_nodes(*hashes)
+
+        if not self.disk.contains(compound):
+            values = [self.graph.eval(k) for k in keys]
+            self.disk.set(compound, values)
+        else:
+            values = self.disk.get(compound)
+
+        for k, h, value in zip(keys, hashes, values):
+            self.ram.set(h, value)
+            if k == key:
+                result = value
+
+        return result
+
+
+class FilterEdge(PropagateNothing):
+    def __init__(self, func: Callable, graph: Graph):
+        super().__init__(arity=1, uses_hash=False)
+        self.graph = graph
+        self.func = func
+
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        keys, = hashes
+        args = self.graph.eval_hash([NodeHash.from_leaf(Placeholder)])
+        return NodeHash.from_hash_nodes(
+            NodeHash.from_leaf(self.func), keys, args,
+            kind=HashType.FILTER,
+        ), FULL_MASK
+
+    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        keys, = arguments
+        result = []
+        for key in keys:
+            args = self.graph.eval(key)
+            if self.func(*args):
+                result.append(key)
+
+        return tuple(result)

@@ -113,11 +113,11 @@ class EdgesBag(Attachable):
 
         self._forward_methods = {}
         for node in outputs:
-            self._forward_methods[node.name] = compile_graph(inputs, node, self.uses_hash())
+            self._forward_methods[node.name] = compile_graph(inputs, node)
 
         self._backward_methods = {}
         for node in backward_outputs:
-            self._backward_methods[node.name] = compile_graph(backward_inputs + inputs, node, self.uses_hash())
+            self._backward_methods[node.name] = compile_graph(backward_inputs + inputs, node)
 
     def get_forward_method(self, name):
         return self._forward_methods[name]
@@ -310,9 +310,6 @@ class EdgesBag(Attachable):
         graph_output = mapping[backward_outputs[backward_name]]
         return compile_graph(graph_inputs, graph_output)
 
-    def uses_hash(self):
-        return any(e.edge.uses_hash for e in self.edges)
-
     @staticmethod
     def update_map(nodes, node_map):
         for node in nodes:
@@ -330,7 +327,7 @@ class EdgesBag(Attachable):
         essential_input_names = {}
         for o in outputs:
             output = tree_node_map[o]
-            counts = count_entries(inputs, [output])
+            counts = count_entries(inputs, output)
             input_names = [x.name for x in inputs if counts.get(x, 0)]
             essential_input_names[o] = input_names
         return essential_input_names

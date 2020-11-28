@@ -1,5 +1,6 @@
-from typing import Callable, Sequence, Union
+from typing import Callable, Sequence
 
+from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
 from ..utils import MultiDict
@@ -36,6 +37,12 @@ class CallableBlock(BaseBlock):
 
     def __dir__(self):
         return tuple(x.name for x in self._layer.outputs)
+
+    def _visualize(self, name, path):
+        mapping = TreeNode.from_edges(self._layer.edges)
+        for o in self._layer.outputs:
+            if o.name == name:
+                mapping[o].visualize(path)
 
 
 class FromLayer(BaseBlock):

@@ -6,6 +6,7 @@ from typing import Sequence, Tuple, Union, NamedTuple, Optional
 class HashType(IntEnum):
     LEAF = 0
     COMPOUND = 1
+    FILTER = 2
 
 
 class NodeHash:
@@ -27,9 +28,9 @@ class NodeHash:
         return cls(data, (), kind=HashType.LEAF)
 
     @classmethod
-    def from_hash_nodes(cls, *hashes: 'NodeHash', prev_edge=None):
+    def from_hash_nodes(cls, *hashes: 'NodeHash', prev_edge=None, kind=HashType.COMPOUND):
         data = tuple(h.value for h in hashes)
-        return cls(data, hashes, kind=HashType.COMPOUND)
+        return cls(data, hashes, kind=kind)
 
     def __hash__(self):
         return self._hash
@@ -141,6 +142,9 @@ class TreeNode:
                 node: f"shape={'box' if node.original not in cache else 'ellipse'}, label=\"{node.name}\"",
             nodenamefunc=lambda node: hex(id(node.original))
         ).to_picture(path)
+
+
+TreeNodes = Sequence[TreeNode]
 
 
 class Node:
