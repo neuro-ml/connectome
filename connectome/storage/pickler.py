@@ -30,6 +30,8 @@ def no_pickle(func):
     Decorator that opts out a function from being pickled during node hash calculation.
     Use it if you are sure that your function will never change in a way that might affect its behaviour.
     """
+    # TODO: maybe keep a global set of all decorated functions
+    #  instead of writing some attribute
     setattr(func, NO_PICKLE_ATTRIBUTE, True)
     return func
 
@@ -56,8 +58,18 @@ class PickleError(TypeError):
     pass
 
 
+# new invalidation bugs will inevitable arise
+# versioning will help diminish the pain from transitioning between updates
+AVAILABLE_VERSIONS = 0, 1
+*PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
+
+
 class PortablePickler(CloudPickler):
     dispatch = CloudPickler.dispatch.copy()
+
+    def __init__(self, file, protocol=None, version=LATEST_VERSION):
+        super().__init__(file, protocol=protocol)
+        self.version = version
 
     def save(self, obj, *args, **kwargs):
         try:
@@ -72,25 +84,31 @@ class PortablePickler(CloudPickler):
         """
         Same reducer as in cloudpickle, except `co_filename`, `co_firstlineno` are not saved.
         """
-        if hasattr(obj, "co_posonlyargcount"):
-            args = (
-                obj.co_argcount, obj.co_posonlyargcount,
-                obj.co_kwonlyargcount, obj.co_nlocals, obj.co_stacksize,
-                obj.co_flags, obj.co_code, obj.co_consts, obj.co_names,
-                obj.co_varnames,  # obj.co_filename,
-                obj.co_name,  # obj.co_firstlineno,
-                obj.co_lnotab, obj.co_freevars, obj.co_cellvars
-            )
-        else:
-            args = (
-                obj.co_argcount,
-                obj.co_kwonlyargcount, obj.co_nlocals, obj.co_stacksize,
-                obj.co_flags, obj.co_code, obj.co_consts, obj.co_names,
-                obj.co_varnames,  # obj.co_filename,
-                obj.co_name,  # obj.co_firstlineno,
-                obj.co_lnotab, obj.co_freevars, obj.co_cellvars
-            )
+        consts = obj.co_consts
+        lnotab = obj.co_lnotab,
+        if self.version >= 1:
+            # remove the line number table
+            lnotab = ()
+            # remove the docstring
+            if consts and isinstance(consts[0], str):
+                consts = list(consts)[1:]
+                if None in consts:
+                    consts.remove(None)
+                consts = (None, *consts)
 
+        if hasattr(obj, "co_posonlyargcount"):
+            posonlyargcount = obj.co_posonlyargcount,
+        else:
+            posonlyargcount = ()
+
+        args = (
+            obj.co_argcount, *posonlyargcount,
+            obj.co_kwonlyargcount, obj.co_nlocals, obj.co_stacksize,
+            obj.co_flags, obj.co_code, consts, obj.co_names,
+            obj.co_varnames,  # obj.co_filename,
+            obj.co_name,  # obj.co_firstlineno,
+            *lnotab, obj.co_freevars, obj.co_cellvars
+        )
         self.save_reduce(types.CodeType, args, obj=obj)
 
     dispatch[types.CodeType] = save_codeobject
@@ -115,8 +133,7 @@ class PortablePickler(CloudPickler):
         Reproducible function tuple
         """
         if is_tornado_coroutine(func):
-            self.save_reduce(_rebuild_tornado_coroutine, (func.__wrapped__,),
-                             obj=func)
+            self.save_reduce(_rebuild_tornado_coroutine, (func.__wrapped__,), obj=func)
             return
 
         save = self.save
@@ -126,6 +143,11 @@ class PortablePickler(CloudPickler):
         f_globals, dct, base_globals = map(sort_dict, [f_globals, dct, base_globals])
         if '__file__' in base_globals:
             base_globals.pop('__file__')
+        # as of py3.8 the docstring is always stored in co_consts[0]
+        # need this assertion to detect any changes in further versions
+        if func.__doc__ is not None:
+            assert code.co_consts
+            assert func.__doc__ == code.co_consts[0]
 
         save(_fill_function)
         write(pickle.MARK)
@@ -177,7 +199,7 @@ class PortablePickler(CloudPickler):
         dispatch[_lru_cache_wrapper] = save_lru_cache
 
 
-def dumps(obj, protocol: int = None) -> bytes:
+def dumps(obj, protocol: int = None, version: int = LATEST_VERSION) -> bytes:
     with BytesIO() as file:
-        PortablePickler(file, protocol=protocol).dump(obj)
+        PortablePickler(file, protocol=protocol, version=version).dump(obj)
         return file.getvalue()

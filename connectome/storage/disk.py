@@ -14,7 +14,7 @@ from ..engine.base import NodeHash
 from ..serializers import Serializer
 from ..utils import atomize
 from .base import CacheStorage
-from .pickler import dumps
+from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
@@ -32,28 +32,32 @@ class DiskStorage(CacheStorage):
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:
-        # TODO: `Nothing` should not come in here
         _, _, relative = key_to_relative(param.value)
-        local = self.root / relative
-        return local.exists()
+        if (self.root / relative).exists():
+            return True
+
+        for version in reversed(PREVIOUS_VERSIONS):
+            _, _, relative = key_to_relative(param.value, version)
+            local = self.root / relative
+            if local.exists():
+                # we can simply copy the previous version, because nothing really changed
+                self.set(param, self.serializer.load(local / DATA_FOLDER))
+                return True
+
+        return False
 
     @atomize()
     def set(self, param: NodeHash, value):
-        local = self._key_to_path(param.value)
+        pickled, digest, relative = key_to_relative(param.value)
+        local = self.root / relative
         data_folder = local / DATA_FOLDER
+        create_folders(data_folder, self.root)
 
         try:
             # data
             self.serializer.save(value, data_folder)
             # meta
-            meta = self.metadata.copy()
-            meta.update({
-                'time': time.time(),
-                # TODO: this can possibly fail
-                'user': getpass.getuser(),
-            })
-            with open(local / META_FILENAME, 'w') as file:
-                json.dump(meta, file)
+            self._save_meta(local, pickled)
 
             copy_group_permissions(local, self.root, recursive=True)
             self._mirror_to_storage(data_folder)
@@ -64,27 +68,30 @@ class DiskStorage(CacheStorage):
 
     @atomize()
     def get(self, param: NodeHash):
-        # TODO: check consistency?
-        _, _, relative = key_to_relative(param.value)
-        data_folder = self.root / relative / DATA_FOLDER
-        return self.serializer.load(data_folder)
+        pickled, _, relative = key_to_relative(param.value)
+        # TODO: how slow is this?
+        check_consistency(self.root / relative / HASH_FILENAME, pickled)
+        return self.serializer.load(self.root / relative / DATA_FOLDER)
 
-    def _key_to_path(self, key):
-        pickled, digest, relative = key_to_relative(key)
-        local = self.root / relative
+    def _save_meta(self, local, pickled):
+        # hash
         hash_path = local / HASH_FILENAME
-        data_folder = local / DATA_FOLDER
-
-        create_folders(data_folder, self.root)
         if hash_path.exists():
             check_consistency(hash_path, pickled)
-
         else:
             # or save
             with open(hash_path, 'wb') as file:
                 file.write(pickled)
 
-        return local
+        # user meta
+        meta = self.metadata.copy()
+        meta.update({
+            'time': time.time(),
+            # TODO: this can possibly fail
+            'user': getpass.getuser(),
+        })
+        with open(local / META_FILENAME, 'w') as file:
+            json.dump(meta, file)
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):
@@ -101,8 +108,8 @@ def digest_bytes(pickled: bytes) -> str:
     return blake2b(pickled, digest_size=FOLDER_LEVELS * LEVEL_SIZE).hexdigest()
 
 
-def key_to_relative(key):
-    pickled = dumps(key)
+def key_to_relative(key, version=LATEST_VERSION):
+    pickled = dumps(key, version=version)
     digest = digest_bytes(pickled)
     relative = digest_to_relative(digest)
     return pickled, digest, relative
