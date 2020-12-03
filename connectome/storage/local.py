@@ -196,17 +196,22 @@ class GroupCache:
         path = Path(path)
         assert path.is_file(), path
 
-        file = self._key_to_path(key)
-        folder = file.parent
+        stored_file = self._key_to_path(key)
+        folder = stored_file.parent
         create_folders(folder, self.root)
 
         try:
-            shutil.copyfile(path, file)
+            shutil.copyfile(path, stored_file)
             copy_group_permissions(folder, self.root, recursive=True)
 
         except BaseException as e:
             del self[key]
             raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
+        # make file read-only
+        os.chmod(stored_file, 0o440)
+
     def __delitem__(self, key):
-        shutil.rmtree(self._key_to_path(key).parent)
+        file = self._key_to_path(key)
+        os.chmod(file, PERMISSIONS)
+        shutil.rmtree(file.parent)
