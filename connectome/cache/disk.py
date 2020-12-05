@@ -8,20 +8,21 @@ from pathlib import Path
 from threading import RLock
 from typing import Sequence
 
-from .local import DiskOptions, Storage, digest_to_relative, FOLDER_LEVELS, LEVEL_SIZE, copy_group_permissions, \
-    create_folders
-from ..engine.base import NodeHash
+from .base import Cache
+from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
+
+from ..storage.base import DiskOptions, Storage, digest_to_relative
+from ..storage.local import FOLDER_LEVELS, LEVEL_SIZE, copy_group_permissions, create_folders
+from ..engine import NodeHash
 from ..serializers import Serializer
 from ..utils import atomize
-from .base import CacheStorage
-from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
 META_FILENAME = 'meta.json'
 
 
-class DiskStorage(CacheStorage):
+class DiskCache(Cache):
     def __init__(self, root: Path, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict):
         super().__init__()
         self._lock = RLock()

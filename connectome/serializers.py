@@ -1,3 +1,5 @@
+from typing import Union, Dict
+
 from contextlib import suppress
 from gzip import GzipFile
 from pathlib import Path
@@ -75,7 +77,7 @@ class JsonSerializer(Serializer):
 
 
 class NumpySerializer(Serializer):
-    def __init__(self, compression: int = None):
+    def __init__(self, compression: Union[int, Dict[type, int]] = None):
         self.compression = compression
 
     def _choose_compression(self, value):

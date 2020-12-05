@@ -4,10 +4,8 @@ from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges, EdgesBag, W
 from ..engine.base import BoundEdge, Node, TreeNode
 from ..engine.edges import CacheEdge, IdentityEdge, CachedRow
 from ..engine.graph import Graph
-from ..storage.remote import RemoteStorage
 from ..utils import check_for_duplicates, node_to_dict
-from ..storage.base import MemoryStorage, CacheStorage
-from ..storage.disk import DiskStorage
+from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
 
 class CacheLayer(Attachable):
@@ -18,7 +16,7 @@ class CacheLayer(Attachable):
         # TODO: do it better
         return LayerParams([], [], [], [], [], set())
 
-    def get_storage(self) -> CacheStorage:
+    def get_storage(self) -> Cache:
         raise NotImplementedError
 
     def _attach_forward(self, forward_outputs: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
@@ -53,13 +51,13 @@ class MemoryCacheLayer(CacheLayer):
         self.size = size
 
     def get_storage(self):
-        return MemoryStorage(self.size)
+        return MemoryCache(self.size)
 
 
 class DiskCacheLayer(CacheLayer):
     def __init__(self, names, root, options, serializer, metadata):
         super().__init__(names)
-        self.storage = DiskStorage(root, options, serializer, metadata)
+        self.storage = DiskCache(root, options, serializer, metadata)
 
     def get_storage(self):
         return self.storage
@@ -68,7 +66,7 @@ class DiskCacheLayer(CacheLayer):
 class RemoteStorageLayer(CacheLayer):
     def __init__(self, names, options, serializer):
         super().__init__(names)
-        self.storage = RemoteStorage(options, serializer)
+        self.storage = RemoteCache(options, serializer)
 
     def get_storage(self):
         return self.storage
@@ -82,8 +80,8 @@ class CacheRowsLayer(Wrapper):
 
     def __init__(self, names, root, options, serializer, metadata):
         self.cache_names = names
-        self.disk = DiskStorage(root, options, serializer, metadata)
-        self.ram = MemoryStorage(None)
+        self.disk = DiskCache(root, options, serializer, metadata)
+        self.ram = MemoryCache(None)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:
         outputs, edges = [], []

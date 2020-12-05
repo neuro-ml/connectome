@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Union, Sequence, Callable
+from paramiko.config import SSH_PORT
 
 from .base import FromLayer, CallableBlock
 from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
@@ -7,8 +8,7 @@ from ..layers.filter import FilterLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, resolve_serializer
-from ..storage.disk import DiskOptions
-from ..storage.relative_remote import RemoteOptions, SSH_PORT
+from ..storage import DiskOptions, RemoteOptions
 from ..utils import PathLike
 
 
@@ -41,7 +41,7 @@ class Filter(FromLayer):
     --------
     >>> dataset = Chain(
     >>>   source,  # dataset with `image` and `spacing` attributes
-    >>>   Filter(lambda image, spacing: min(*image.shape) > 30 and max(*spacing) < 5),
+    >>>   Filter(lambda image, spacing: min(image.shape) > 30 and max(spacing) < 5),
     >>> )
     """
 
@@ -71,7 +71,7 @@ class CacheToRam(FromLayer):
 class CacheToDisk(FromLayer):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
                  serializers: Union[Serializer, Sequence[Serializer]] = None,
-                 names: MaybeStr = None, metadata: dict = None):
+                 names: MaybeStr, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
         super().__init__(DiskCacheLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))
@@ -80,7 +80,7 @@ class CacheToDisk(FromLayer):
 class CacheRows(FromLayer):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
                  serializers: Union[Serializer, Sequence[Serializer]] = None,
-                 names: MaybeStr = None, metadata: dict = None):
+                 names: MaybeStr, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
         super().__init__(CacheRowsLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))

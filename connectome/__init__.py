@@ -1,4 +1,2 @@
-from .interface.base import Source, Transform, Chain, chained
-from .interface.blocks import CacheToRam, CacheToDisk, CacheRows, Apply, RemoteStorage, Merge, Filter
-from .interface.decorators import insert, optional, inverse
-from .layers.base import INHERIT_ALL
+from .interface import *
+from .layers import INHERIT_ALL

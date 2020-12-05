@@ -2,8 +2,7 @@ from typing import Sequence, Tuple, Callable
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType
 from .graph import Graph
-from ..storage.base import MemoryStorage
-from ..storage.disk import CacheStorage, DiskStorage
+from ..cache import Cache, MemoryCache, DiskCache
 
 
 # TODO: maybe the engine itself should deal with these
@@ -82,7 +81,7 @@ class IdentityEdge(Edge):
 
 
 class CacheEdge(PropagateNothing):
-    def __init__(self, storage: CacheStorage):
+    def __init__(self, storage: Cache):
         super().__init__(arity=1, uses_hash=True)
         self.storage = storage
 
@@ -163,7 +162,7 @@ class ProjectionEdge(Edge):
 
 
 class CachedRow(PropagateNothing):
-    def __init__(self, disk: DiskStorage, ram: MemoryStorage, graph: Graph):
+    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph):
         super().__init__(arity=3, uses_hash=True)
         self.graph = graph
         self.disk = disk

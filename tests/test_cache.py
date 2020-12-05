@@ -1,8 +1,7 @@
 from tempfile import TemporaryDirectory
 
-from connectome import Chain, CacheToRam, CacheToDisk
-from connectome.interface.blocks import CacheRows
-from connectome.storage.local import DiskOptions
+from connectome import Chain, CacheToRam, CacheToDisk, CacheRows
+from connectome.storage import DiskOptions
 
 
 def test_hash(block_maker, hash_layer):
@@ -20,4 +19,5 @@ def test_hash(block_maker, hash_layer):
 
         rows.image(pipeline.ids[0])
         for i in pipeline.ids:
+            assert hashed.image(i)[0] == pipeline.image(i)
             assert hashed.image(i) == ram.image(i) == disk.image(i) == rows.image(i)
