@@ -3,6 +3,9 @@ import shutil
 from hashlib import blake2b
 from pathlib import Path
 
+from diskcache import Cache
+from diskcache.core import DBNAME
+
 FOLDER_LEVELS = 1, 31, 32
 DIGEST_SIZE = sum(FOLDER_LEVELS)
 PERMISSIONS = 0o770
@@ -14,14 +17,19 @@ class StorageLocation:
         self.root = root
         if not root.exists():
             create_folders(root, root)
+        self.counter = Cache(str(root), size_limit=10 * 2 ** 30, cull_limit=0, eviction_policy='none')
+        for file in root.glob(f'{DBNAME}*'):
+            os.chmod(file, PERMISSIONS)
+            shutil.chown(file, group=root.group())
 
-    def volume(self):
-        return get_folder_size(self.root)
+    def volume(self) -> int:
+        return sum(self.counter[key] for key in self.counter)
 
     def _key_to_path(self, key):
         return self.root / digest_to_relative(key) / FILENAME
 
     def __contains__(self, key):
+        # TODO: use the counter?
         return self._key_to_path(key).exists()
 
     def __getitem__(self, key):
@@ -48,11 +56,17 @@ class StorageLocation:
 
         # make file read-only
         os.chmod(stored_file, 0o444 & PERMISSIONS)
+        # calculate the volume
+        self.counter[key] = os.path.getsize(path)
 
     def __delitem__(self, key):
         file = self._key_to_path(key)
         os.chmod(file, PERMISSIONS)
         shutil.rmtree(file.parent)
+        del self.counter[key]
+
+    def __del__(self):
+        self.counter.close()
 
 
 def copy_group_permissions(target, reference, recursive=False):
@@ -73,20 +87,6 @@ def create_folders(path: Path, root: Path):
         os.chmod(path, PERMISSIONS)
         if path != root:
             shutil.chown(path, group=root.group())
-
-
-def get_file_size(path):
-    return os.path.getsize(path)
-
-
-# FIXME: this function is VERY slow
-def get_folder_size(path):
-    size = 0
-    for root, _, files in os.walk(path):
-        for name in files:
-            size += get_file_size(os.path.join(root, name))
-
-    return size
 
 
 def _digest_file(path: Path, block_size=2 ** 20):

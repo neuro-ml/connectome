@@ -4,3 +4,4 @@ pylru
 paramiko==2.*
 scp
 tqdm
+diskcache
