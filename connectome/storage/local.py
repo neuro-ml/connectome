@@ -3,7 +3,8 @@ import shutil
 from hashlib import blake2b
 from pathlib import Path
 
-LEVEL_SIZE, FOLDER_LEVELS = 32, 2
+FOLDER_LEVELS = 1, 31, 32
+DIGEST_SIZE = sum(FOLDER_LEVELS)
 PERMISSIONS = 0o770
 FILENAME = 'data'
 
@@ -89,7 +90,7 @@ def get_folder_size(path):
 
 
 def _digest_file(path: Path, block_size=2 ** 20):
-    hasher = blake2b(digest_size=FOLDER_LEVELS * LEVEL_SIZE)
+    hasher = blake2b(digest_size=DIGEST_SIZE)
 
     with open(path, 'rb') as f:
         while True:
@@ -102,12 +103,13 @@ def _digest_file(path: Path, block_size=2 ** 20):
 
 
 def digest_to_relative(key):
-    assert len(key) % FOLDER_LEVELS == 0
-    size = len(key) // FOLDER_LEVELS
+    assert len(key) == DIGEST_SIZE * 2
 
     parts = []
-    for i in range(FOLDER_LEVELS):
-        i *= size
-        parts.append(key[i:i + size])
+    start = 0
+    for level in FOLDER_LEVELS:
+        stop = start + level * 2
+        parts.append(key[start:stop])
+        start = stop
 
     return Path(*parts)

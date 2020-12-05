@@ -12,7 +12,7 @@ from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 
 from ..storage.base import DiskOptions, Storage, digest_to_relative
-from ..storage.local import FOLDER_LEVELS, LEVEL_SIZE, copy_group_permissions, create_folders
+from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..utils import atomize
@@ -106,7 +106,7 @@ class DiskCache(Cache):
 
 
 def digest_bytes(pickled: bytes) -> str:
-    return blake2b(pickled, digest_size=FOLDER_LEVELS * LEVEL_SIZE).hexdigest()
+    return blake2b(pickled, digest_size=DIGEST_SIZE).hexdigest()
 
 
 def key_to_relative(key, version=LATEST_VERSION):
