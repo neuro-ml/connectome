@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Sequence, Union
 from tqdm import tqdm
 
-from .local import StorageLocation, _digest_file, digest_to_relative, FILENAME
+from .local import StorageLocation, digest_file, digest_to_relative, FILENAME
 from .remote import RelativeRemote, RemoteOptions
 from ..utils import ChainDict, InsertError
 
@@ -31,7 +31,7 @@ class Storage:
         self.local = ChainDict(list(self.options), self._select_storage)
 
     def store(self, path: Path) -> str:
-        key = _digest_file(path)
+        key = digest_file(path)
         if key in self.local:
             assert match_files(path, self.local[key]), (path, self.local[key])
         else:

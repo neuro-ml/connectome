@@ -90,7 +90,7 @@ def create_folders(path: Path, root: Path):
             shutil.chown(path, group=root.group())
 
 
-def _digest_file(path: Path, block_size=2 ** 20):
+def digest_file(path: Path, block_size=2 ** 20):
     hasher = blake2b(digest_size=DIGEST_SIZE)
 
     with open(path, 'rb') as f:
