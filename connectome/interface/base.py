@@ -35,8 +35,11 @@ class CallableBlock(BaseBlock):
 
         return method
 
+    def __rshift__(self, block: BaseBlock) -> 'Chain':
+        return Chain(self, block)
+
     def __dir__(self):
-        return tuple(x.name for x in self._layer.outputs)
+        return [x.name for x in self._layer.outputs]
 
     def _visualize(self, name, path):
         mapping = TreeNode.from_edges(self._layer.edges)

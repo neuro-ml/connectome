@@ -35,7 +35,7 @@ class Merge(CallableBlock):
 
 class Filter(FromLayer):
     """
-    Filters the `ids` of the current pipeline given a `predicate`.
+    Filters the `ids` of the current pipeline given a ``predicate``.
 
     Examples
     --------
@@ -47,6 +47,20 @@ class Filter(FromLayer):
 
     def __init__(self, predicate: Callable):
         super().__init__(FilterLayer(predicate))
+
+    @classmethod
+    def drop(cls, ids: Sequence[str]):
+        """Removes the provided ``ids`` from the dataset."""
+        assert all(isinstance(i, str) for i in ids)
+        ids = set(ids)
+        return cls(lambda id: id not in ids)
+
+    @classmethod
+    def keep(cls, ids: Sequence[str]):
+        """Removes the all the ids not present in ``ids``."""
+        assert all(isinstance(i, str) for i in ids)
+        ids = set(ids)
+        return cls(lambda id: id in ids)
 
 
 class Apply(FromLayer):
