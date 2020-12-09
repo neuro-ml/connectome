@@ -1,6 +1,6 @@
 from typing import Sequence, Tuple, Callable
 
-from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType
+from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType, TreeNodes
 from .graph import Graph
 from ..cache import Cache, MemoryCache, DiskCache
 
@@ -23,16 +23,6 @@ class Nothing:
     def in_hashes(hashes: Sequence[NodeHash]):
         # TODO: do we want always to evaluate all hashes
         return any(x.data is Nothing for x in list(hashes))
-
-
-class Placeholder:
-    """
-    A placeholder used to calculate the graph hash without inputs.
-    """
-
-    # TODO: singleton
-    def __init__(self):
-        raise RuntimeError("Don't init me!")
 
 
 class PropagateNothing(Edge):
@@ -60,13 +50,17 @@ class FunctionEdge(PropagateNothing):
         super().__init__(arity, uses_hash=False)
         self.function = function
 
+    def _calc_hash(self, hashes):
+        return NodeHash.from_hash_nodes(NodeHash.from_leaf(self.function), *hashes, prev_edge=self)
+
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return self.function(*arguments)
 
     def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return NodeHash.from_hash_nodes(
-            NodeHash.from_leaf(self.function), *hashes, prev_edge=self
-        ), FULL_MASK
+        return self._calc_hash(hashes), FULL_MASK
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return self._calc_hash(hashes)
 
 
 class IdentityEdge(Edge):
@@ -78,6 +72,29 @@ class IdentityEdge(Edge):
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         return hashes[0], FULL_MASK
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return hashes[0]
+
+
+class ValueEdge(Edge):
+    """
+    Used in interface to provide constant parameters.
+    """
+
+    def __init__(self, value):
+        super().__init__(arity=0, uses_hash=False)
+        self.value = value
+        self.node_hash = NodeHash.from_leaf(self.value)
+
+    def _evaluate(self, arguments: Sequence, essential_inputs: TreeNodes, parameter: NodeHash):
+        return self.value
+
+    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        return self.node_hash, FULL_MASK
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return self.node_hash
 
 
 class CacheEdge(PropagateNothing):
@@ -103,6 +120,9 @@ class CacheEdge(PropagateNothing):
         self.storage.set(node_hash, value)
         return value
 
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return hashes[0]
+
 
 class ProductEdge(Edge):
     def __init__(self, arity: int):
@@ -113,6 +133,9 @@ class ProductEdge(Edge):
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         return NodeHash.from_hash_nodes(*hashes, prev_edge=self), FULL_MASK
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return NodeHash.from_hash_nodes(*hashes, prev_edge=self)
 
 
 # TODO: are Switch and Projection the only edges that need Nothing?
@@ -134,6 +157,9 @@ class SwitchEdge(Edge):
             # TODO: need a special type for hash of nothing
             node_hash = NodeHash.from_leaf(Nothing)
         return node_hash, FULL_MASK
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return hashes[0]
 
 
 class ProjectionEdge(Edge):
@@ -160,6 +186,9 @@ class ProjectionEdge(Edge):
         assert len(real) == 1, real
         return real[0], FULL_MASK
 
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return hashes[0]
+
 
 class CachedRow(PropagateNothing):
     def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph):
@@ -182,6 +211,9 @@ class CachedRow(PropagateNothing):
 
         return entry, [1, 2]
 
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return hashes[0]
+
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         if not arguments:
             return self.ram.get(node_hash)
@@ -192,7 +224,7 @@ class CachedRow(PropagateNothing):
 
         hashes = []
         for k in keys:
-            h = self.graph.eval_hash([NodeHash.from_leaf(k)])
+            h = self.graph.eval_hash(NodeHash.from_leaf(k))
             hashes.append(h)
             if k == key:
                 assert node_hash == h
@@ -218,13 +250,19 @@ class FilterEdge(PropagateNothing):
         self.graph = graph
         self.func = func
 
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+    def _hash(self, hashes):
         keys, = hashes
-        args = self.graph.eval_hash([NodeHash.from_leaf(Placeholder)])
+        args = self.graph.hash()
         return NodeHash.from_hash_nodes(
             NodeHash.from_leaf(self.func), keys, args,
             kind=HashType.FILTER,
-        ), FULL_MASK
+        )
+
+    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        return self._hash(hashes), FULL_MASK
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        return self._hash(hashes)
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         keys, = arguments

@@ -75,10 +75,17 @@ class Edge:
         assert len(set(mask)) == len(mask)
         return node_hash, mask
 
+    def hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
+        assert len(hashes) == self.arity
+        return self._hash_graph(hashes)
+
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         raise NotImplementedError
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+        raise NotImplementedError
+
+    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
         raise NotImplementedError
 
     @property

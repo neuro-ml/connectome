@@ -1,8 +1,7 @@
 import inspect
 
-from ..engine.edges import FunctionEdge, IdentityEdge
+from ..engine.edges import FunctionEdge, IdentityEdge, ValueEdge
 from ..engine.base import Node, BoundEdge
-from ..engine.interface import ValueEdge, InitEdge, ItemGetterEdge
 from ..layers.base import EdgesBag, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter
@@ -210,18 +209,18 @@ class GraphFactory:
             yield BoundEdge(ValueEdge(value), [], self.arguments[name])
 
         # if no __init__ was provided there is an identity edge from args to constants
-        if not self.has_init():
-            for name in self.constants:
-                yield BoundEdge(IdentityEdge(), [self.arguments[to_argument(name)]], self.constants[name])
+        assert not self.has_init()
+        for name in self.constants:
+            yield BoundEdge(IdentityEdge(), [self.arguments[to_argument(name)]], self.constants[name])
 
         # otherwise the constants are extracted from self
-        else:
-            self_node = Node('$self')
-            init = self.scope[INIT_NAME]
-            # TODO: the inputs must be sorted. check it somewhere
-            yield InitEdge(init, self.mock_storage, [self.arguments[k] for k in sorted(self.arguments)], self_node)
-            for name in self.constants:
-                yield ItemGetterEdge(name, self_node, self.constants[name])
+        # else:
+        # self_node = Node('$self')
+        # init = self.scope[INIT_NAME]
+        # # TODO: the inputs must be sorted. check it somewhere
+        # yield InitEdge(init, self.mock_storage, [self.arguments[k] for k in sorted(self.arguments)], self_node)
+        # for name in self.constants:
+        #     yield ItemGetterEdge(name, self_node, self.constants[name])
 
     def has_init(self):
         return INIT_NAME in self.scope

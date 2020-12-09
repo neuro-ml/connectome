@@ -45,10 +45,13 @@ class Graph:
         caller.__signature__ = signature
         self.eval = caller
 
-    def eval_hash(self, hashes: Sequence[NodeHash]):
+    def eval_hash(self, *hashes: NodeHash):
         assert len(hashes) == len(self.inputs)
         hashes, masks = prune(dict(zip(self.inputs, hashes)), self.output)
         return hashes[self.output]
+
+    def hash(self):
+        return hash_graph(self.inputs, self.output)
 
 
 # TODO: deprecate?
@@ -149,21 +152,23 @@ class LazyHashes:
 
 
 def prune(inputs: Dict[TreeNode, NodeHash], output: TreeNode):
-    def visitor(node: TreeNode):
-        # if node in hashes:
-        #     return hashes[node]
-
-        edge, group = node.edge
-        hashes[node], masks[node] = edge.process_hashes(LazyHashes(group, hashes, masks))
-        # result, mask = edge.process_hashes([visitor(x) for x in group])
-        # hashes[node] = result
-        # masks[node] = mask
-        # return result
-
     masks = {}
     hashes = inputs.copy()
-    visitor(output)
+    edge, group = output.edge
+    hashes[output], masks[output] = edge.process_hashes(LazyHashes(group, hashes, masks))
     return hashes, masks
+
+
+def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
+    def visitor(node: TreeNode):
+        if node not in hashes:
+            edge, group = node.edge
+            hashes[node] = edge.hash_graph(list(map(visitor, group)))
+
+        return hashes[node]
+
+    hashes = dict.fromkeys(inputs, NodeHash.from_leaf(Placeholder))
+    return visitor(output)
 
 
 def render(node, cache, masks, hashes):
@@ -175,3 +180,13 @@ def render(node, cache, masks, hashes):
         cache[node] = edge.evaluate([render(x, cache, masks, hashes) for x in inputs], mask, hashes[node])
 
     return cache[node]
+
+
+class Placeholder:
+    """
+    A placeholder used to calculate the graph hash without inputs.
+    """
+
+    # TODO: singleton
+    def __init__(self):
+        raise RuntimeError("Don't init me!")
