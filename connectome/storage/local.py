@@ -1,3 +1,4 @@
+import errno
 import os
 import shutil
 from hashlib import blake2b
@@ -48,7 +49,7 @@ class StorageLocation:
         create_folders(folder, self.root)
 
         try:
-            shutil.copyfile(path, stored_file)
+            copy_file(path, stored_file)
             copy_group_permissions(folder, self.root, recursive=True)
 
         except BaseException as e:
@@ -114,3 +115,16 @@ def digest_to_relative(key):
         start = stop
 
     return Path(*parts)
+
+
+def copy_file(source, destination):
+    # in Python>=3.8 the sendfile call is used, which apparently may fail
+    try:
+        shutil.copyfile(source, destination)
+    except OSError as e:
+        # BlockingIOError -> fallback to slow copy
+        if e.errno != errno.EWOULDBLOCK:
+            raise
+
+    with open(source, 'rb') as src, open(destination, 'wb') as dst:
+        shutil.copyfileobj(src, dst)
