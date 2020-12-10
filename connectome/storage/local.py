@@ -121,6 +121,7 @@ def copy_file(source, destination):
     # in Python>=3.8 the sendfile call is used, which apparently may fail
     try:
         shutil.copyfile(source, destination)
+        return
     except OSError as e:
         # BlockingIOError -> fallback to slow copy
         if e.errno != errno.EWOULDBLOCK:
