@@ -60,7 +60,14 @@ class Chain(CallableBlock):
         self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
 
     def __getitem__(self, index):
-        return Chain(*map(FromLayer, self._layer.slice(index.start, index.stop).layers))
+        if isinstance(index, int):
+            index = slice(index, index + 1)
+
+        if isinstance(index, slice):
+            start = index.start if index.start is not None else 0
+            return Chain(*map(FromLayer, self._layer.slice(start, index.stop).layers))
+
+        raise ValueError('The index can be either an int or slice.')
 
     # def remove_cache(self):
     #     return Chain.from_pipeline(self._layer.remove_cache_layers())

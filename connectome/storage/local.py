@@ -105,7 +105,7 @@ def digest_file(path: Path, block_size=2 ** 20):
 
 
 def digest_to_relative(key):
-    assert len(key) == DIGEST_SIZE * 2
+    assert len(key) == DIGEST_SIZE * 2, len(key)
 
     parts = []
     start = 0
