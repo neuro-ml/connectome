@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Callable, Sequence, Union
 
 from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
@@ -133,7 +133,7 @@ class TransformBase(type):
 
 
 class Transform(CallableBlock, metaclass=TransformBase):
-    __inherit__ = ()
+    __inherit__: Union[str, Sequence[str], bool] = ()
 
 
 # TODO add inheritance

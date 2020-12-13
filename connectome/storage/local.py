@@ -4,9 +4,6 @@ import shutil
 from hashlib import blake2b
 from pathlib import Path
 
-# from diskcache import Cache
-# from diskcache.core import DBNAME
-
 FOLDER_LEVELS = 1, 31, 32
 DIGEST_SIZE = sum(FOLDER_LEVELS)
 PERMISSIONS = 0o770
@@ -18,6 +15,7 @@ class StorageLocation:
         self.root = root
         if not root.exists():
             create_folders(root, root)
+
         # self.counter = Cache(str(root), size_limit=10 * 2 ** 30, cull_limit=0, eviction_policy='none')
         # for file in root.glob(f'{DBNAME}*'):
         #     os.chmod(file, PERMISSIONS)

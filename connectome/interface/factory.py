@@ -303,18 +303,15 @@ class TransformFactory(GraphFactory):
         pass
 
     def _process_inherit(self, value):
-        if isinstance(value, list):
+        if isinstance(value, str):
+            value = [value]
+
+        if value != INHERIT_ALL:
             for node_name in value:
                 # TODO exception
                 assert isinstance(node_name, str)
-                self.inherited_node_names.append(node_name)
 
-        elif isinstance(value, str):
-            self.inherited_node_names.append(value)
-        elif value == INHERIT_ALL:
-            self.inherited_node_names = INHERIT_ALL
-        else:
-            raise ValueError("Expected 'str' or 'List[str] in __inherit__'")
+        self.inherited_node_names = value
 
     def _process_forward(self, name, value) -> BoundEdge:
         decorators = get_decorators(value)

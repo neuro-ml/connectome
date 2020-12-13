@@ -8,7 +8,7 @@ from ..utils import check_for_duplicates, node_to_dict
 Nodes = Sequence[Node]
 BoundEdges = Sequence[BoundEdge]
 
-INHERIT_ALL = object()
+INHERIT_ALL = True
 
 
 class Layer:
