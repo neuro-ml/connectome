@@ -1,4 +1,3 @@
-from functools import wraps
 from typing import Callable
 
 
@@ -28,13 +27,21 @@ class InsertDecoratorAdapter(DecoratorAdapter):
     name = 'insert'
 
 
+class PositionalDecoratorAdapter(DecoratorAdapter):
+    name = 'positional'
+
+
 def inverse(func: Callable):
-    return wraps(func)(InverseDecoratorAdapter(func))
+    return InverseDecoratorAdapter(func)
 
 
 def optional(func: Callable):
-    return wraps(func)(OptionalDecoratorAdapter(func))
+    return OptionalDecoratorAdapter(func)
+
+
+def positional(func: Callable):
+    return PositionalDecoratorAdapter(func)
 
 
 def insert(func: Callable):
-    return wraps(func)(InsertDecoratorAdapter(func))
+    return InsertDecoratorAdapter(func)

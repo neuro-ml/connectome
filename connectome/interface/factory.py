@@ -4,7 +4,8 @@ from ..engine.edges import FunctionEdge, IdentityEdge, ValueEdge
 from ..engine.base import Node, BoundEdge
 from ..layers.base import EdgesBag, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
-from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter
+from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
+    PositionalDecoratorAdapter
 
 
 class NodeStorage(dict):
@@ -314,25 +315,39 @@ class TransformFactory(GraphFactory):
         self.inherited_node_names = value
 
     def _process_forward(self, name, value) -> BoundEdge:
+        # we have 2 situations here:
+        #  1. all the arguments are positional-or-keyword -> it can be an insertion or a transformation
+        #  2. the first argument is positional-only (or marked by a decorator) -> this is a transformation
         decorators = get_decorators(value)
+        value = unwrap_transform(value)
         if OptionalDecoratorAdapter in decorators:
             self.optional_node_names.append(name)
 
-        value = unwrap_transform(value)
-
         inputs = []
-        names = extract_signature(value)
-        if InsertDecoratorAdapter not in decorators:
-            if not names:
-                raise ValueError('Non-insert transform methods require at least one argument')
+        signature = list(inspect.signature(value).parameters.values())
+        positional = False
+        if signature:
+            parameter = signature[0]
+            # second case
+            assert parameter.default == parameter.empty, parameter
+            positional = parameter.kind == parameter.POSITIONAL_ONLY or PositionalDecoratorAdapter in decorators
+            if positional:
+                signature = signature[1:]
+                inputs.append(self.inputs[name])
 
-            inputs.append(self.inputs[name])
-            names = names[1:]
+        # TODO: deprecate
+        if InsertDecoratorAdapter in decorators:
+            if positional:
+                raise ValueError(f"Can't insert using positional arguments.")
+            if name in extract_signature(value):
+                raise ValueError(f"Can't insert {name}, the name is already present.")
 
-        inputs.extend(
-            self._get_private(arg) if is_private(arg) else self.inputs[arg]
-            for arg in names
-        )
+        for parameter in signature:
+            assert parameter.default == parameter.empty, parameter
+            assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
+            arg = parameter.name
+            inputs.append(self._get_private(arg) if is_private(arg) else self.inputs[arg])
+
         return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:

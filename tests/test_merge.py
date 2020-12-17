@@ -1,4 +1,4 @@
-from connectome import Source, Merge, Transform, Chain
+from connectome import Source, Merge, Transform, Chain, positional
 from connectome.engine.base import NodeHash
 
 
@@ -55,6 +55,7 @@ def test_simple(hash_layer):
 def test_nested():
     class Underscore(Transform):
         @staticmethod
+        @positional
         def image(x):
             return f'_{x}'
 

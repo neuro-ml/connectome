@@ -115,7 +115,7 @@ class TreeNode:
         bridges = {}
         # each edge is represented by its output
         for edge in edges:
-            assert edge.output not in bridges
+            assert edge.output not in bridges, edge
             bridges[edge.output] = edge
             nodes.add(edge.output)
             nodes.update(edge.inputs)

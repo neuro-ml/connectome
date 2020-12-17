@@ -1,9 +1,7 @@
 import re
 import pytest
 
-from connectome.layers.base import INHERIT_ALL
-from connectome.interface.base import Source, Transform
-from connectome.interface.decorators import inverse, optional
+from connectome import Source, Transform, inverse, optional, positional
 
 
 class FirstDS(Source):
@@ -54,12 +52,14 @@ class Crop(Transform):
         return len(image)
 
     @staticmethod
+    @positional
     def image(x, _size):
         return x + f' transformed {_size}'
 
     spacing = lungs = image
 
     @staticmethod
+    @positional
     @inverse
     def image(x, _size):
         return re.sub(f' transformed {_size}', '', x)
@@ -69,12 +69,14 @@ class Zoom(Transform):
     _spacing = None
 
     @staticmethod
+    @positional
     def image(x, _spacing):
         return str(x + _spacing)
 
     spacing = lungs = image
 
     @staticmethod
+    @positional
     @inverse
     def image(x, _spacing):
         return int(x) - _spacing
@@ -85,27 +87,31 @@ class Optional(Transform):
 
     @staticmethod
     @optional
+    @positional
     def first_optional(x):
         return x + 1
 
     @staticmethod
+    @positional
     @optional
     def second_optional(x):
         return str(x)
 
     @staticmethod
+    @positional
     @inverse
     def first_optional(x):
         return x - 1
 
     @staticmethod
+    @positional
     @inverse
     def second_optional(x):
         return int(x)
 
 
 class Identity(Transform):
-    __inherit__ = INHERIT_ALL
+    __inherit__ = True
 
 
 class BlockMaker:
