@@ -1,4 +1,5 @@
 import getpass
+import gzip
 import json
 import os
 import shutil
@@ -20,6 +21,7 @@ from ..utils import atomize
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
 META_FILENAME = 'meta.json'
+GZIP_COMPRESSION = 1
 
 
 class DiskCache(Cache):
@@ -80,9 +82,7 @@ class DiskCache(Cache):
         if hash_path.exists():
             check_consistency(hash_path, pickled)
         else:
-            # or save
-            with open(hash_path, 'wb') as file:
-                file.write(pickled)
+            save_hash(hash_path, pickled)
 
         # user meta
         meta = self.metadata.copy()
@@ -117,6 +117,18 @@ def key_to_relative(key, version=LATEST_VERSION):
 
 
 def check_consistency(hash_path, pickled):
-    with open(hash_path, 'rb') as file:
-        dumped = file.read()
-        assert dumped == pickled, (dumped, pickled)
+    try:
+        with gzip.GzipFile(hash_path, 'rb') as file:
+            dumped = file.read()
+            assert dumped == pickled, (dumped, pickled)
+
+    except OSError:
+        # transition from old non-gzipped hashes
+        with open(hash_path, 'rb') as file:
+            dumped = file.read()
+            assert dumped == pickled, (dumped, pickled)
+
+
+def save_hash(hash_path, pickled):
+    with gzip.GzipFile(hash_path, 'wb', compresslevel=GZIP_COMPRESSION, mtime=0) as file:
+        file.write(pickled)

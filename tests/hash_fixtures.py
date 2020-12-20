@@ -2,9 +2,10 @@ from typing import Sequence, Tuple
 
 import pytest
 
-from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node, BoundEdge
+from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node
 from connectome.interface.base import FromLayer
-from connectome.layers.base import Nodes, BoundEdges, Wrapper, EdgesBag
+from connectome.layers.base import Wrapper, EdgesBag
+from connectome.layers.transform import TransformLayer
 
 
 class HashEdge(Edge):
@@ -28,7 +29,7 @@ class HashLayer(Wrapper):
             outputs.append(output)
             edges.append(HashEdge().bind(node, output))
 
-        return EdgesBag(state.inputs, outputs, edges)
+        return TransformLayer(state.inputs, outputs, edges)
 
 
 @pytest.fixture

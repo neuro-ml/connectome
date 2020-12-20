@@ -29,11 +29,11 @@ class NoContext(Context):
         raise ValueError('The layer is not reversible')
 
     def update(self, mapping: dict) -> 'Context':
-        pass
+        return self
 
 
 class EdgesBag(Wrapper):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Context = None):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Context):
         self.inputs = tuple(inputs)
         self.outputs = tuple(outputs)
         self.edges = tuple(edges)

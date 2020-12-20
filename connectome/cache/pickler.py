@@ -8,6 +8,7 @@ This module contains a relaxed but reproducible version of cloudpickle:
 import importlib
 import itertools
 import pickle
+import pickletools
 import struct
 import sys
 import types
@@ -18,8 +19,7 @@ from io import BytesIO
 
 from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild_tornado_coroutine, _fill_function, \
     _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule, \
-    _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict, _rehydrate_skeleton_class, _make_skeleton_class, \
-    _ensure_tracking, string_types
+    _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict, string_types
 
 
 # TODO: replace by tuple
@@ -69,7 +69,7 @@ class PickleError(TypeError):
 
 # new invalidation bugs will inevitable arise
 # versioning will help diminish the pain from transitioning between updates
-AVAILABLE_VERSIONS = 0, 1
+AVAILABLE_VERSIONS = 0, 1, 2
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
 
 
@@ -194,6 +194,9 @@ class PortablePickler(CloudPickler):
         write(pickle.TUPLE)
         write(pickle.REDUCE)
 
+    def _save_dynamic_enum(self, obj, clsdict):
+        raise NotImplementedError
+
     def save_dynamic_class(self, obj):
         clsdict = _extract_class_dict(obj)
         clsdict.pop('__weakref__', None)
@@ -220,7 +223,6 @@ class PortablePickler(CloudPickler):
         save = self.save
         write = self.write
 
-        save(_rehydrate_skeleton_class)
         write(pickle.MARK)
 
         # reproducibility
@@ -229,16 +231,16 @@ class PortablePickler(CloudPickler):
         clsdict = sort_dict(clsdict)
         type_kwargs = sort_dict(type_kwargs)
 
-        if Enum is not None and issubclass(obj, Enum):
-            # Special handling of Enum subclasses
-            self._save_dynamic_enum(obj, clsdict)
+        if issubclass(obj, Enum):
+            members = sort_dict(dict((e.name, e.value) for e in obj))
+            qualname = getattr(obj, "__qualname__", None)
+            save((obj.__bases__, obj.__name__, qualname, members, obj.__module__))
+
+            for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
+                             "_value2member_map_"] + list(members):
+                clsdict.pop(attrname, None)
         else:
-            # "Regular" class definition:
-            tp = type(obj)
-            self.save_reduce(
-                _make_skeleton_class, (tp, obj.__name__, obj.__bases__, type_kwargs, _ensure_tracking(obj), None),
-                obj=obj
-            )
+            save((type(obj), obj.__name__, obj.__bases__, type_kwargs, None))
 
         save(clsdict)
         write(pickle.TUPLE)
@@ -278,4 +280,7 @@ class PortablePickler(CloudPickler):
 def dumps(obj, protocol: int = None, version: int = LATEST_VERSION) -> bytes:
     with BytesIO() as file:
         PortablePickler(file, protocol=protocol, version=version).dump(obj)
-        return file.getvalue()
+        result = file.getvalue()
+        if version >= 2:
+            result = pickletools.optimize(result)
+        return result
