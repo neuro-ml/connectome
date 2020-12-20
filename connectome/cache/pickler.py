@@ -123,11 +123,7 @@ class PortablePickler(CloudPickler):
     dispatch[types.CodeType] = save_codeobject
 
     def save_function(self, obj, name=None):
-        """ Registered with the dispatch to handle all function types.
-
-        Determines what kind of function obj is (e.g. lambda, defined at
-        interactive prompt, etc) and handles the pickling appropriately.
-        """
+        """ Patched version that knows about __development__ mode """
         if _is_truly_global(obj, name):
             return Pickler.save_global(self, obj, name=name)
         elif PYPY and isinstance(obj.__code__, builtin_code_type):
@@ -138,9 +134,7 @@ class PortablePickler(CloudPickler):
     dispatch[types.FunctionType] = save_function
 
     def save_function_tuple(self, func):
-        """
-        Reproducible function tuple
-        """
+        """ Reproducible function tuple """
         if is_tornado_coroutine(func):
             self.save_reduce(_rebuild_tornado_coroutine, (func.__wrapped__,), obj=func)
             return
@@ -231,6 +225,7 @@ class PortablePickler(CloudPickler):
         clsdict = sort_dict(clsdict)
         type_kwargs = sort_dict(type_kwargs)
 
+        save(types.ClassType)
         if issubclass(obj, Enum):
             members = sort_dict(dict((e.name, e.value) for e in obj))
             qualname = getattr(obj, "__qualname__", None)
@@ -240,8 +235,9 @@ class PortablePickler(CloudPickler):
                              "_value2member_map_"] + list(members):
                 clsdict.pop(attrname, None)
         else:
-            save((type(obj), obj.__name__, obj.__bases__, type_kwargs, None))
+            save((type(obj), obj.__name__, obj.__bases__, type_kwargs))
 
+        write(pickle.REDUCE)
         save(clsdict)
         write(pickle.TUPLE)
         write(pickle.REDUCE)
