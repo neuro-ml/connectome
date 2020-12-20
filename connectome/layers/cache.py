@@ -1,29 +1,32 @@
-from typing import Sequence
-
-from .base import LayerParams, Attachable, Nodes, Tuple, BoundEdges, EdgesBag, Wrapper
+from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
 from ..engine.base import BoundEdge, Node, TreeNode
 from ..engine.edges import CacheEdge, IdentityEdge, CachedRow
 from ..engine.graph import Graph
-from ..utils import check_for_duplicates, node_to_dict
+from ..utils import node_to_dict
 from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
 
-class CacheLayer(Attachable):
+class IdentityContext(Context):
+    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
+        # just propagate everything
+        return outputs, edges
+
+    def update(self, mapping: dict) -> 'Context':
+        pass
+
+
+class CacheLayer(Wrapper):
     def __init__(self, names):
         self.cache_names = names
-
-    def prepare(self) -> LayerParams:
-        # TODO: do it better
-        return LayerParams([], [], [], [], [], set())
 
     def get_storage(self) -> Cache:
         raise NotImplementedError
 
-    def _attach_forward(self, forward_outputs: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
-        check_for_duplicates([x.name for x in forward_outputs])
-        forward_outputs = node_to_dict(forward_outputs)
+    def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
+        state = layer.freeze()
+        forward_outputs = node_to_dict(state.outputs)
 
-        edges = []
+        edges = list(state.edges)
         outputs = [Node(name) for name in forward_outputs]
 
         for node in outputs:
@@ -32,17 +35,7 @@ class CacheLayer(Attachable):
             else:
                 edges.append(BoundEdge(IdentityEdge(), [forward_outputs[node.name]], node))
 
-        return outputs, edges
-
-    def _attach_backward(self, prev_inputs: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
-        check_for_duplicates([x.name for x in prev_inputs])
-        prev_inputs = node_to_dict(prev_inputs)
-
-        edges = []
-        inputs = [Node(name) for name in prev_inputs]
-        for node in inputs:
-            edges.append(BoundEdge(IdentityEdge(), [node], prev_inputs[node.name]))
-        return inputs, edges
+        return EdgesBag(state.inputs, outputs, edges, IdentityContext())
 
 
 class MemoryCacheLayer(CacheLayer):
@@ -84,18 +77,17 @@ class CacheRowsLayer(Wrapper):
         self.ram = MemoryCache(None)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:
-        outputs, edges = [], []
-
-        main = layer.prepare()
-        edges.extend(main.edges)
+        main = layer.freeze()
+        edges = list(main.edges)
         key, = main.inputs
         keys = node_to_dict(main.outputs)['ids']
 
-        copy = layer.prepare()
+        copy = layer.freeze()
         mapping = TreeNode.from_edges(copy.edges)
         outputs_copy = node_to_dict(copy.outputs)
         graph_inputs = [mapping[copy.inputs[0]]]
 
+        outputs = []
         for output in main.outputs:
             name = output.name
             if name not in self.cache_names:
@@ -108,4 +100,4 @@ class CacheRowsLayer(Wrapper):
                 edges.append(BoundEdge(CachedRow(self.disk, self.ram, graph), [output, key, keys], local))
                 outputs.append(local)
 
-        return EdgesBag([key], outputs, edges, [], [])
+        return EdgesBag([key], outputs, edges, IdentityContext())

@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Callable, Sequence
 
 from .pipeline import PipelineLayer
+from .transform import TransformLayer
 from ..engine.edges import ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge, FunctionEdge
 from ..engine.base import Node, BoundEdge, NodeHash, HashType
 from .base import EdgesBag
@@ -22,7 +23,7 @@ class SwitchLayer(PipelineLayer):
     def __init__(self, selector: Callable, *layers: EdgesBag):
         self.selector = selector
         self.layers = layers
-        self.core = EdgesBag(*self.create_graph())
+        self.core = TransformLayer(*self.create_graph())
         super().__init__(self.make_switch(), self.core, self.make_projector())
 
     def make_switch(self):
@@ -50,7 +51,7 @@ class SwitchLayer(PipelineLayer):
             outputs.append(output)
             edges.append(BoundEdge(SwitchEdge(selector(i)), inputs, output))
 
-        return EdgesBag(inputs, outputs, edges)
+        return TransformLayer(inputs, outputs, edges)
 
     def create_graph(self):
         # TODO: backwards support?
@@ -58,7 +59,7 @@ class SwitchLayer(PipelineLayer):
         all_edges = []
         output_groups = defaultdict(list)
         for layer in self.layers:
-            layer_params = layer.prepare()
+            layer_params = layer.freeze()
             inp, = layer_params.inputs
             inputs.append(inp)
 
@@ -102,4 +103,4 @@ class SwitchLayer(PipelineLayer):
 
             edges.append(BoundEdge(edge, [inp], out))
 
-        return EdgesBag(inputs, outputs, edges)
+        return TransformLayer(inputs, outputs, edges)

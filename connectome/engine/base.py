@@ -92,12 +92,22 @@ class Edge:
     def uses_hash(self):
         return self._uses_hash
 
+    def bind(self, inputs: Union['Node', 'Nodes'], output: 'Node') -> 'BoundEdge':
+        if isinstance(inputs, Node):
+            inputs = [inputs]
+        assert len(inputs) == self.arity
+        return BoundEdge(self, inputs, output)
+
 
 class TreeNode:
     __slots__ = 'name', 'edge'
 
     def __init__(self, name: str, edge: Optional[Tuple[Edge, Sequence['TreeNode']]]):
         self.name, self.edge = name, edge
+
+    @property
+    def parents(self):
+        return self.edge[1]
 
     @classmethod
     def from_edges(cls, edges: Sequence['BoundEdge']) -> dict:
@@ -151,9 +161,6 @@ class TreeNode:
         ).to_picture(path)
 
 
-TreeNodes = Sequence[TreeNode]
-
-
 class Node:
     def __init__(self, name: str):
         self.name = name
@@ -167,5 +174,11 @@ class Node:
 
 class BoundEdge(NamedTuple):
     edge: Edge
-    inputs: Sequence[Node]
+    inputs: 'Nodes'
     output: Node
+
+
+TreeNodes = Sequence[TreeNode]
+Nodes = Sequence[Node]
+BoundEdges = Sequence[BoundEdge]
+Edges = Sequence[Edge]

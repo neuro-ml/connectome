@@ -1,5 +1,6 @@
 from typing import Callable, Sequence, Union
 
+from .utils import MaybeStr
 from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
@@ -10,19 +11,13 @@ from .factory import SourceFactory, TransformFactory
 class BaseBlock:
     _layer: Layer
 
-    # TODO: think of a better interface for loopback
-    def _wrap_predict(self, function: Callable, forward_names: Sequence[str], backward_name: str):
-        if isinstance(self._layer, EdgesBag):
-            return self._layer.get_loopback(function, forward_names, backward_name)
-        else:
-            raise TypeError
-
 
 class CallableBlock(BaseBlock):
     _layer: EdgesBag
+    _methods: dict
 
     def __getattr__(self, name):
-        method = self._layer.get_forward_method(name)
+        method = self._methods[name]
         # FIXME: hardcoded
         if name == 'ids':
             ids = method()
@@ -41,6 +36,12 @@ class CallableBlock(BaseBlock):
     def __dir__(self):
         return [x.name for x in self._layer.outputs]
 
+    def _wrap(self, inputs: MaybeStr, outputs: MaybeStr) -> Callable:
+        def decorator(func: Callable) -> Callable:
+            return self._layer.loopback([[func, inputs, outputs]])
+
+        return decorator
+
     def _visualize(self, name, path):
         mapping = TreeNode.from_edges(self._layer.edges)
         for o in self._layer.outputs:
@@ -58,6 +59,7 @@ class Chain(CallableBlock):
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
         super().__init__()
         self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
+        self._methods = self._layer.compile()
 
     def __getitem__(self, index):
         if isinstance(index, int):
@@ -104,6 +106,7 @@ class SourceBase(type):
             # TODO: should only build if not called from super
             factory.build(scope.kwargs)
             self._layer = factory.get_layer()
+            self._methods = self._layer.compile()
 
         return super().__new__(mcs, class_name, bases, {'__init__': __init__})
 
@@ -128,6 +131,7 @@ class TransformBase(type):
             # TODO: should only build if not called from super
             factory.build(scope.kwargs)
             self._layer = factory.get_layer()
+            self._methods = self._layer.compile()
 
         return super().__new__(mcs, class_name, bases, {'__init__': __init__})
 

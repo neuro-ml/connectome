@@ -5,6 +5,7 @@ from connectome.layers.base import EdgesBag
 
 from connectome.engine.base import Node, BoundEdge
 from connectome.engine.edges import FunctionEdge
+from connectome.layers.transform import TransformLayer
 
 from connectome.utils import extract_signature
 
@@ -66,8 +67,8 @@ class LayerMaker:
             cur_inputs = [get_related_nodes(name, True) for name in attr_names]
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 
-        return EdgesBag(list(inputs.values()), list(outputs.values()), edges,
-                        list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes)
+        return TransformLayer(list(inputs.values()), list(outputs.values()), edges,
+                              list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes)
 
 
 @pytest.fixture(scope='module')

@@ -2,7 +2,7 @@ from collections import Counter
 
 import pytest
 
-from connectome.interface.base import Source, Chain
+from connectome.interface.base import Source, Chain, Transform
 from connectome.interface.blocks import Merge
 
 
@@ -67,7 +67,6 @@ def test_merge(block_maker):
     assert pipeline.image('second:8') == f'second_ds_2_second:8 transformed 20'
 
 
-@pytest.mark.skip
 def test_backward(block_maker):
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=15),
@@ -75,8 +74,9 @@ def test_backward(block_maker):
         block_maker.crop()
     )
 
-    identity = pipeline[1:]._wrap_predict(lambda x: x, ['image'], 'image')
-    double = pipeline[1:]._wrap_predict(lambda x: 2 * x, ['image'], 'image')
+    dec = pipeline[1:]._wrap('image', 'image')
+    identity = dec(lambda x: x)['image']
+    double = dec(lambda x: 2 * x)['image']
 
     assert identity(100500) == 100500
     assert double(100500) == 100623100500
@@ -122,5 +122,18 @@ def test_persistent(block_maker):
         block_maker.optional(),
         block_maker.optional(),
         block_maker.zoom(spacing=123),
+    )
+    assert Counter(pipeline.ids) == Counter('0123')
+
+    class Partial(Transform):
+        __inherit__ = 'image'
+
+    pipeline = Chain(
+        block_maker.first_ds(first_constant=2, ids_arg=4),
+        block_maker.zoom(spacing=123),
+        block_maker.optional(),
+        block_maker.optional(),
+        block_maker.zoom(spacing=123),
+        Partial(),
     )
     assert Counter(pipeline.ids) == Counter('0123')

@@ -2,7 +2,7 @@ import inspect
 
 from ..engine.edges import FunctionEdge, IdentityEdge, ValueEdge
 from ..engine.base import Node, BoundEdge
-from ..layers.base import EdgesBag, INHERIT_ALL
+from ..layers.transform import TransformLayer, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
     PositionalDecoratorAdapter
@@ -255,7 +255,7 @@ class GraphFactory:
         self.edges.extend(self._get_constant_edges(arguments))
 
     def get_layer(self):
-        return EdgesBag(
+        return TransformLayer(
             list(self.inputs.values()), list(self.outputs.values()), self.edges,
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
             self.optional_node_names,

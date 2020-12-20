@@ -10,6 +10,7 @@ from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, resolve_serializer
 from ..storage import DiskOptions, RemoteOptions
 from ..utils import PathLike
+from .utils import MaybeStr
 
 
 class Merge(CallableBlock):
@@ -31,6 +32,7 @@ class Merge(CallableBlock):
                 raise ValueError(f'Identifier {identifier} not found.') from None
 
         self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))
+        self._methods = self._layer.compile()
 
 
 class Filter(FromLayer):
@@ -66,9 +68,6 @@ class Filter(FromLayer):
 class Apply(FromLayer):
     def __init__(self, **transform):
         super().__init__(ApplyLayer(transform))
-
-
-MaybeStr = Union[Sequence[str], str]
 
 
 def to_seq(x):

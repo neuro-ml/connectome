@@ -1,1 +1,1 @@
-from .base import INHERIT_ALL
+from .transform import INHERIT_ALL

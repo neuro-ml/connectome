@@ -4,7 +4,7 @@ import pytest
 
 from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node, BoundEdge
 from connectome.interface.base import FromLayer
-from connectome.layers.base import Attachable, LayerParams, Nodes, BoundEdges
+from connectome.layers.base import Nodes, BoundEdges, Wrapper, EdgesBag
 
 
 class HashEdge(Edge):
@@ -18,18 +18,17 @@ class HashEdge(Edge):
         return hashes[0], FULL_MASK
 
 
-class HashLayer(Attachable):
-    def prepare(self) -> LayerParams:
-        return LayerParams([], [], [], [], [], set())
+class HashLayer(Wrapper):
+    def wrap(self, layer: EdgesBag) -> EdgesBag:
+        state = layer.freeze()
 
-    def _attach_forward(self, nodes: Sequence, params: LayerParams) -> Tuple[Nodes, BoundEdges]:
-        outputs, edges = [], []
-        for node in nodes:
+        outputs, edges = [], list(state.edges)
+        for node in state.outputs:
             output = Node(node.name)
             outputs.append(output)
-            edges.append(BoundEdge(HashEdge(), [node], output))
+            edges.append(HashEdge().bind(node, output))
 
-        return outputs, edges
+        return EdgesBag(state.inputs, outputs, edges)
 
 
 @pytest.fixture

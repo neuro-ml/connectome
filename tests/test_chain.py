@@ -1,6 +1,6 @@
 from connectome import Source, Transform, Chain
 from connectome.interface.decorators import insert
-from connectome.layers.base import INHERIT_ALL
+from connectome.layers.transform import INHERIT_ALL
 
 
 class DS(Source):
@@ -40,7 +40,7 @@ def test_nested(block_maker, hash_layer):
         Chain(one, two, hash_layer),
         Chain(Chain(one, two), hash_layer),
         Chain(one, Chain(two, hash_layer)),
-        Chain(Chain(one), Chain(two), Chain(hash_layer)),
+        Chain(Chain(one), Chain(two), hash_layer),
         Chain(Chain(one, two, hash_layer)),
     ]
 

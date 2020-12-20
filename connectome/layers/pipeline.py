@@ -1,4 +1,4 @@
-from .base import EdgesBag, Wrapper
+from .base import Wrapper, EdgesBag
 from .cache import CacheLayer
 
 
@@ -8,8 +8,8 @@ class PipelineLayer(EdgesBag):
         for layer in tail:
             head = layer.wrap(head)
 
-        params = head.prepare()
-        super().__init__(params.inputs, params.outputs, params.edges, params.backward_inputs, params.backward_outputs)
+        state = head.freeze()
+        super().__init__(state.inputs, state.outputs, state.edges, state.context)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:
         return PipelineLayer(layer, *self.layers)

@@ -1,11 +1,11 @@
 from typing import Callable, Dict
 
+from .transform import TransformLayer, INHERIT_ALL
 from ..engine.base import Node, BoundEdge
 from ..engine.edges import FunctionEdge
-from .base import EdgesBag, INHERIT_ALL
 
 
-class ApplyLayer(EdgesBag):
+class ApplyLayer(TransformLayer):
     def __init__(self, transforms: Dict[str, Callable]):
         inputs, outputs, edges = [], [], []
         for name, func in transforms.items():
