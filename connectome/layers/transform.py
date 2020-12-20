@@ -140,7 +140,7 @@ class BagContext(Context):
 
         # add inheritance
         output_names = node_to_dict(actual)
-        for node in self.inputs:
+        for name, node in outputs.items():
             name = node.name
             if name not in output_names and (self.inherit == INHERIT_ALL or name in self.inherit):
                 out = Node(name)

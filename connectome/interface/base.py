@@ -36,9 +36,19 @@ class CallableBlock(BaseBlock):
     def __dir__(self):
         return [x.name for x in self._layer.outputs]
 
-    def _wrap(self, inputs: MaybeStr, outputs: MaybeStr) -> Callable:
+    def _wrap(self, func: Callable, inputs: MaybeStr, outputs: MaybeStr = None, final: MaybeStr = None) -> Callable:
+        return self._decorate(inputs, outputs, final)(func)
+
+    def _decorate(self, inputs: MaybeStr, outputs: MaybeStr = None, final: MaybeStr = None) -> Callable:
+        if outputs is None:
+            outputs = inputs
+        if final is None:
+            final = outputs
+        if not isinstance(final, str):
+            final = tuple(final)
+
         def decorator(func: Callable) -> Callable:
-            return self._layer.loopback([[func, inputs, outputs]])
+            return self._layer.loopback(func, inputs, outputs)[final]
 
         return decorator
 

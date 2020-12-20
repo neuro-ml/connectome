@@ -26,8 +26,8 @@ class MultiDict(dict):
 
     def __getitem__(self, key):
         container = super().__getitem__(key)
-        assert len(container) == 1
-        return container[0]
+        # assert len(container) == 1
+        return container[-1]
 
 
 def extract_signature(func):

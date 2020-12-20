@@ -1,7 +1,5 @@
 from collections import Counter
 
-import pytest
-
 from connectome.interface.base import Source, Chain, Transform
 from connectome.interface.blocks import Merge
 
@@ -70,44 +68,51 @@ def test_merge(block_maker):
 def test_backward(block_maker):
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=15),
-        block_maker.zoom(spacing=123),
+        block_maker.zoom(spacing='123'),
         block_maker.crop()
     )
 
-    dec = pipeline[1:]._wrap('image', 'image')
-    identity = dec(lambda x: x)['image']
-    double = dec(lambda x: 2 * x)['image']
+    processing = pipeline[1:]
+    dec = processing._decorate('image')
+    identity = dec(lambda x: x)
+    under = dec(lambda x: '_' + x)
 
-    assert identity(100500) == 100500
-    assert double(100500) == 100623100500
+    assert identity('100500') == '100500'
+    assert under('100500') == '_100500'
+
+    @processing._decorate('image', 'lungs')
+    def pred(image):
+        return 'some_lungs ' + image
+
+    assert pred('some_img') == 'some_lungs some_img'
 
 
 def test_optional(block_maker):
-    # pipeline = Chain(
-    #     block_maker.first_ds(first_constant=2, ids_arg=15),
-    #     block_maker.zoom(spacing=123),
-    #     block_maker.optional(),
-    #     block_maker.identity(),
-    #     block_maker.optional(),
-    #     block_maker.optional(),
-    #     block_maker.crop(),
-    #     block_maker.optional(),
-    #     block_maker.optional(),
-    #     block_maker.identity(),
-    # )
-    #
-    # identity = pipeline[1:]._wrap_predict(lambda x: x, ['image'], 'image')
-    # double = pipeline[1:]._wrap_predict(lambda x: 2 * x, ['image'], 'image')
-    #
-    # assert identity(100500) == 100500
-    # assert double(100500) == 100623100500
+    pipeline = Chain(
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        block_maker.zoom(spacing='123'),
+        block_maker.optional(),
+        block_maker.identity(),
+        block_maker.optional(),
+        block_maker.optional(),
+        block_maker.crop(),
+        block_maker.optional(),
+        block_maker.optional(),
+        block_maker.identity(),
+    )
+
+    identity = pipeline[1:]._wrap(lambda x: x, 'image')
+    double = pipeline[1:]._wrap(lambda x: '_' + x, 'image')
+
+    assert identity('100500') == '100500'
+    assert double('100500') == '_100500'
 
     optional = block_maker.optional()
     assert optional.first_optional(10) == 11
     assert optional.second_optional(10) == '10'
 
-    # layer = optional._layer
-    # assert layer.get_backward_method('first_optional')(layer.get_forward_method('first_optional')(100500)) == 100500
+    func = optional._layer.loopback(lambda x: x, 'first_optional', 'first_optional')['first_optional']
+    assert func(100500) == 100500
 
 
 def test_persistent(block_maker):

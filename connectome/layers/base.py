@@ -1,7 +1,7 @@
 from operator import itemgetter
 from typing import Tuple
 
-from ..engine.edges import FunctionEdge
+from ..engine.edges import FunctionEdge, ProductEdge
 from ..engine.graph import compile_graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..utils import node_to_dict
@@ -59,41 +59,42 @@ class EdgesBag(Wrapper):
     def compile(self):
         return bake_methods(self.inputs, self.outputs, self.edges)
 
-    def loopback(self, bridges):
+    def loopback(self, func, inputs, output):
         if self.context is None:
             raise ValueError
 
-        # TODO: freeze
-        edges = list(self.edges)
-        current = node_to_dict(self.outputs)
+        state = self.freeze()
+        edges = list(state.edges)
+        current = node_to_dict(state.outputs)
 
         # TODO: check uniqueness
-        # connect forward outputs with bridges
+        # connect forward outputs with bridge
         outputs = []
-        for func, inputs, output in bridges:
-            if isinstance(inputs, str):
-                inputs = [inputs]
-            inputs = [current[name] for name in inputs]
-            edge = FunctionEdge(func, len(inputs))
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        inputs = [current[name] for name in inputs]
+        edge = FunctionEdge(func, len(inputs))
 
-            # single output
-            if isinstance(output, str):
-                output = Node(output)
+        # single output
+        if isinstance(output, str):
+            output = Node(output)
 
-                edges.append(edge.bind(inputs, output))
-                outputs.append(output)
+            edges.append(edge.bind(inputs, output))
+            outputs.append(output)
 
-            # multiple outputs
-            else:
-                aux = Node('$aux')
-                edges.append(edge.bind(inputs, aux))
-                for idx, out in enumerate(output):
-                    out = Node(out)
-                    edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
-                    outputs.append(out)
+        # multiple outputs
+        else:
+            assert len(set(outputs)) == len(outputs)
 
-        outputs, edges = self.context.reverse(self.inputs, outputs, edges)
-        return bake_methods(self.inputs, outputs, edges)
+            aux = Node('$aux')
+            edges.append(edge.bind(inputs, aux))
+            for idx, out in enumerate(output):
+                out = Node(out)
+                edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
+                outputs.append(out)
+
+        outputs, edges = state.context.reverse(state.inputs, outputs, edges)
+        return GraphContainer(state.inputs, outputs, edges)
 
 
 def update_map(nodes, node_map):
@@ -104,7 +105,29 @@ def update_map(nodes, node_map):
 
 
 def bake_methods(inputs: Nodes, outputs: Nodes, edges: BoundEdges):
-    tree_node_map = TreeNode.from_edges(edges)
-    inputs = [tree_node_map[x] for x in inputs]
-    outputs = [tree_node_map[x] for x in outputs]
-    return {node.name: compile_graph(inputs, node) for node in outputs}
+    return GraphContainer(inputs, outputs, edges).methods
+
+
+class GraphContainer:
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges):
+        tree_node_map = TreeNode.from_edges(edges)
+        self.inputs = [tree_node_map[x] for x in inputs]
+        self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
+        self.methods = {node.name: compile_graph(self.inputs, node) for node in self.outputs.values()}
+
+    def __getitem__(self, item):
+        if item not in self.methods:
+            assert isinstance(item, tuple), item
+            outputs = []
+            for name in item:
+                if name not in self.outputs:
+                    raise ValueError(f'"{name}" is not an available output: {tuple(self.outputs)}')
+                outputs.append(self.outputs[name])
+
+            product = TreeNode('$product', (ProductEdge(len(item)), outputs))
+            self.methods[item] = compile_graph(self.inputs, product)
+
+        return self.methods[item]
+
+    def __getattr__(self, name):
+        return self[name]

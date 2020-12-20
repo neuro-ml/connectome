@@ -64,6 +64,8 @@ class Crop(Transform):
     def image(x, _size):
         return re.sub(f' transformed {_size}', '', x)
 
+    spacing = lungs = image
+
 
 class Zoom(Transform):
     _spacing = None
@@ -71,7 +73,7 @@ class Zoom(Transform):
     @staticmethod
     @positional
     def image(x, _spacing):
-        return str(x + _spacing)
+        return x + _spacing
 
     spacing = lungs = image
 
@@ -79,7 +81,9 @@ class Zoom(Transform):
     @positional
     @inverse
     def image(x, _spacing):
-        return int(x) - _spacing
+        return x[:-len(_spacing)]
+
+    spacing = lungs = image
 
 
 class Optional(Transform):
