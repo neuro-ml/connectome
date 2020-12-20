@@ -8,16 +8,21 @@ This module contains a relaxed but reproducible version of cloudpickle:
 import importlib
 import itertools
 import pickle
+import struct
 import sys
 import types
 from collections import OrderedDict
 from contextlib import suppress
+from enum import Enum
 from io import BytesIO
 
 from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild_tornado_coroutine, _fill_function, \
-    _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule
+    _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule, \
+    _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict, _rehydrate_skeleton_class, _make_skeleton_class, \
+    _ensure_tracking, string_types
 
 
+# TODO: replace by tuple
 def sort_dict(d: dict):
     return OrderedDict([(k, d[k]) for k in sorted(d)])
 
@@ -52,6 +57,10 @@ def _is_under_development(obj, name):
         base = importlib.import_module(base_module)
 
     return getattr(base, '__development__', False)
+
+
+def _is_truly_global(obj, name):
+    return _is_global(obj, name=name) and not _is_under_development(obj, name)
 
 
 class PickleError(TypeError):
@@ -119,7 +128,7 @@ class PortablePickler(CloudPickler):
         Determines what kind of function obj is (e.g. lambda, defined at
         interactive prompt, etc) and handles the pickling appropriately.
         """
-        if _is_global(obj, name=name) and not _is_under_development(obj, name):
+        if _is_truly_global(obj, name):
             return Pickler.save_global(self, obj, name=name)
         elif PYPY and isinstance(obj.__code__, builtin_code_type):
             return self.save_pypy_builtin_func(obj)
@@ -171,22 +180,89 @@ class PortablePickler(CloudPickler):
             'defaults': defaults,
             'dict': dct,
             'closure_values': closure_values,
+            # TODO: drop __module__ ?
             'module': func.__module__,
             'name': func.__name__,
-            # 'doc': func.__doc__, - Don't need the doc
             '_cloudpickle_submodules': submodules
         }
         if hasattr(func, '__qualname__'):
             state['qualname'] = func.__qualname__
-        # don't need annotations
-        # if getattr(func, '__annotations__', False):
-        #     state['annotations'] = sort_dict(func.__annotations__)
         if getattr(func, '__kwdefaults__', False):
             state['kwdefaults'] = func.__kwdefaults__
 
         save(tuple(state.items()))
         write(pickle.TUPLE)
         write(pickle.REDUCE)
+
+    def save_dynamic_class(self, obj):
+        clsdict = _extract_class_dict(obj)
+        clsdict.pop('__weakref__', None)
+
+        if "_abc_impl" in clsdict:
+            import abc
+            (registry, _, _, _) = abc._get_dump(obj)
+            clsdict["_abc_impl"] = [subclass_weakref() for subclass_weakref in registry]
+
+        # originally here was the __doc__
+        type_kwargs = {}
+        if hasattr(obj, "__slots__"):
+            type_kwargs['__slots__'] = obj.__slots__
+            if isinstance(obj.__slots__, string_types):
+                clsdict.pop(obj.__slots__)
+            else:
+                for k in obj.__slots__:
+                    clsdict.pop(k, None)
+
+        __dict__ = clsdict.pop('__dict__', None)
+        if isinstance(__dict__, property):
+            type_kwargs['__dict__'] = __dict__
+
+        save = self.save
+        write = self.write
+
+        save(_rehydrate_skeleton_class)
+        write(pickle.MARK)
+
+        # reproducibility
+        # TODO: drop __module__ ?
+        clsdict.pop('__doc__', None)
+        clsdict = sort_dict(clsdict)
+        type_kwargs = sort_dict(type_kwargs)
+
+        if Enum is not None and issubclass(obj, Enum):
+            # Special handling of Enum subclasses
+            self._save_dynamic_enum(obj, clsdict)
+        else:
+            # "Regular" class definition:
+            tp = type(obj)
+            self.save_reduce(
+                _make_skeleton_class, (tp, obj.__name__, obj.__bases__, type_kwargs, _ensure_tracking(obj), None),
+                obj=obj
+            )
+
+        save(clsdict)
+        write(pickle.TUPLE)
+        write(pickle.REDUCE)
+
+    def save_global(self, obj, name=None, pack=struct.pack):
+        """ Save a "global" which is not under __development__ """
+        if obj is type(None):
+            return self.save_reduce(type, (None,), obj=obj)
+        elif obj is type(Ellipsis):
+            return self.save_reduce(type, (Ellipsis,), obj=obj)
+        elif obj is type(NotImplemented):
+            return self.save_reduce(type, (NotImplemented,), obj=obj)
+        elif obj in _BUILTIN_TYPE_NAMES:
+            return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
+        elif name is not None:
+            Pickler.save_global(self, obj, name=name)
+        elif not _is_truly_global(obj, name=name):
+            self.save_dynamic_class(obj)
+        else:
+            Pickler.save_global(self, obj, name=name)
+
+    dispatch[type] = save_global
+    dispatch[types.ClassType] = save_global
 
     with suppress(ImportError):
         from _functools import _lru_cache_wrapper
