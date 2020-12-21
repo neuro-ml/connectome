@@ -12,6 +12,7 @@ import pickletools
 import struct
 import sys
 import types
+from weakref import WeakSet
 from collections import OrderedDict
 from contextlib import suppress
 from enum import Enum
@@ -27,23 +28,22 @@ def sort_dict(d: dict):
     return OrderedDict([(k, d[k]) for k in sorted(d)])
 
 
-NO_PICKLE_ATTRIBUTE = '__connectome_no_pickle__'
+# we use a set of weak refs, because we don't want to cause memory leaks
+NO_PICKLE_SET = WeakSet()
 
 
-def no_pickle(func):
+def no_pickle(obj):
     """
-    Decorator that opts out a function from being pickled during node hash calculation.
-    Use it if you are sure that your function will never change in a way that might affect its behaviour.
+    Decorator that opts out a function or class from being pickled during node hash calculation.
+    Use it if you are sure that your function/class will never change in a way that might affect its behaviour.
     """
-    # TODO: maybe keep a global set of all decorated functions
-    #  instead of writing some attribute
-    setattr(func, NO_PICKLE_ATTRIBUTE, True)
-    return func
+    NO_PICKLE_SET.add(obj)
+    return obj
 
 
 def _is_under_development(obj, name):
-    # the user opted out this function
-    if hasattr(obj, NO_PICKLE_ATTRIBUTE):
+    # the user opted out this function/class
+    if obj in NO_PICKLE_SET:
         return False
 
     if name is None:
