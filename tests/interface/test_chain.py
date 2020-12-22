@@ -1,4 +1,4 @@
-from connectome import Source, Transform, Chain
+from connectome import Source, Transform, Chain, CacheToRam
 from connectome.interface.decorators import insert
 from connectome.layers.transform import INHERIT_ALL
 
@@ -48,3 +48,15 @@ def test_nested(block_maker, hash_layer):
         value = base.image(i)
         for variant in variants:
             assert variant.image(i) == value
+
+
+def test_cache_removal(block_maker):
+    one = block_maker.first_ds(first_constant=2, ids_arg=15)
+    two = block_maker.crop()
+
+    simple = one >> two
+    cached = Chain(one, two, CacheToRam())._drop_cache()
+    nested = (simple >> CacheToRam())._drop_cache()
+
+    for i in one.ids:
+        assert simple.image(i) == cached.image(i) == nested.image(i)

@@ -1,5 +1,5 @@
 from .base import Wrapper, EdgesBag
-from .cache import CacheLayer
+from .cache import CacheBase
 
 
 class PipelineLayer(EdgesBag):
@@ -17,8 +17,11 @@ class PipelineLayer(EdgesBag):
     def remove_cache_layers(self):
         not_cache_layers = []
         for layer in self.layers:
-            if not isinstance(layer, CacheLayer):
+            if isinstance(layer, PipelineLayer):
+                layer = layer.remove_cache_layers()
+            if not isinstance(layer, CacheBase):
                 not_cache_layers.append(layer)
+
         return PipelineLayer(*not_cache_layers)
 
     def index(self, index):

@@ -81,12 +81,8 @@ class Chain(CallableBlock):
 
         raise ValueError('The index can be either an int or slice.')
 
-    # def remove_cache(self):
-    #     return Chain.from_pipeline(self._layer.remove_cache_layers())
-    #
-    # @classmethod
-    # def from_pipeline(cls, pipeline: PipelineLayer):
-    #     return cls(*map(FromLayer, pipeline.layers))
+    def _drop_cache(self):
+        return Chain(*map(FromLayer, self._layer.remove_cache_layers().layers))
 
 
 def chained(*blocks: BaseBlock):

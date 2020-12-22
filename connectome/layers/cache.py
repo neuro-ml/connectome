@@ -15,7 +15,11 @@ class IdentityContext(Context):
         pass
 
 
-class CacheLayer(Wrapper):
+class CacheBase(Wrapper):
+    pass
+
+
+class CacheLayer(CacheBase):
     def __init__(self, names):
         self.cache_names = names
 
@@ -65,8 +69,7 @@ class RemoteStorageLayer(CacheLayer):
         return self.storage
 
 
-# TODO: caches need a common parent
-class CacheRowsLayer(Wrapper):
+class CacheRowsLayer(CacheBase):
     """
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
