@@ -1,5 +1,6 @@
 from collections import Counter
 
+from connectome import positional
 from connectome.interface.base import Source, Chain, Transform
 from connectome.interface.blocks import Merge
 
@@ -46,6 +47,29 @@ def test_chain(block_maker):
         block_maker.crop(),
     )
     assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 16'
+
+
+def test_inplace_transform(block_maker):
+    @positional
+    def image(x, _size):
+        return x + f' transformed {_size}'
+
+    base = Chain(
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        block_maker.crop(),
+    )
+    inplace = Chain(
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        Transform(
+            _size=lambda image: len(image),
+            spacing=image, lungs=image, image=image,
+        ),
+    )
+
+    for i in base.ids:
+        assert base.image(i) == inplace.image(i)
+        assert base.lungs(i) == inplace.lungs(i)
+        assert base.spacing(i) == inplace.spacing(i)
 
 
 def test_merge(block_maker):

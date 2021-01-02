@@ -76,8 +76,7 @@ class Chain(CallableBlock):
             index = slice(index, index + 1)
 
         if isinstance(index, slice):
-            start = index.start if index.start is not None else 0
-            return Chain(*map(FromLayer, self._layer.slice(start, index.stop).layers))
+            return Chain(*map(FromLayer, self._layer.slice(index.start, index.stop, index.step).layers))
 
         raise ValueError('The index can be either an int or slice.')
 
@@ -119,30 +118,66 @@ class SourceBase(type):
 
 class TransformBase(type):
     @classmethod
-    def __prepare__(mcs, *args):
+    def __prepare__(mcs, *args, **kwargs):
         return MultiDict()
 
-    def __new__(mcs, class_name, bases, namespace):
-        def __init__(*args, **kwargs):
-            assert args
-            if len(args) > 1:
-                raise TypeError('This constructor accepts only keyword arguments.')
-            self = args[0]
+    def __new__(mcs, class_name, bases, namespace, **flags):
+        if flags.get('__root', False):
+            # we can construct transforms on the fly
+            def __init__(*args, __inherit__=(), **kwargs):
+                assert args
+                if len(args) > 1:
+                    raise TypeError('This constructor accepts only keyword arguments.')
+                self, = args
 
-            # TODO: split into two objects: the first one holds the scope
-            #  the second one compiles the layer
-            factory = TransformFactory(namespace)
-            scope = factory.get_init_signature().bind_partial(**kwargs)
-            scope.apply_defaults()
-            # TODO: should only build if not called from super
-            factory.build(scope.kwargs)
-            self._layer = factory.get_layer()
-            self._methods = self._layer.compile()
+                local = MultiDict()
+                local['__inherit__'] = __inherit__
+                for name, value in kwargs.items():
+                    assert callable(value)
+                    local[name] = staticmethod(value)
+
+                factory = TransformFactory(local)
+                factory.build({})
+                self._layer = factory.get_layer()
+                self._methods = self._layer.compile()
+
+        else:
+            def __init__(*args, **kwargs):
+                assert args
+                if len(args) > 1:
+                    raise TypeError('This constructor accepts only keyword arguments.')
+                self, = args
+
+                # TODO: split into two objects: the first one holds the scope
+                #  the second one compiles the layer
+                factory = TransformFactory(namespace)
+                scope = factory.get_init_signature().bind_partial(**kwargs)
+                scope.apply_defaults()
+                # TODO: should only build if not called from super
+                factory.build(scope.kwargs)
+                self._layer = factory.get_layer()
+                self._methods = self._layer.compile()
 
         return super().__new__(mcs, class_name, bases, {'__init__': __init__})
 
 
-class Transform(CallableBlock, metaclass=TransformBase):
+class Transform(CallableBlock, metaclass=TransformBase, __root=True):
+    """
+    Base class for all transforms.
+
+    Can also be used as a inplace factory for transforms.
+
+    Examples
+    --------
+    # class-based transforms
+    >>> class Zoom(Transform):
+    >>>     @staticmethod
+    >>>     def image(image):
+    >>>         return zoom(image, scale_factor=2)
+    # inplace transforms
+    >>> Transform(image=lambda image: zoom(image, scale_factor=2))
+    """
+
     __inherit__: Union[str, Sequence[str], bool] = ()
 
 

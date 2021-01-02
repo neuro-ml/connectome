@@ -27,10 +27,11 @@ class PipelineLayer(EdgesBag):
     def index(self, index):
         return self.slice(index, index + 1)
 
-    def slice(self, start, stop):
-        assert start >= 0
+    def slice(self, start, stop=None, step=None):
+        layers = self.layers[start:stop:step]
 
-        if issubclass(type(self.layers[start]), EdgesBag):
-            return PipelineLayer(*self.layers[start:stop])
-        else:
+        if not isinstance(layers[0], EdgesBag):
+            # TODO: need a non-callable pipeline
             raise IndexError('First layer must be a EdgesBag')
+
+        return PipelineLayer(*layers)
