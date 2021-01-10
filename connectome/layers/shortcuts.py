@@ -1,8 +1,8 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Iterable
 
 from .transform import TransformLayer, INHERIT_ALL
-from ..engine.base import Node, BoundEdge
-from ..engine.edges import FunctionEdge
+from ..engine.base import Node
+from ..engine.edges import FunctionEdge, IdentityEdge
 
 
 class ApplyLayer(TransformLayer):
@@ -12,6 +12,18 @@ class ApplyLayer(TransformLayer):
             inp, out = Node(name), Node(name)
             inputs.append(inp)
             outputs.append(out)
-            edges.append(BoundEdge(FunctionEdge(func, arity=1), [inp], out))
+            edges.append(FunctionEdge(func, arity=1).bind(inp, out))
+
+        super().__init__(inputs, outputs, edges, inherit_nodes=INHERIT_ALL)
+
+
+class IdentityLayer(TransformLayer):
+    def __init__(self, names: Iterable[str]):
+        inputs, outputs, edges = [], [], []
+        for name in names:
+            inp, out = Node(name), Node(name)
+            inputs.append(inp)
+            outputs.append(out)
+            edges.append(IdentityEdge().bind(inp, out))
 
         super().__init__(inputs, outputs, edges, inherit_nodes=INHERIT_ALL)

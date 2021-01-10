@@ -4,6 +4,7 @@ from .utils import MaybeStr
 from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
+from ..layers.shortcuts import IdentityLayer
 from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory
 
@@ -49,9 +50,16 @@ class CallableBlock(BaseBlock):
             final = outputs
         if not isinstance(final, str):
             final = tuple(final)
+        if isinstance(inputs, str):
+            inputs = [inputs]
+
+        layer = self._layer
+        if set(inputs) - {node.name for node in layer.outputs}:
+            # FIXME: temporary dirty hack
+            layer = PipelineLayer(IdentityLayer(set(inputs) | {node.name for node in layer.inputs}), layer)
 
         def decorator(func: Callable) -> Callable:
-            return self._layer.loopback(func, inputs, outputs)[final]
+            return layer.loopback(func, inputs, outputs)[final]
 
         return decorator
 
@@ -84,15 +92,16 @@ class FromLayer(BaseBlock):
 class Chain(CallableBlock):
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
         super().__init__()
+        self._blocks = [head, *tail]
         self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
         self._methods = self._layer.compile()
 
     def __getitem__(self, index):
         if isinstance(index, int):
-            return FromLayer(self._layer.index(index))
+            return self._blocks[index]
 
         if isinstance(index, slice):
-            return Chain(*map(FromLayer, self._layer.slice(index.start, index.stop, index.step).layers))
+            return Chain(*self._blocks[index])
 
         raise ValueError('The index can be either an int or slice.')
 
@@ -112,22 +121,29 @@ def chained(*blocks: BaseBlock):
 
 
 class SourceBase(type):
-    def __new__(mcs, class_name, bases, namespace):
-        def __init__(*args, **kwargs):
-            assert args
-            if len(args) > 1:
-                raise TypeError('This constructor accepts only keyword arguments.')
-            self = args[0]
+    def __new__(mcs, class_name, bases, namespace, **flags):
+        if flags.get('__root', False):
+            def __init__(*args, **kwargs):
+                raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
+        else:
+            # TODO: exception
+            assert bases == (Source,)
 
-            # TODO: split into two objects: the first one holds the scope
-            #  the second one compiles the layer
-            factory = SourceFactory(namespace)
-            scope = factory.get_init_signature().bind_partial(**kwargs)
-            scope.apply_defaults()
-            # TODO: should only build if not called from super
-            factory.build(scope.kwargs)
-            self._layer = factory.get_layer()
-            self._methods = self._layer.compile()
+            def __init__(*args, **kwargs):
+                assert args
+                if len(args) > 1:
+                    raise TypeError('This constructor accepts only keyword arguments.')
+                self = args[0]
+
+                # TODO: split into two objects: the first one holds the scope
+                #  the second one compiles the layer
+                factory = SourceFactory(namespace)
+                scope = factory.get_init_signature().bind_partial(**kwargs)
+                scope.apply_defaults()
+                # TODO: should only build if not called from super
+                factory.build(scope.kwargs)
+                self._layer = factory.get_layer()
+                self._methods = self._layer.compile()
 
         return super().__new__(mcs, class_name, bases, {'__init__': __init__})
 
@@ -158,6 +174,9 @@ class TransformBase(type):
                 self._methods = self._layer.compile()
 
         else:
+            # TODO: exception
+            assert bases == (Transform,)
+
             def __init__(*args, **kwargs):
                 assert args
                 if len(args) > 1:
@@ -181,7 +200,7 @@ class Transform(CallableBlock, metaclass=TransformBase, __root=True):
     """
     Base class for all transforms.
 
-    Can also be used as a inplace factory for transforms.
+    Can also be used as an inplace factory for transforms.
 
     Examples
     --------
@@ -198,5 +217,5 @@ class Transform(CallableBlock, metaclass=TransformBase, __root=True):
 
 
 # TODO add inheritance
-class Source(CallableBlock, metaclass=SourceBase):
+class Source(CallableBlock, metaclass=SourceBase, __root=True):
     pass

@@ -4,7 +4,7 @@ from typing import Callable
 class DecoratorAdapter:
     name = None
 
-    def __init__(self, func):
+    def __init__(self, func: Callable):
         self.__func__ = func
 
     def __get__(self, instance, owner):
