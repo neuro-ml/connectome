@@ -25,7 +25,7 @@ class PipelineLayer(EdgesBag):
         return PipelineLayer(*not_cache_layers)
 
     def index(self, index):
-        return self.slice(index, index + 1)
+        return self.layers[index]
 
     def slice(self, start, stop=None, step=None):
         layers = self.layers[start:stop:step]

@@ -166,3 +166,16 @@ def test_persistent(block_maker):
         Partial(),
     )
     assert Counter(pipeline.ids) == Counter('0123')
+
+
+def test_instance(block_maker):
+    pipeline = Chain(
+        block_maker.first_ds(first_constant=2, ids_arg=15),
+        block_maker.crop(),
+    )
+
+    for i in pipeline.ids:
+        instance = pipeline(i)
+        assert instance.id == pipeline.id(i) == i
+        assert instance.image == pipeline.image(i)
+        assert instance.lungs == pipeline.lungs(i)

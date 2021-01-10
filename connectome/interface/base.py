@@ -33,6 +33,9 @@ class CallableBlock(BaseBlock):
     def __rshift__(self, block: BaseBlock) -> 'Chain':
         return Chain(self, block)
 
+    def __call__(self, *args, **kwargs) -> 'Instance':
+        return Instance(self, args, kwargs)
+
     def __dir__(self):
         return [x.name for x in self._layer.outputs]
 
@@ -59,6 +62,19 @@ class CallableBlock(BaseBlock):
                 mapping[o].visualize(path)
 
 
+class Instance:
+    def __init__(self, block: CallableBlock, args, kwargs):
+        self._block = block
+        self._args, self._kwargs = args, kwargs
+
+    def __getattr__(self, name):
+        method = getattr(self._block, name)
+        return method(*self._args, **self._kwargs)
+
+    def __dir__(self):
+        return dir(self._block)
+
+
 class FromLayer(BaseBlock):
     def __init__(self, layer):
         super().__init__()
@@ -73,7 +89,7 @@ class Chain(CallableBlock):
 
     def __getitem__(self, index):
         if isinstance(index, int):
-            index = slice(index, index + 1)
+            return FromLayer(self._layer.index(index))
 
         if isinstance(index, slice):
             return Chain(*map(FromLayer, self._layer.slice(index.start, index.stop, index.step).layers))
