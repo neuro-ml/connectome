@@ -69,7 +69,7 @@ class PickleError(TypeError):
 
 # new invalidation bugs will inevitable arise
 # versioning will help diminish the pain from transitioning between updates
-AVAILABLE_VERSIONS = 0, 1, 2
+AVAILABLE_VERSIONS = 0, 1, 2, 3
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
 
 
@@ -161,11 +161,18 @@ class PortablePickler(CloudPickler):
         )
 
         save(_make_skel_func)
-        save((
-            code,
-            len(closure_values) if closure_values is not None else -1,
-            base_globals,
-        ))
+        if self.version >= 3:
+            # base globals are only needed for unpickling
+            save((
+                code,
+                len(closure_values) if closure_values is not None else -1,
+            ))
+        else:
+            save((
+                code,
+                len(closure_values) if closure_values is not None else -1,
+                base_globals,
+            ))
         write(pickle.REDUCE)
         self.memoize(func)
 
@@ -174,15 +181,19 @@ class PortablePickler(CloudPickler):
             'defaults': defaults,
             'dict': dct,
             'closure_values': closure_values,
-            # TODO: drop __module__ ?
             'module': func.__module__,
             'name': func.__name__,
             '_cloudpickle_submodules': submodules
         }
         if hasattr(func, '__qualname__'):
+            # TODO: drop __qualname__ ?
             state['qualname'] = func.__qualname__
         if getattr(func, '__kwdefaults__', False):
             state['kwdefaults'] = func.__kwdefaults__
+
+        if self.version >= 3:
+            del state['module']
+            state = sort_dict(state)
 
         save(tuple(state.items()))
         write(pickle.TUPLE)
