@@ -67,11 +67,13 @@ class EdgesBag(Wrapper):
         edges = list(state.edges)
         current = node_to_dict(state.outputs)
 
-        # TODO: check uniqueness
         # connect forward outputs with bridge
         outputs = []
         if isinstance(inputs, str):
             inputs = [inputs]
+
+        # TODO: exception
+        assert len(set(inputs)) == len(inputs), inputs
         inputs = [current[name] for name in inputs]
         edge = FunctionEdge(func, len(inputs))
 

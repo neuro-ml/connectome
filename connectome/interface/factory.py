@@ -136,11 +136,7 @@ class GraphFactory:
         raise NotImplementedError
 
     def _process_backward(self, name, value) -> BoundEdge:
-        value = unwrap_transform(value)
-        first, *names = extract_signature(value)
-        # TODO: check first name
-        inputs = [self.backward_inputs[name]] + list(map(self._get_private, names))
-        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.backward_outputs[name])
+        raise NotImplementedError
 
     def _get_private(self, name):
         assert is_private(name)
@@ -207,12 +203,12 @@ class GraphFactory:
 
     def _get_constant_edges(self, arguments: dict):
         for name, value in arguments.items():
-            yield BoundEdge(ValueEdge(value), [], self.arguments[name])
+            yield ValueEdge(value).bind([], self.arguments[name])
 
         # if no __init__ was provided there is an identity edge from args to constants
         assert not self.has_init()
         for name in self.constants:
-            yield BoundEdge(IdentityEdge(), [self.arguments[to_argument(name)]], self.constants[name])
+            yield IdentityEdge().bind(self.arguments[to_argument(name)], self.constants[name])
 
         # otherwise the constants are extracted from self
         # else:
@@ -268,7 +264,7 @@ class SourceFactory(GraphFactory):
     def _init(self):
         self.ID = self.inputs['id']
         self.inputs.freeze()
-        self.edges.append(BoundEdge(IdentityEdge(), [self.ID], self.outputs['id']))
+        self.edges.append(IdentityEdge().bind(self.ID, self.outputs['id']))
 
     def _validate(self):
         # TODO: ids, id, magic
@@ -289,19 +285,50 @@ class SourceFactory(GraphFactory):
             inputs.append(self._get_private(first) if is_private(first) else self.ID)
 
         inputs.extend(map(self._get_private, names))
-        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
+        return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         first, *names = extract_signature(value)
         inputs = [self._get_private(first) if is_private(first) else self.ID]
         inputs.extend(map(self._get_private, names))
-        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.parameters[name])
+        return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
 
 
 class TransformFactory(GraphFactory):
     def _validate(self):
         pass
+
+    def _get_inputs(self, name, value, input_nodes, decorators):
+        # we have 2 situations here:
+        #  1. all the arguments are positional-or-keyword -> it can be an insertion or a transformation
+        #  2. the first argument is positional-only (or marked by a decorator) -> this is a transformation
+        inputs = []
+        signature = list(inspect.signature(value).parameters.values())
+        positional = False
+        if signature:
+            parameter = signature[0]
+            # second case
+            assert parameter.default == parameter.empty, parameter
+            positional = parameter.kind == parameter.POSITIONAL_ONLY or PositionalDecoratorAdapter in decorators
+            if positional:
+                signature = signature[1:]
+                inputs.append(input_nodes[name])
+
+        # TODO: deprecate
+        if InsertDecoratorAdapter in decorators:
+            if positional:
+                raise ValueError(f"Can't insert using positional arguments.")
+            if name in extract_signature(value):
+                raise ValueError(f"Can't insert {name}, the name is already present.")
+
+        for parameter in signature:
+            assert parameter.default == parameter.empty, parameter
+            assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
+            arg = parameter.name
+            inputs.append(self._get_private(arg) if is_private(arg) else input_nodes[arg])
+
+        return inputs
 
     def _process_inherit(self, value):
         if isinstance(value, str):
@@ -315,40 +342,19 @@ class TransformFactory(GraphFactory):
         self.inherited_node_names = value
 
     def _process_forward(self, name, value) -> BoundEdge:
-        # we have 2 situations here:
-        #  1. all the arguments are positional-or-keyword -> it can be an insertion or a transformation
-        #  2. the first argument is positional-only (or marked by a decorator) -> this is a transformation
         decorators = get_decorators(value)
         value = unwrap_transform(value)
         if OptionalDecoratorAdapter in decorators:
             self.optional_node_names.append(name)
 
-        inputs = []
-        signature = list(inspect.signature(value).parameters.values())
-        positional = False
-        if signature:
-            parameter = signature[0]
-            # second case
-            assert parameter.default == parameter.empty, parameter
-            positional = parameter.kind == parameter.POSITIONAL_ONLY or PositionalDecoratorAdapter in decorators
-            if positional:
-                signature = signature[1:]
-                inputs.append(self.inputs[name])
+        inputs = self._get_inputs(name, value, self.inputs, decorators)
+        return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])
 
-        # TODO: deprecate
-        if InsertDecoratorAdapter in decorators:
-            if positional:
-                raise ValueError(f"Can't insert using positional arguments.")
-            if name in extract_signature(value):
-                raise ValueError(f"Can't insert {name}, the name is already present.")
-
-        for parameter in signature:
-            assert parameter.default == parameter.empty, parameter
-            assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
-            arg = parameter.name
-            inputs.append(self._get_private(arg) if is_private(arg) else self.inputs[arg])
-
-        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.outputs[name])
+    def _process_backward(self, name, value) -> BoundEdge:
+        decorators = get_decorators(value)
+        value = unwrap_transform(value)
+        inputs = self._get_inputs(name, value, self.backward_inputs, decorators)
+        return FunctionEdge(value, len(inputs)).bind(inputs, self.backward_outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
@@ -356,4 +362,4 @@ class TransformFactory(GraphFactory):
             self._get_private(arg) if is_private(arg) else self.inputs[arg]
             for arg in extract_signature(value)
         ]
-        return BoundEdge(FunctionEdge(value, len(inputs)), inputs, self.parameters[name])
+        return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
