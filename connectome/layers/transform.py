@@ -10,18 +10,21 @@ INHERIT_ALL = True
 
 
 class TransformLayer(EdgesBag):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = None,
-                 backward_outputs: Nodes = None, optional_nodes: Sequence[str] = None,
-                 inherit_nodes: Sequence[str] = None, persistent_nodes: Sequence[str] = None):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
+                 backward_outputs: Nodes = (), optional_nodes: Sequence[str] = (),
+                 inherit_nodes: Sequence[str] = (), persistent_nodes: Sequence[str] = ()):
         super().__init__(
             inputs, outputs, edges,
-            BagContext(backward_inputs or [], backward_outputs or [], inherit_nodes or [])
+            BagContext(backward_inputs, backward_outputs, inherit_nodes)
         )
         check_for_duplicates(node_to_dict(inputs).keys())
 
-        self.inherit_nodes = inherit_nodes or []
-        self.optional_nodes = optional_nodes or []
-        self.persistent_nodes = persistent_nodes or []
+        if inherit_nodes != INHERIT_ALL:
+            inherit_nodes = tuple(inherit_nodes)
+
+        self.inherit_nodes = inherit_nodes
+        self.optional_nodes = tuple(optional_nodes)
+        self.persistent_nodes = tuple(persistent_nodes)
 
     def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
         previous = layer.freeze()
@@ -31,9 +34,9 @@ class TransformLayer(EdgesBag):
         cur_inputs = node_to_dict(current.inputs)
 
         if self.inherit_nodes == INHERIT_ALL:
-            inherit_nodes = list(prev_outputs.keys())
+            inherit_nodes = tuple(prev_outputs.keys())
         else:
-            inherit_nodes = self.inherit_nodes + list(self.persistent_nodes)
+            inherit_nodes = self.inherit_nodes + self.persistent_nodes
 
         outputs = []
         edges = list(previous.edges) + list(current.edges)

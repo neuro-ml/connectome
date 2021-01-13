@@ -144,6 +144,9 @@ class PortablePickler(CloudPickler):
 
         code, f_globals, defaults, closure_values, dct, base_globals = self.extract_func_data(func)
         f_globals, dct, base_globals = map(sort_dict, [f_globals, dct, base_globals])
+
+        base_globals = base_globals.copy()
+        assert set(base_globals).issubset({'__package__', '__name__', '__path__', '__file__'})
         if '__file__' in base_globals:
             base_globals.pop('__file__')
         # as of py3.8 the docstring is always stored in co_consts[0]

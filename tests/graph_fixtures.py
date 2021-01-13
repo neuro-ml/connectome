@@ -12,7 +12,7 @@ from connectome.utils import extract_signature
 
 class LayerMaker:
     @staticmethod
-    def make_layer(optional_nodes=None, **kwargs):
+    def make_layer(optional_nodes=(), **kwargs):
 
         parameters = {}
         forward_methods = {}

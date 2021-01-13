@@ -339,6 +339,8 @@ class TransformFactory(GraphFactory):
                 # TODO exception
                 assert isinstance(node_name, str)
 
+            value = tuple(value)
+
         self.inherited_node_names = value
 
     def _process_forward(self, name, value) -> BoundEdge:
