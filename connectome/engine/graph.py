@@ -177,7 +177,10 @@ def render(node, cache, masks, hashes):
         mask = masks[node]
 
         inputs = [inputs[idx] for idx in mask]
-        cache[node] = edge.evaluate([render(x, cache, masks, hashes) for x in inputs], mask, hashes[node])
+        cache[node] = edge.evaluate(
+            tuple(render(x, cache, masks, hashes) for x in inputs),
+            mask, hashes[node]
+        )
 
     return cache[node]
 

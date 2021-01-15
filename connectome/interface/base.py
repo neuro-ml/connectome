@@ -63,6 +63,11 @@ class CallableBlock(BaseBlock):
 
         return decorator
 
+    def _compile(self, inputs: MaybeStr):
+        if not isinstance(inputs, str):
+            inputs = tuple(inputs)
+        return self._methods[inputs]
+
     def _visualize(self, name, path):
         mapping = TreeNode.from_edges(self._layer.edges)
         for o in self._layer.outputs:

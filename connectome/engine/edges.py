@@ -129,7 +129,7 @@ class ProductEdge(Edge):
         super().__init__(arity, uses_hash=True)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        return arguments
+        return tuple(arguments)
 
     def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
         return NodeHash.from_hash_nodes(*hashes, prev_edge=self), FULL_MASK

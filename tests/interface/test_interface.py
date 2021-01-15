@@ -48,6 +48,10 @@ def test_chain(block_maker):
     )
     assert pipeline.image(id='123123') == f'image, 2: 123123 transformed 16'
 
+    compiled = pipeline._compile(['image', 'lungs', 'spacing'])
+    for i in pipeline.ids:
+        assert compiled(i) == (pipeline.image(i), pipeline.lungs(i), pipeline.spacing(i))
+
 
 def test_inplace_transform(block_maker):
     @positional

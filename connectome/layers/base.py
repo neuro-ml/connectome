@@ -107,7 +107,7 @@ def update_map(nodes, node_map):
 
 
 def bake_methods(inputs: Nodes, outputs: Nodes, edges: BoundEdges):
-    return GraphContainer(inputs, outputs, edges).methods
+    return GraphContainer(inputs, outputs, edges)
 
 
 class GraphContainer:

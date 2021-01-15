@@ -69,7 +69,7 @@ class PickleError(TypeError):
 
 # new invalidation bugs will inevitable arise
 # versioning will help diminish the pain from transitioning between updates
-AVAILABLE_VERSIONS = 0, 1, 2, 3
+AVAILABLE_VERSIONS = 0, 1, 2, 3, 4
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
 
 
@@ -188,9 +188,10 @@ class PortablePickler(CloudPickler):
             'name': func.__name__,
             '_cloudpickle_submodules': submodules
         }
-        if hasattr(func, '__qualname__'):
-            # TODO: drop __qualname__ ?
-            state['qualname'] = func.__qualname__
+        if self.version < 4:
+            if hasattr(func, '__qualname__'):
+                # qualname is only used fo debug
+                state['qualname'] = func.__qualname__
         if getattr(func, '__kwdefaults__', False):
             state['kwdefaults'] = func.__kwdefaults__
 
@@ -242,8 +243,11 @@ class PortablePickler(CloudPickler):
         save(types.ClassType)
         if issubclass(obj, Enum):
             members = sort_dict(dict((e.name, e.value) for e in obj))
-            qualname = getattr(obj, "__qualname__", None)
-            save((obj.__bases__, obj.__name__, qualname, members, obj.__module__))
+            if self.version >= 4:
+                save((obj.__bases__, obj.__name__, members, obj.__module__))
+            else:
+                qualname = getattr(obj, "__qualname__", None)
+                save((obj.__bases__, obj.__name__, qualname, members, obj.__module__))
 
             for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
                              "_value2member_map_"] + list(members):
