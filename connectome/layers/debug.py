@@ -7,6 +7,10 @@ from ..engine.edges import IdentityEdge
 
 
 class HashDigest(IdentityEdge):
+    def __init__(self):
+        super().__init__()
+        self._uses_hash = True
+
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         pickled, digest, _ = key_to_relative(node_hash.value)
         return arguments[0], node_hash.value, digest, pickled
