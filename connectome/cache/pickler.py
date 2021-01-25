@@ -22,6 +22,8 @@ from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild
     _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule, \
     _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict, string_types
 
+NEWER_THAN_38 = sys.version_info[:2] > (3, 8)
+
 
 # TODO: replace by tuple
 def sort_dict(d: dict):
@@ -151,7 +153,7 @@ class PortablePickler(CloudPickler):
             base_globals.pop('__file__')
         # as of py3.8 the docstring is always stored in co_consts[0]
         # need this assertion to detect any changes in further versions
-        if func.__doc__ is not None:
+        if func.__doc__ is not None and NEWER_THAN_38:
             assert code.co_consts
             assert func.__doc__ == code.co_consts[0]
 
