@@ -1,5 +1,6 @@
+from abc import ABC, abstractmethod
 from enum import unique, IntEnum
-from typing import Sequence, Tuple, Union, NamedTuple, Optional
+from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any
 
 
 @unique
@@ -14,7 +15,7 @@ class NodeHash:
 
     def __init__(self, data, children, kind: HashType):
         # TODO: self.prev_edge = prev_edge
-        self.children: Sequence[NodeHash] = children
+        self.children: NodeHashes = children
         self.kind = kind
         self.data = data
         self.value = kind.value, data
@@ -55,41 +56,57 @@ class NodeHash:
 
 FULL_MASK = None
 NodesMask = Union[Sequence[int], FULL_MASK]
+NodeHashes = Sequence[NodeHash]
 
 
-class Edge:
+class Edge(ABC):
     def __init__(self, arity: int, uses_hash: bool):
         self.arity = arity
         self._uses_hash = uses_hash
 
-    def evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        assert len(arguments) == len(mask)
-        return self._evaluate(arguments, mask, node_hash)
+    def propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        """ Computes the hash of the output given the input hashes. """
+        assert len(inputs) == self.arity
+        return self._propagate_hash(inputs)
 
-    def process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        assert len(hashes) == self.arity
-        node_hash, mask = self._process_hashes(hashes)
+    @abstractmethod
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        pass
+
+    def compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        """ Computes the mask of the essential inputs. """
+        assert len(inputs) == self.arity
+        mask = self._compute_mask(inputs, output)
         if mask == FULL_MASK:
             mask = range(self.arity)
         assert all(0 <= x < self.arity for x in mask)
         assert len(set(mask)) == len(mask)
-        return node_hash, mask
+        return mask
 
-    def hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        assert len(hashes) == self.arity
-        return self._hash_graph(hashes)
+    @abstractmethod
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        pass
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        raise NotImplementedError
+    def evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+        """ Computes the output value. """
+        assert len(arguments) == len(mask)
+        return self._evaluate(arguments, mask, node_hash)
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        raise NotImplementedError
+    @abstractmethod
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+        pass
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        raise NotImplementedError
+    def hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        """ Propagates the graph's hash without any control flow. """
+        assert len(inputs) == self.arity
+        return self._hash_graph(inputs)
+
+    @abstractmethod
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        pass
 
     @property
-    def uses_hash(self):
+    def uses_hash(self) -> bool:
         return self._uses_hash
 
     def bind(self, inputs: Union['Node', 'Nodes'], output: 'Node') -> 'BoundEdge':
@@ -104,6 +121,10 @@ class TreeNode:
 
     def __init__(self, name: str, edge: Optional[Tuple[Edge, Sequence['TreeNode']]]):
         self.name, self.edge = name, edge
+
+    @property
+    def is_leaf(self):
+        return self.edge is None
 
     @property
     def parents(self):

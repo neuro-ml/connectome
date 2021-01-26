@@ -1,6 +1,7 @@
-from typing import Sequence, Tuple, Callable
+from abc import abstractmethod
+from typing import Sequence, Callable
 
-from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType, TreeNodes
+from .base import NodeHash, Edge, NodesMask, FULL_MASK, HashType, TreeNodes, NodeHashes
 from .graph import Graph
 from ..cache import Cache, MemoryCache, DiskCache
 
@@ -21,28 +22,30 @@ class Nothing:
 
     @staticmethod
     def in_hashes(hashes: Sequence[NodeHash]):
-        # TODO: do we want always to evaluate all hashes
-        return any(x.data is Nothing for x in list(hashes))
+        return any(x.data is Nothing for x in hashes)
 
 
 class PropagateNothing(Edge):
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        raise NotImplementedError
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        if Nothing.in_hashes(inputs):
+            # TODO: singleton
+            return NodeHash.from_leaf(Nothing)
 
-    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        raise NotImplementedError
-
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        if Nothing.in_hashes(hashes):
-            return NodeHash.from_leaf(Nothing), FULL_MASK
-
-        return self._process(hashes)
+        return self._propagate(inputs)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         if Nothing.in_data(arguments) or Nothing.in_hashes([node_hash]):
             return Nothing
 
         return self._eval(arguments, mask, node_hash)
+
+    @abstractmethod
+    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        pass
+
+    @abstractmethod
+    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        pass
 
 
 class FunctionEdge(PropagateNothing):
@@ -56,11 +59,14 @@ class FunctionEdge(PropagateNothing):
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return self.function(*arguments)
 
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return self._calc_hash(hashes), FULL_MASK
+    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return self._calc_hash(inputs)
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return self._calc_hash(hashes)
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return self._calc_hash(inputs)
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
 
 
 class IdentityEdge(Edge):
@@ -70,11 +76,14 @@ class IdentityEdge(Edge):
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return arguments[0]
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return hashes[0], FULL_MASK
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        return inputs[0]
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return hashes[0]
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
 
 
 class ValueEdge(Edge):
@@ -85,16 +94,19 @@ class ValueEdge(Edge):
     def __init__(self, value):
         super().__init__(arity=0, uses_hash=False)
         self.value = value
-        self.node_hash = NodeHash.from_leaf(self.value)
+        self._hash = NodeHash.from_leaf(self.value)
 
     def _evaluate(self, arguments: Sequence, essential_inputs: TreeNodes, parameter: NodeHash):
         return self.value
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return self.node_hash, FULL_MASK
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return self._hash
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return self.node_hash
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        return self._hash
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
 
 
 class CacheEdge(PropagateNothing):
@@ -102,14 +114,13 @@ class CacheEdge(PropagateNothing):
         super().__init__(arity=1, uses_hash=True)
         self.storage = storage
 
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        node_hash, = hashes
-        if self.storage.contains(node_hash):
-            mask = []
-        else:
-            mask = FULL_MASK
+    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
 
-        return node_hash, mask
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        if self.storage.contains(output):
+            return []
+        return FULL_MASK
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # no arguments means that the value is cached
@@ -120,8 +131,8 @@ class CacheEdge(PropagateNothing):
         self.storage.set(node_hash, value)
         return value
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return hashes[0]
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
 
 
 class ProductEdge(Edge):
@@ -131,11 +142,14 @@ class ProductEdge(Edge):
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return tuple(arguments)
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return NodeHash.from_hash_nodes(*hashes, prev_edge=self), FULL_MASK
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return NodeHash.from_hash_nodes(*hashes, prev_edge=self)
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        return NodeHash.from_hash_nodes(*inputs, prev_edge=self)
+
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return NodeHash.from_hash_nodes(*inputs, prev_edge=self)
 
 
 # TODO: are Switch and Projection the only edges that need Nothing?
@@ -145,26 +159,42 @@ class SwitchEdge(Edge):
         super().__init__(arity=1, uses_hash=True)
         self.selector = selector
 
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        node_hash, = inputs
+        if not self.selector(node_hash):
+            # TODO: need a special type for hash of nothing
+            node_hash = NodeHash.from_leaf(Nothing)
+        return node_hash
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
+
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         if node_hash.data is Nothing:
             return Nothing
 
         return arguments[0]
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        node_hash, = hashes
-        if not self.selector(node_hash):
-            # TODO: need a special type for hash of nothing
-            node_hash = NodeHash.from_leaf(Nothing)
-        return node_hash, FULL_MASK
-
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return hashes[0]
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
 
 
 class ProjectionEdge(Edge):
     def __init__(self):
         super().__init__(arity=1, uses_hash=True)
+
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        # take the only non-Nothing hash
+        real = []
+        for v in inputs[0].children:
+            if v.data is not Nothing:
+                real.append(v)
+
+        assert len(real) == 1, real
+        return real[0]
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         # take the only non-Nothing value
@@ -176,18 +206,8 @@ class ProjectionEdge(Edge):
         assert len(real) == 1, real
         return real[0]
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        # take the only non-Nothing hash
-        real = []
-        for v in hashes[0].children:
-            if v.data is not Nothing:
-                real.append(v)
-
-        assert len(real) == 1, real
-        return real[0], FULL_MASK
-
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return hashes[0]
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
 
 
 class CachedRow(PropagateNothing):
@@ -197,7 +217,7 @@ class CachedRow(PropagateNothing):
         self.disk = disk
         self.ram = ram
 
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
+    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
         """
         Hashes
         ------
@@ -205,14 +225,15 @@ class CachedRow(PropagateNothing):
         key: a unique key for each entry in the tuple
         keys: all available keys
         """
-        entry = hashes[0]
-        if self.ram.contains(entry):
-            return entry, []
+        return inputs[0]
 
-        return entry, [1, 2]
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        if self.ram.contains(output):
+            return []
+        return [1, 2]
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return hashes[0]
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         if not arguments:
@@ -258,11 +279,14 @@ class FilterEdge(PropagateNothing):
             kind=HashType.FILTER,
         )
 
-    def _process(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return self._hash(hashes), FULL_MASK
+    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return self._hash(inputs)
 
-    def _hash_graph(self, hashes: Sequence[NodeHash]) -> NodeHash:
-        return self._hash(hashes)
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
+
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return self._hash(inputs)
 
     def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         keys, = arguments

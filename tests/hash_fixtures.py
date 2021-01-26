@@ -2,7 +2,7 @@ from typing import Sequence, Tuple
 
 import pytest
 
-from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node
+from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node, NodeHashes
 from connectome.interface.base import FromLayer
 from connectome.layers.base import Wrapper, EdgesBag
 from connectome.layers.transform import TransformLayer
@@ -15,8 +15,14 @@ class HashEdge(Edge):
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return arguments[0], node_hash
 
-    def _process_hashes(self, hashes: Sequence[NodeHash]) -> Tuple[NodeHash, NodesMask]:
-        return hashes[0], FULL_MASK
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        return inputs[0]
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
+
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        return inputs[0]
 
 
 class HashLayer(Wrapper):
