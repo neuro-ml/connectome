@@ -67,9 +67,9 @@ def compile_graph(inputs: Sequence[TreeNode], outputs: TreeNode):
 
 
 def uses_hash(node: TreeNode) -> bool:
-    if node.edge is None:
+    if node.is_leaf:
         return False
-    return node.edge[0].uses_hash or any(map(uses_hash, node.edge[1]))
+    return node.edge.uses_hash or any(map(uses_hash, node.parents))
 
 
 def validate_graph(inputs: TreeNodes, output: TreeNode):
@@ -78,10 +78,10 @@ def validate_graph(inputs: TreeNodes, output: TreeNode):
         if node in inputs:
             return
         # no edges - must be an input
-        if not node.edge:
+        if node.is_leaf:
             assert node in inputs, (node, inputs)
         else:
-            for inp in node.edge[1]:
+            for inp in node.parents:
                 visitor(inp)
 
     visitor(output)
@@ -94,11 +94,11 @@ def count_entries(inputs: TreeNodes, output: TreeNode, masks=None):
         if node in inputs:
             return
 
-        group = node.edge[1]
+        parents = node.parents
         if masks is not None:
-            group = [group[idx] for idx in masks[node]]
+            parents = [parents[idx] for idx in masks[node]]
 
-        for n in group:
+        for n in parents:
             visitor(n)
 
     entry_counts = defaultdict(int)
@@ -135,8 +135,7 @@ def count_entries(inputs: TreeNodes, output: TreeNode, masks=None):
 def compute_hashes(inputs: Dict[TreeNode, NodeHash], output: TreeNode):
     def visitor(node: TreeNode):
         if node not in cache:
-            edge, group = node.edge
-            cache[node] = edge.propagate_hash(list(map(visitor, group)))
+            cache[node] = node.edge.propagate_hash(list(map(visitor, node.parents)))
 
         return cache[node]
 
@@ -152,10 +151,10 @@ def compute_masks(output: TreeNode, hashes):
                 cache[node] = []
                 return
 
-            edge, group = node.edge
-            cache[node] = mask = edge.compute_mask([hashes[n] for n in group], hashes[node])
+            parents = node.parents
+            cache[node] = mask = node.edge.compute_mask([hashes[n] for n in parents], hashes[node])
             for idx in mask:
-                visitor(group[idx])
+                visitor(parents[idx])
 
     cache = {}
     visitor(output)
@@ -165,8 +164,7 @@ def compute_masks(output: TreeNode, hashes):
 def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
     def visitor(node: TreeNode):
         if node not in hashes:
-            edge, group = node.edge
-            hashes[node] = edge.hash_graph(list(map(visitor, group)))
+            hashes[node] = node.edge.hash_graph(list(map(visitor, node.parents)))
 
         return hashes[node]
 
@@ -176,11 +174,11 @@ def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
 
 def render(node, cache, masks, hashes):
     if node not in cache:
-        edge, inputs = node.edge
+        inputs = node.parents
         mask = masks[node]
 
         inputs = [inputs[idx] for idx in mask]
-        cache[node] = edge.evaluate(
+        cache[node] = node.edge.evaluate(
             tuple(render(x, cache, masks, hashes) for x in inputs),
             mask, hashes[node]
         )
@@ -196,3 +194,6 @@ class Placeholder:
     # TODO: singleton
     def __init__(self):
         raise RuntimeError("Don't init me!")
+
+# TODO:
+# PlaceholderHash = NodeHash.from_leaf(Placeholder)

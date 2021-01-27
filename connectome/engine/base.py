@@ -14,7 +14,6 @@ class NodeHash:
     __slots__ = 'kind', 'data', 'value', 'children', '_hash'
 
     def __init__(self, data, children, kind: HashType):
-        # TODO: self.prev_edge = prev_edge
         self.children: NodeHashes = children
         self.kind = kind
         self.data = data
@@ -29,7 +28,7 @@ class NodeHash:
         return cls(data, (), kind=HashType.LEAF)
 
     @classmethod
-    def from_hash_nodes(cls, *hashes: 'NodeHash', prev_edge=None, kind=HashType.COMPOUND):
+    def from_hash_nodes(cls, *hashes: 'NodeHash', kind=HashType.COMPOUND):
         data = tuple(h.value for h in hashes)
         return cls(data, hashes, kind=kind)
 
@@ -117,18 +116,23 @@ class Edge(ABC):
 
 
 class TreeNode:
-    __slots__ = 'name', 'edge'
+    __slots__ = 'name', '_edge'
 
     def __init__(self, name: str, edge: Optional[Tuple[Edge, Sequence['TreeNode']]]):
-        self.name, self.edge = name, edge
+        # TODO: rename edge to _edge
+        self.name, self._edge = name, edge
 
     @property
     def is_leaf(self):
-        return self.edge is None
+        return self._edge is None
+
+    @property
+    def edge(self):
+        return self._edge[0]
 
     @property
     def parents(self):
-        return self.edge[1]
+        return self._edge[1]
 
     @classmethod
     def from_edges(cls, edges: Sequence['BoundEdge']) -> dict:
@@ -170,12 +174,12 @@ class TreeNode:
         from anytree import Node
 
         def convert(node):
-            return Node(node.name, original=node, edge=f'label={type(node.edge[0]).__name__}' if node.edge else '',
-                        children=list(map(convert, node.edge[1] if node.edge else [])))
+            return Node(node.name, original=node, edge=f'label={type(node.edge).__name__}' if not node.is_leaf else '',
+                        children=list(map(convert, node.parents if not node.is_leaf else [])))
 
         UniqueDotExporter(
             convert(self),
-            edgeattrfunc=lambda parent, child: parent.edge,
+            edgeattrfunc=lambda parent, child: (parent.edge, parent.parents),
             nodeattrfunc=lambda
                 node: f"shape={'box' if node.original not in cache else 'ellipse'}, label=\"{node.name}\"",
             nodenamefunc=lambda node: hex(id(node.original))

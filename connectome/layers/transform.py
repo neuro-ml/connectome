@@ -94,7 +94,7 @@ class TransformLayer(EdgesBag):
 
 def is_reachable(inputs: TreeNodes, output: TreeNode):
     def find_parents(x: TreeNode):
-        if not x.edge:
+        if x.is_leaf:
             yield x
             return
 
