@@ -9,6 +9,10 @@ class HashType(IntEnum):
     COMPOUND = 1
     FILTER = 2
 
+    # experimental
+    MAPPING = 3
+    GROUPING = 4
+
 
 class NodeHash:
     __slots__ = 'kind', 'data', 'value', 'children', '_hash'

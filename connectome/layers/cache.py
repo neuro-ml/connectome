@@ -12,7 +12,7 @@ class IdentityContext(Context):
         return outputs, edges
 
     def update(self, mapping: dict) -> 'Context':
-        pass
+        return self
 
 
 class CacheBase(Wrapper):
@@ -35,9 +35,9 @@ class CacheLayer(CacheBase):
 
         for node in outputs:
             if self.cache_names is None or node.name in self.cache_names:
-                edges.append(BoundEdge(CacheEdge(self.get_storage()), [forward_outputs[node.name]], node))
+                edges.append(CacheEdge(self.get_storage()).bind(forward_outputs[node.name], node))
             else:
-                edges.append(BoundEdge(IdentityEdge(), [forward_outputs[node.name]], node))
+                edges.append(IdentityEdge().bind(forward_outputs[node.name], node))
 
         return EdgesBag(state.inputs, outputs, edges, IdentityContext())
 

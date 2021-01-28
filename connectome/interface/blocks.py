@@ -5,6 +5,7 @@ from paramiko.config import SSH_PORT
 from .base import FromLayer, CallableBlock
 from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
 from ..layers.filter import FilterLayer
+from ..layers.goup import GroupLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, resolve_serializer
@@ -63,6 +64,11 @@ class Filter(FromLayer):
         assert all(isinstance(i, str) for i in ids)
         ids = set(ids)
         return cls(lambda id: id in ids)
+
+
+class GroupBy(FromLayer):
+    def __init__(self, name: str):
+        super().__init__(GroupLayer(name))
 
 
 class Apply(FromLayer):
