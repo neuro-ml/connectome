@@ -22,6 +22,16 @@ class Two(Source):
         return f'Two: {i}'
 
 
+class Three(Source):
+    @staticmethod
+    def ids():
+        return tuple('789')
+
+    @staticmethod
+    def image(i):
+        return f'Three: {i}'
+
+
 def test_simple(hash_layer):
     one, two = One(), Two()
     merged = Merge(one, two)
@@ -52,7 +62,7 @@ def test_simple(hash_layer):
         assert hashed.image(i) == two_hashed.image(i)
 
 
-def test_nested():
+def test_chained():
     class Underscore(Transform):
         @staticmethod
         @positional
@@ -75,3 +85,15 @@ def test_nested():
     assert set(merged.ids) == set('123456')
     assert merged.image('1') == '__One: 1'
     assert merged.image('5') == '_Two: 5'
+
+
+def test_nested():
+    a = One()
+    b = Two()
+    c = Three()
+    ds = Merge(a, Merge(b, c))
+    assert ds.ids == a.ids + b.ids + c.ids
+
+    for x in [a, b, c]:
+        for i in x.ids:
+            assert ds.image(i) == x.image(i)

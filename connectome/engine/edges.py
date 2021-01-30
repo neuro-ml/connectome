@@ -167,6 +167,8 @@ class SwitchEdge(Edge):
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         node_hash, = inputs
+        if node_hash.data is Nothing:
+            return node_hash
         if not self.selector(node_hash):
             return NodeHash.from_leaf(Nothing)
         return node_hash
@@ -195,6 +197,10 @@ class ProjectionEdge(Edge):
             if v.data is not Nothing:
                 real.append(v)
 
+        # this is a nested merge, just propagate the Nothing
+        if not real:
+            return NodeHash.from_leaf(Nothing)
+
         assert len(real) == 1, real
         return real[0]
 
@@ -202,6 +208,9 @@ class ProjectionEdge(Edge):
         return FULL_MASK
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        if node_hash.data is Nothing:
+            return Nothing
+
         # take the only non-Nothing value
         real = []
         for v in arguments[0]:

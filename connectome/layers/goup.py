@@ -27,9 +27,10 @@ class GroupLayer(Wrapper):
         edges = list(main.edges)
         outputs = []
         mapping = TreeNode.from_edges(edges)
-        changed_input = Node(self.name)
+        changed_input = Node('id')
         mapping_node = Node('$mapping')
         ids_node = self._find(main.outputs, 'ids')
+        outputs.append(changed_input)
 
         # create a mapping: {new_id: [old_ids]}
         edges.append(MappingEdge(Graph([mapping[inp]], mapping[self._find(main.outputs, self.name)])).bind(
@@ -37,7 +38,7 @@ class GroupLayer(Wrapper):
 
         # evaluate each output
         for node in main.outputs:
-            if node.name in [self.name, 'ids']:
+            if node.name in [self.name, 'ids', 'id']:
                 continue
 
             output = Node(node.name)
