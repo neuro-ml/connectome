@@ -117,16 +117,17 @@ class NumpySerializer(Serializer):
 
 
 class DictSerializer(Serializer):
-    def __init__(self, *args, serializer: Serializer = None, keys_filename=None, **kwargs):
+    def __init__(self, *args, serializer: Serializer = None, keys_filename='dict_keys.json', **kwargs):
         serializer = serializer or NumpySerializer(*args, **kwargs)
-        keys_filename = keys_filename or 'dict_keys.json'
 
         self.keys_filename = keys_filename
         self.serializer = serializer
 
     def save(self, data: dict, folder: Path):
-        assert isinstance(data, dict)
+        if not isinstance(data, dict):
+            raise SerializerError
 
+        # TODO: remove all if at least one iteration fails
         keys_to_folder = {}
         for sub_folder, (key, value) in enumerate(data.items()):
             keys_to_folder[sub_folder] = key
@@ -137,7 +138,11 @@ class DictSerializer(Serializer):
             json.dump(keys_to_folder, f)
 
     def load(self, folder: Path):
-        with open(folder / self.keys_filename, 'r') as f:
+        keys = folder / self.keys_filename
+        if not keys.exists():
+            raise SerializerError
+
+        with open(keys, 'r') as f:
             keys_map = json.load(f)
 
         data = {}
