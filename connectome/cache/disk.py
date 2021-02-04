@@ -51,8 +51,13 @@ class DiskCache(Cache):
 
     @atomize()
     def set(self, param: NodeHash, value):
-        pickled, digest, relative = key_to_relative(param.value)
+        pickled, _, relative = key_to_relative(param.value)
         local = self.root / relative
+        if local.exists():
+            # idempotency
+            check_consistency(self.root / relative / HASH_FILENAME, pickled)
+            return
+
         data_folder = local / DATA_FOLDER
         create_folders(data_folder, self.root)
 
