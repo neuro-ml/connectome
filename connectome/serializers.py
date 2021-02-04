@@ -117,10 +117,8 @@ class NumpySerializer(Serializer):
 
 
 class DictSerializer(Serializer):
-    def __init__(self, *args, serializer: Serializer = None, keys_filename='dict_keys.json', **kwargs):
-        serializer = serializer or NumpySerializer(*args, **kwargs)
-
-        self.keys_filename = keys_filename
+    def __init__(self, serializer: Serializer):
+        self.keys_filename = 'dict_keys.json'
         self.serializer = serializer
 
     def save(self, data: dict, folder: Path):
