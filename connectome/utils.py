@@ -31,15 +31,16 @@ class MultiDict(dict):
 
 
 def extract_signature(func):
-    res = []
+    names = []
+    annotations = {}
     signature = inspect.signature(func)
     for parameter in signature.parameters.values():
         assert parameter.default == parameter.empty, parameter
         assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
+        names.append(parameter.name)
+        annotations[parameter.name] = parameter.annotation
 
-        res.append(parameter.name)
-
-    return res
+    return names, annotations
 
 
 def atomize(attribute: str = '_lock'):

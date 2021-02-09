@@ -14,7 +14,7 @@ class FilterLayer(Wrapper):
     """
 
     def __init__(self, predicate: Callable):
-        self.names = extract_signature(predicate)
+        self.names, _ = extract_signature(predicate)
         assert 'ids' not in self.names
         self.predicate = predicate
 

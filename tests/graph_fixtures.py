@@ -51,19 +51,19 @@ class LayerMaker:
         edges = []
         for name, func in forward_methods.items():
             output_node = get_node(name, outputs)
-            attr_names = extract_signature(func)
+            attr_names, _ = extract_signature(func)
             cur_inputs = list(map(get_related_nodes, attr_names))
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 
         for name, func in parameters.items():
             output_node = parameter_nodes[name]
-            attr_names = extract_signature(func)
+            attr_names, _ = extract_signature(func)
             cur_inputs = list(map(get_related_nodes, attr_names))
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 
         for name, func in backward_methods.items():
             output_node = get_node(name, backward_outputs)
-            attr_names = extract_signature(func)
+            attr_names, _ = extract_signature(func)
             cur_inputs = [get_related_nodes(name, True) for name in attr_names]
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 

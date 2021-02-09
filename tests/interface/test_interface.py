@@ -1,8 +1,6 @@
 from collections import Counter
 
-from connectome import positional
-from connectome.interface.base import Source, Chain, Transform
-from connectome.interface.blocks import Merge
+from connectome import positional, Local, Source, Chain, Transform, Merge
 
 
 def test_single_with_params():
@@ -183,3 +181,35 @@ def test_instance(block_maker):
         assert instance.id == pipeline.id(i) == i
         assert instance.image == pipeline.image(i)
         assert instance.lungs == pipeline.lungs(i)
+
+
+def test_locals(block_maker):
+    class NoLocal(Transform):
+        @staticmethod
+        def _shape(image):
+            return len(image)
+
+        @staticmethod
+        def shape(_shape):
+            return _shape
+
+        @staticmethod
+        def image(image, _shape):
+            return f'{image} shape: {_shape}'
+
+    class WithLocal(Transform):
+        @staticmethod
+        def shape(image):
+            return len(image)
+
+        @staticmethod
+        def image(image, shape: Local):
+            return f'{image} shape: {shape}'
+
+    ds = block_maker.first_ds(first_constant=2, ids_arg=15)
+    one = ds >> NoLocal()
+    two = ds >> WithLocal()
+
+    for i in ds.ids:
+        assert one.image(i) == two.image(i)
+        assert one.shape(i) == two.shape(i)

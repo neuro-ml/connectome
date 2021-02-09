@@ -218,6 +218,7 @@ class Transform(CallableBlock, metaclass=TransformBase, __root=True):
     >>> Transform(image=lambda image: zoom(image, scale_factor=2))
     """
 
+    # TODO: Literal
     __inherit__: Union[str, Sequence[str], bool] = ()
 
 

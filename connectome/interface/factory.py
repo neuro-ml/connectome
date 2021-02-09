@@ -6,6 +6,7 @@ from ..layers.transform import TransformLayer, INHERIT_ALL
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
     PositionalDecoratorAdapter
+from .utils import Local
 
 
 class NodeStorage(dict):
@@ -57,6 +58,10 @@ def is_backward(name: str, value):
             and isinstance(value, staticmethod)
             and InverseDecoratorAdapter in get_decorators(value)
     )
+
+
+def is_local(annotation):
+    return annotation is Local or isinstance(annotation, Local)
 
 
 def get_decorators(value):
@@ -173,7 +178,7 @@ class GraphFactory:
                 self.defaults[to_argument(name)] = value
 
             else:
-                raise RuntimeError(name)
+                raise RuntimeError(f'The type of the "{name}" edge cannot be determined.')
 
         for x in [self.constants, self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
             x.freeze()
@@ -274,30 +279,55 @@ class SourceFactory(GraphFactory):
     def _process_inherit(self, value):
         raise ValueError
 
+    def _get_first(self, name, annotations):
+        if is_local(annotations[name]):
+            raise TypeError('The first argument cannot be local')
+        if is_private(name):
+            return self._get_private(name)
+        return self.ID
+
+    def _get_internal(self, name, annotations):
+        if is_private(name):
+            return self._get_private(name)
+        if not is_local(annotations[name]):
+            raise ValueError('Source arguments must be either local or private')
+        return self.outputs[name]
+
     def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
-        names = extract_signature(value)
+        names, annotations = extract_signature(value)
 
         inputs = []
         # FIXME: for now only ids is allowed to have no arguments
         if name != 'ids':
             first, *names = names
-            inputs.append(self._get_private(first) if is_private(first) else self.ID)
+            inputs.append(self._get_first(first, annotations))
 
-        inputs.extend(map(self._get_private, names))
+        inputs.extend(self._get_internal(name, annotations) for name in names)
         return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
-        first, *names = extract_signature(value)
-        inputs = [self._get_private(first) if is_private(first) else self.ID]
-        inputs.extend(map(self._get_private, names))
+        (first, *names), annotations = extract_signature(value)
+        inputs = [self._get_first(first, annotations)]
+        inputs.extend(self._get_internal(name, annotations) for name in names)
         return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
 
 
 class TransformFactory(GraphFactory):
     def _validate(self):
         pass
+
+    def _get_input(self, name, annotation, input_nodes):
+        # 3 cases here:
+        if is_private(name):
+            # _private
+            return self._get_private(name)
+        if is_local(annotation):
+            # x: Local
+            return self.outputs[name]
+        # just an input
+        return input_nodes[name]
 
     def _get_inputs(self, name, value, input_nodes, decorators):
         # we have 2 situations here:
@@ -319,17 +349,17 @@ class TransformFactory(GraphFactory):
         if InsertDecoratorAdapter in decorators:
             if positional:
                 raise ValueError(f"Can't insert using positional arguments.")
-            if name in extract_signature(value):
+            if name in extract_signature(value)[0]:
                 raise ValueError(f"Can't insert {name}, the name is already present.")
 
         for parameter in signature:
             assert parameter.default == parameter.empty, parameter
             assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
-            arg = parameter.name
-            inputs.append(self._get_private(arg) if is_private(arg) else input_nodes[arg])
+            inputs.append(self._get_input(parameter.name, parameter.annotation, input_nodes))
 
         return inputs
 
+    # TODO: magic_dispatch
     def _process_inherit(self, value):
         if isinstance(value, str):
             value = [value]
@@ -360,8 +390,6 @@ class TransformFactory(GraphFactory):
 
     def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
-        inputs = [
-            self._get_private(arg) if is_private(arg) else self.inputs[arg]
-            for arg in extract_signature(value)
-        ]
+        names, annotations = extract_signature(value)
+        inputs = [self._get_input(arg, annotations[arg], self.inputs) for arg in names]
         return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
