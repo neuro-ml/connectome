@@ -12,6 +12,7 @@ class MemoryCache(Cache):
     def __init__(self, size: Union[int, None]):
         super().__init__()
         self._cache = {} if size is None else pylru.lrucache(size)
+        # FIXME: a global lock is too slow
         self._lock = RLock()
 
     @atomize()

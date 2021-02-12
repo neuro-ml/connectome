@@ -1,16 +1,19 @@
 import time
+from multiprocessing.context import Process
 from tempfile import TemporaryDirectory
 from threading import Thread
 
-import pytest
-
 from connectome import CacheToRam, Apply, CacheToDisk
+from connectome.serializers import JsonSerializer
 from connectome.storage import DiskOptions
 
 
-def sleeper(x):
-    time.sleep(1)
-    return x
+def sleeper(s):
+    def f(x):
+        time.sleep(s)
+        return x
+
+    return f
 
 
 def test_memory_locking(block_maker):
@@ -19,7 +22,7 @@ def test_memory_locking(block_maker):
             assert ds.image(i) == cached.image(i)
 
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
-    cached = ds >> Apply(image=sleeper) >> CacheToRam()
+    cached = ds >> Apply(image=sleeper(0.1)) >> CacheToRam()
 
     th = Thread(target=visit)
     th.start()
@@ -27,19 +30,17 @@ def test_memory_locking(block_maker):
     th.join()
 
 
-@pytest.mark.skip
 def test_disk_locking(block_maker):
     def visit():
+        ds = block_maker.first_ds(first_constant=2, ids_arg=3)
+        cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(
+            root, DiskOptions(storage), names=['image'], serializer=JsonSerializer())
+
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
 
-    ds = block_maker.first_ds(first_constant=2, ids_arg=3)
     with TemporaryDirectory() as root, TemporaryDirectory() as storage:
-        storage = DiskOptions(storage)
-        # TODO: need a huge file that will take a while to write to disk
-        cached = ds >> Apply(image=sleeper) >> CacheToDisk(root, storage, names=['image'])
-
-        th = Thread(target=visit)
+        th = Process(target=visit)
         th.start()
         visit()
         th.join()
@@ -50,7 +51,7 @@ def test_disk_idempotency(block_maker):
 
     with TemporaryDirectory() as root, TemporaryDirectory() as storage:
         storage = DiskOptions(storage)
-        cache = CacheToDisk(root, storage, names=['image'])
+        cache = CacheToDisk(root, storage, names=['image'], serializer=JsonSerializer())
         cached = ds >> cache >> cache
 
         for i in ds.ids:

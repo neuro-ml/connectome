@@ -10,8 +10,8 @@ from threading import RLock
 from typing import Sequence
 
 from .base import Cache
+from .locks import NoLock
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
-
 from ..storage.base import DiskOptions, Storage, digest_to_relative
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
@@ -27,11 +27,13 @@ GZIP_COMPRESSION = 1
 class DiskCache(Cache):
     def __init__(self, root: Path, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict):
         super().__init__()
-        self._lock = RLock()
         self.metadata = metadata
         self.serializer = serializer
         self.storage = Storage(options)
         self.root = Path(root)
+        # FIXME: a global lock is too slow
+        self._lock = RLock()
+        self._file_lock = NoLock()
 
     @atomize()
     def contains(self, param: NodeHash) -> bool:
@@ -40,11 +42,11 @@ class DiskCache(Cache):
             return True
 
         for version in reversed(PREVIOUS_VERSIONS):
-            _, _, relative = key_to_relative(param.value, version)
+            pickled, _, relative = key_to_relative(param.value, version)
             local = self.root / relative
             if local.exists():
                 # we can simply copy the previous version, because nothing really changed
-                self.set(param, self.serializer.load(local / DATA_FOLDER))
+                self.set(param, self._load(local, pickled))
                 return True
 
         return False
@@ -52,34 +54,40 @@ class DiskCache(Cache):
     @atomize()
     def set(self, param: NodeHash, value):
         pickled, _, relative = key_to_relative(param.value)
-        local = self.root / relative
-        if local.exists():
+        root = self.root / relative
+        if root.exists():
             # idempotency
-            check_consistency(self.root / relative / HASH_FILENAME, pickled)
-            return
+            with self._file_lock.read(root):
+                check_consistency(root / HASH_FILENAME, pickled)
+                return
 
-        data_folder = local / DATA_FOLDER
-        create_folders(data_folder, self.root)
+        with self._file_lock.write(root):
+            data_folder = root / DATA_FOLDER
+            create_folders(data_folder, self.root)
 
-        try:
-            # data
-            self.serializer.save(value, data_folder)
-            # meta
-            self._save_meta(local, pickled)
+            try:
+                # data
+                self.serializer.save(value, data_folder)
+                # meta
+                self._save_meta(root, pickled)
 
-            copy_group_permissions(local, self.root, recursive=True)
-            self._mirror_to_storage(data_folder)
+                copy_group_permissions(root, self.root, recursive=True)
+                self._mirror_to_storage(data_folder)
 
-        except BaseException as e:
-            shutil.rmtree(local)
-            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
+            except BaseException as e:
+                shutil.rmtree(root)
+                raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
     @atomize()
     def get(self, param: NodeHash):
         pickled, _, relative = key_to_relative(param.value)
-        # TODO: how slow is this?
-        check_consistency(self.root / relative / HASH_FILENAME, pickled)
-        return self.serializer.load(self.root / relative / DATA_FOLDER)
+        return self._load(self.root / relative, pickled)
+
+    def _load(self, root, pickled):
+        with self._file_lock.read(root):
+            # TODO: how slow is this?
+            check_consistency(root / HASH_FILENAME, pickled)
+            return self.serializer.load(root / DATA_FOLDER)
 
     def _save_meta(self, local, pickled):
         # hash

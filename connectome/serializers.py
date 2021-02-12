@@ -25,15 +25,6 @@ class Serializer:
         raise NotImplementedError
 
 
-# TODO: is this necessary?
-def resolve_serializer(serializer):
-    if serializer is None:
-        serializer = NumpySerializer()
-    if not isinstance(serializer, Serializer):
-        serializer = ChainSerializer(*serializer)
-    return serializer
-
-
 class ChainSerializer(Serializer):
     def __init__(self, *serializers: Serializer):
         self.serializers = serializers

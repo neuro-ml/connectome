@@ -8,7 +8,7 @@ from ..layers.filter import FilterLayer
 from ..layers.goup import GroupLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
-from ..serializers import Serializer, resolve_serializer
+from ..serializers import Serializer, ChainSerializer
 from ..storage import DiskOptions, RemoteOptions
 from ..utils import PathLike
 from .utils import MaybeStr
@@ -82,6 +82,12 @@ def to_seq(x):
     return x
 
 
+def _resolve_serializer(serializer):
+    if not isinstance(serializer, Serializer):
+        serializer = ChainSerializer(*serializer)
+    return serializer
+
+
 class CacheToRam(FromLayer):
     def __init__(self, names: MaybeStr = None, size: int = None):
         super().__init__(MemoryCacheLayer(names, size))
@@ -89,35 +95,35 @@ class CacheToRam(FromLayer):
 
 class CacheToDisk(FromLayer):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
-                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
-        super().__init__(DiskCacheLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))
+        super().__init__(DiskCacheLayer(names, root, storage, serializer, metadata or {}))
 
 
 class CacheRows(FromLayer):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
-                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
-        super().__init__(CacheRowsLayer(names, root, storage, resolve_serializer(serializers), metadata or {}))
+        super().__init__(CacheRowsLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
 class RemoteStorageBase(FromLayer):
     def __init__(self, options: Sequence[RemoteOptions],
-                 serializers: Union[Serializer, Sequence[Serializer]] = None, names: MaybeStr = None):
+                 serializer: Union[Serializer, Sequence[Serializer]], names: MaybeStr = None):
         names = to_seq(names)
-        super().__init__(RemoteStorageLayer(names, options, resolve_serializer(serializers)))
+        super().__init__(RemoteStorageLayer(names, options, _resolve_serializer(serializer)))
 
 
 class RemoteStorage(RemoteStorageBase):
     def __init__(self, hostname: str, storage: Union[PathLike, Sequence[PathLike]], port: int = SSH_PORT,
-                 serializers: Union[Serializer, Sequence[Serializer]] = None,
+                 *, serializer: Union[Serializer, Sequence[Serializer]],
                  username: str = None, password: str = None, names: MaybeStr = None):
         if isinstance(storage, (str, Path)):
             storage = [storage]
         names = to_seq(names)
         options = [RemoteOptions(hostname, Path(path), port, username, password) for path in storage]
-        super().__init__(options, serializers, names)
+        super().__init__(options, _resolve_serializer(serializer), names)
