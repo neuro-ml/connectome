@@ -20,19 +20,14 @@ class Merge(CallableBlock):
 
         id2dataset_index = {}
         for index, dataset in enumerate(blocks):
-            intersection = set(dataset.ids) & set(id2dataset_index.keys())
+            ids = dataset.ids
+            intersection = set(ids) & set(id2dataset_index)
             if intersection:
                 raise RuntimeError(f'Ids {intersection} are duplicated in merged datasets.')
 
-            id2dataset_index.update({i: index for i in dataset.ids})
+            id2dataset_index.update({i: index for i in ids})
 
-        def branch_selector(identifier):
-            try:
-                return id2dataset_index[identifier]
-            except KeyError:
-                raise ValueError(f'Identifier {identifier} not found.') from None
-
-        self._layer = SwitchLayer(branch_selector, *(s._layer for s in blocks))
+        self._layer = SwitchLayer(id2dataset_index, [s._layer for s in blocks])
         self._methods = self._layer.compile()
 
 
@@ -72,7 +67,7 @@ class GroupBy(FromLayer):
 
 
 class Apply(FromLayer):
-    def __init__(self, **transform):
+    def __init__(self, **transform: Callable):
         super().__init__(ApplyLayer(transform))
 
 
@@ -99,7 +94,7 @@ class CacheToDisk(FromLayer):
                  names: MaybeStr, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
-        super().__init__(DiskCacheLayer(names, root, storage, serializer, metadata or {}))
+        super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
 class CacheRows(FromLayer):

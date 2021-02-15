@@ -39,11 +39,12 @@ def test_disk_locking(block_maker):
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
 
-    with TemporaryDirectory() as root, TemporaryDirectory() as storage:
-        th = Process(target=visit)
-        th.start()
-        visit()
-        th.join()
+    for _ in range(5):
+        with TemporaryDirectory() as root, TemporaryDirectory() as storage:
+            th = Process(target=visit)
+            th.start()
+            visit()
+            th.join()
 
 
 def test_disk_idempotency(block_maker):

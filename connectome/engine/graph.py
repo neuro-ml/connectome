@@ -148,7 +148,7 @@ def compute_masks(output: TreeNode, hashes):
     def visitor(node: TreeNode):
         if node not in cache:
             if node.is_leaf:
-                cache[node] = []
+                cache[node] = ()
                 return
 
             parents = node.parents
@@ -168,7 +168,7 @@ def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
 
         return hashes[node]
 
-    hashes = dict.fromkeys(inputs, NodeHash.from_leaf(Placeholder))
+    hashes = dict.fromkeys(inputs, _PLACEHOLDER)
     return visitor(output)
 
 
@@ -186,14 +186,5 @@ def render(node, cache, masks, hashes):
     return cache[node]
 
 
-class Placeholder:
-    """
-    A placeholder used to calculate the graph hash without inputs.
-    """
-
-    # TODO: singleton
-    def __init__(self):
-        raise RuntimeError("Don't init me!")
-
-# TODO:
-# PlaceholderHash = NodeHash.from_leaf(Placeholder)
+# a placeholder used to calculate the graph hash without inputs
+_PLACEHOLDER = NodeHash.from_leaf(object())

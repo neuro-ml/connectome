@@ -1,7 +1,11 @@
+from typing import Sequence, Any
+
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
-from ..engine.base import BoundEdge, Node, TreeNode
-from ..engine.edges import CacheEdge, IdentityEdge, CachedRow
+from ..engine import NodeHash
+from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, Edge
+from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
+from ..engine.node_hash import NodeHashes
 from ..utils import node_to_dict
 from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
@@ -104,3 +108,58 @@ class CacheRowsLayer(CacheBase):
                 outputs.append(local)
 
         return EdgesBag([key], outputs, edges, IdentityContext())
+
+
+class CachedRow(Edge):
+    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph):
+        super().__init__(arity=3, uses_hash=True)
+        self.graph = graph
+        self.disk = disk
+        self.ram = ram
+
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        """
+        Hashes
+        ------
+        entry: the hash for the entry at ``key``
+        key: a unique key for each entry in the tuple
+        keys: all available keys
+        """
+        return inputs[0]
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        if self.ram.contains(output):
+            return []
+        return [1, 2]
+
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return inputs[0]
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+        if not arguments:
+            return self.ram.get(node_hash)
+
+        key, keys = arguments
+        keys = sorted(keys)
+        assert key in keys
+
+        hashes = []
+        for k in keys:
+            h = self.graph.eval_hash(NodeHash.from_leaf(k))
+            hashes.append(h)
+            if k == key:
+                assert node_hash == h
+        compound = NodeHash.from_hash_nodes(*hashes)
+
+        if not self.disk.contains(compound):
+            values = [self.graph.eval(k) for k in keys]
+            self.disk.set(compound, values)
+        else:
+            values = self.disk.get(compound)
+
+        for k, h, value in zip(keys, hashes, values):
+            self.ram.set(h, value)
+            if k == key:
+                result = value
+
+        return result

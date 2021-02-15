@@ -1,11 +1,12 @@
 from collections import defaultdict
-from typing import Sequence
+from typing import Sequence, Any
 
 from .base import EdgesBag, Wrapper, NoContext
 from ..engine import NodeHash
-from ..engine.base import Node, TreeNode, NodeHashes, NodesMask, FULL_MASK, HashType
-from ..engine.edges import PropagateNothing, FunctionEdge
+from ..engine.base import Node, TreeNode, NodeHashes, NodesMask, FULL_MASK, Edge
+from ..engine.edges import FunctionEdge
 from ..engine.graph import Graph
+from ..engine.node_hash import HashType
 
 
 class GroupLayer(Wrapper):
@@ -54,13 +55,13 @@ class GroupLayer(Wrapper):
         return EdgesBag([changed_input], outputs, edges, NoContext())
 
 
-class MappingEdge(PropagateNothing):
+class MappingEdge(Edge):
     def __init__(self, graph):
         super().__init__(arity=1, uses_hash=True)
         self.graph = graph
         self._mapping = None
 
-    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         return NodeHash.from_hash_nodes(
             *inputs, self.graph.hash(),
             kind=HashType.MAPPING,
@@ -71,7 +72,7 @@ class MappingEdge(PropagateNothing):
             return []
         return FULL_MASK
 
-    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
         if self._mapping is not None:
             return self._mapping
 
@@ -83,15 +84,15 @@ class MappingEdge(PropagateNothing):
         return mapping
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return self._propagate(inputs)
+        return self._propagate_hash(inputs)
 
 
-class GroupEdge(PropagateNothing):
+class GroupEdge(Edge):
     def __init__(self, graph):
         super().__init__(arity=2, uses_hash=True)
         self.graph = graph
 
-    def _propagate(self, inputs: Sequence[NodeHash]) -> NodeHash:
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         return NodeHash.from_hash_nodes(
             *inputs, self.graph.hash(),
             kind=HashType.GROUPING,
@@ -100,7 +101,7 @@ class GroupEdge(PropagateNothing):
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
         return FULL_MASK
 
-    def _eval(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
         # get the required ids
         ids = arguments[1][arguments[0]]
 
@@ -111,7 +112,7 @@ class GroupEdge(PropagateNothing):
         return result
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return self._propagate(inputs)
+        return self._propagate_hash(inputs)
 
 
 def extract_keys(d):

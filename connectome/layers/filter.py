@@ -1,10 +1,12 @@
-from typing import Callable
+from typing import Callable, Sequence, Any
 
 from .base import EdgesBag, Wrapper
 from .cache import IdentityContext
-from ..engine.base import BoundEdge, Node, TreeNode
-from ..engine.edges import FilterEdge, ProductEdge
+from ..engine import NodeHash
+from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, FULL_MASK, Edge
+from ..engine.edges import ProductEdge
 from ..engine.graph import Graph
+from ..engine.node_hash import NodeHashes, HashType
 from ..utils import extract_signature, node_to_dict
 
 
@@ -53,3 +55,37 @@ class FilterLayer(Wrapper):
         graph = self._make_graph(layer)
         edges.append(BoundEdge(FilterEdge(self.predicate, graph), [ids], out))
         return EdgesBag(main.inputs, outputs, edges, IdentityContext())
+
+
+class FilterEdge(Edge):
+    def __init__(self, func: Callable, graph: Graph):
+        super().__init__(arity=1, uses_hash=False)
+        self.graph = graph
+        self.func = func
+
+    def _make_hash(self, hashes):
+        keys, = hashes
+        args = self.graph.hash()
+        return NodeHash.from_hash_nodes(
+            NodeHash.from_leaf(self.func), keys, args,
+            kind=HashType.FILTER,
+        )
+
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        return self._make_hash(inputs)
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
+
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return self._make_hash(inputs)
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+        keys, = arguments
+        result = []
+        for key in keys:
+            args = self.graph.eval(key)
+            if self.func(*args):
+                result.append(key)
+
+        return tuple(result)

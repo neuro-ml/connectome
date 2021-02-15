@@ -1,106 +1,81 @@
 from collections import defaultdict
-from typing import Callable, Sequence
+from typing import Sequence
 
-from .pipeline import PipelineLayer
-from .transform import TransformLayer
-from ..engine.edges import ProductEdge, SwitchEdge, ProjectionEdge, IdentityEdge, FunctionEdge
-from ..engine.base import Node, BoundEdge, NodeHash, HashType
+from ..engine.edges import ValueEdge
+from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode
+from ..engine.graph import Graph
+from ..engine.node_hash import HashType
+from ..utils import node_to_dict
 from .base import EdgesBag
 
 
-def merge_tuple(x: Sequence[tuple]):
-    return sum(map(tuple, x), ())
-
-
-class SwitchLayer(PipelineLayer):
-    """
-    Parameters
-    ----------
-    selector
-        returns the index of the branch to be evaluated
-    """
-
-    def __init__(self, selector: Callable, *layers: EdgesBag):
-        self.selector = selector
+class SwitchLayer(EdgesBag):
+    def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag]):
         self.layers = layers
-        self.core = TransformLayer(*self.create_graph())
-        super().__init__(self.make_switch(), self.core, self.make_projector())
-
-    def make_switch(self):
-        def find_leaves(nh: NodeHash):
-            if nh.kind == HashType.LEAF:
-                yield nh.data
-
-            else:
-                for child in nh.children:
-                    yield from find_leaves(child)
-
-        def selector(idx):
-            def func(value: NodeHash):
-                leaf, = find_leaves(value)
-                selected = self.selector(leaf)
-                assert 0 <= selected < len(self.core.inputs), selected
-                return selected == idx
-
-            return func
-
-        inputs = [Node('input')]
-        edges, outputs = [], []
-        for i, output in enumerate(self.core.inputs):
-            output = Node(output.name)
-            outputs.append(output)
-            edges.append(BoundEdge(SwitchEdge(selector(i)), inputs, output))
-
-        return TransformLayer(inputs, outputs, edges)
+        self.id_to_index = id_to_index
+        super().__init__(*self.create_graph(), context=None)
 
     def create_graph(self):
-        # TODO: backwards support?
-        inputs = []
-        all_edges = []
-        output_groups = defaultdict(list)
+        # find outputs
+        common_outputs = {x.name for x in self.layers[0].outputs} - {'ids'}
+        for layer in self.layers[1:]:
+            common_outputs &= {x.name for x in layer.outputs}
+
+        # compile graphs
+        graphs = defaultdict(list)
         for layer in self.layers:
             layer_params = layer.freeze()
             inp, = layer_params.inputs
-            inputs.append(inp)
+            out = node_to_dict(layer_params.outputs)
+            mapping = TreeNode.from_edges(layer_params.edges)
 
-            for output in layer_params.outputs:
-                output_groups[output.name].append(output)
+            for name in common_outputs:
+                graphs[name].append(Graph([mapping[inp]], mapping[out[name]]))
 
-            all_edges.extend(layer_params.edges)
-
-        arity = len(self.layers)
-        outputs = []
-        for name, nodes in output_groups.items():
-            if len(nodes) != arity:
-                continue
-
-            output = Node(name)
-            outputs.append(output)
-            all_edges.append(BoundEdge(ProductEdge(arity), nodes, output))
-
-        assert outputs
-
-        # avoiding name clashes
-        unique_inputs = []
-        for idx, node in enumerate(inputs):
-            inp = Node(f'arg{idx}')
-            unique_inputs.append(inp)
-            all_edges.append(BoundEdge(IdentityEdge(), [inp], node))
-
-        return unique_inputs, outputs, all_edges
-
-    def make_projector(self):
-        inputs, outputs, edges = [], [], []
-        for node in self.core.outputs:
-            inp, out = Node(node.name), Node(node.name)
-            inputs.append(inp)
+        # make outputs
+        inp = Node('id')
+        outputs, edges = [], []
+        for name, graph in graphs.items():
+            out = Node(name)
             outputs.append(out)
-            # FIXME: this is a dirty hack for now
-            if node.name == 'ids':
-                edge = FunctionEdge(merge_tuple, arity=1)
-            else:
-                edge = ProjectionEdge()
+            edges.append(SwitchEdge(self.id_to_index, graph).bind(inp, out))
 
-            edges.append(BoundEdge(edge, [inp], out))
+        # and ids
+        ids = Node('ids')
+        outputs.append(ids)
+        edges.append(ValueEdge(tuple(sorted(self.id_to_index))).bind([], ids))
 
-        return TransformLayer(inputs, outputs, edges)
+        return [inp], outputs, edges
+
+
+class SwitchEdge(Edge):
+    def __init__(self, id_to_index: dict, graphs: Sequence[Graph]):
+        super().__init__(arity=1, uses_hash=True)
+        self.graphs = graphs
+        self.id_to_index = id_to_index
+
+    def _select_graph(self, key):
+        try:
+            return self.graphs[self.id_to_index[key]]
+        except KeyError:
+            raise ValueError(f'Identifier {key} not found.') from None
+
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        node_hash, = inputs
+        assert node_hash.kind == HashType.LEAF
+        graph = self._select_graph(node_hash.data)
+        return graph.eval_hash(*inputs)
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return FULL_MASK
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+        key, = arguments
+        graph = self._select_graph(key)
+        return graph.eval(key)
+
+    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+        return NodeHash.from_hash_nodes(
+            *inputs, *(graph.hash() for graph in self.graphs),
+            kind=HashType.MERGE
+        )
