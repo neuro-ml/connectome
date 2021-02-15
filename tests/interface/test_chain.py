@@ -1,6 +1,4 @@
-from connectome import Source, Transform, Chain, CacheToRam
-from connectome.interface.decorators import insert
-from connectome.layers.transform import INHERIT_ALL
+from connectome import Source, Transform, Chain, CacheToRam, insert
 
 
 class DS(Source):
@@ -11,7 +9,7 @@ class DS(Source):
 
 # here `image` is a required input that has no output, but must be inherited
 class Some(Transform):
-    __inherit__ = INHERIT_ALL
+    __inherit__ = True
 
     @staticmethod
     @insert

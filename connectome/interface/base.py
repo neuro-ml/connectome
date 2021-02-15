@@ -5,6 +5,7 @@ from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
 from ..layers.shortcuts import IdentityLayer
+from ..layers.transform import InheritType
 from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory
 
@@ -217,9 +218,7 @@ class Transform(CallableBlock, metaclass=TransformBase, __root=True):
     # inplace transforms
     >>> Transform(image=lambda image: zoom(image, scale_factor=2))
     """
-
-    # TODO: Literal
-    __inherit__: Union[str, Sequence[str], bool] = ()
+    __inherit__: InheritType = ()
 
 
 # TODO add inheritance

@@ -2,7 +2,7 @@ import inspect
 
 from ..engine.edges import FunctionEdge, IdentityEdge, ValueEdge
 from ..engine.base import Node, BoundEdge
-from ..layers.transform import TransformLayer, INHERIT_ALL
+from ..layers.transform import TransformLayer
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
     PositionalDecoratorAdapter
@@ -88,7 +88,7 @@ def unwrap_transform(value):
 
 
 INIT_NAME = '__init__'
-ALLOWED_MAGIC = {'__module__', '__qualname__', '__inherit__'}
+SILENT_MAGIC = {'__module__', '__qualname__'}
 
 
 class GraphFactory:
@@ -119,6 +119,7 @@ class GraphFactory:
         # names of persistent nodes
         # TODO move it somewhere
         self.persistent_node_names = ['ids', 'id']
+        self.magic_dispatch = {}
         self._init()
         self._validate()
         self._collect_nodes()
@@ -129,9 +130,6 @@ class GraphFactory:
     def _validate(self):
         # e.g. check allowed magic here
         # or names and values
-        raise NotImplementedError
-
-    def _process_inherit(self, value):
         raise NotImplementedError
 
     def _process_parameter(self, name, value) -> BoundEdge:
@@ -158,11 +156,13 @@ class GraphFactory:
         self.parameters.freeze()
         # gather, inputs, outputs and their edges
         for name, value in self.scope.items():
-            # TODO: func
-            # TODO: move to validate?
             if name.startswith('__'):
-                if name == '__inherit__':
-                    self._process_inherit(value)
+                if name in SILENT_MAGIC:
+                    continue
+                if name not in self.magic_dispatch:
+                    raise RuntimeError(f'Unrecognized magic method "{name}"')
+
+                self.magic_dispatch[name](value)
 
             elif is_parameter(name, value):
                 self.edges.append(self._process_parameter(name, value))
@@ -276,9 +276,6 @@ class SourceFactory(GraphFactory):
         # require docstring
         pass
 
-    def _process_inherit(self, value):
-        raise ValueError
-
     def _get_first(self, name, annotations):
         if is_local(annotations[name]):
             raise TypeError('The first argument cannot be local')
@@ -317,6 +314,9 @@ class SourceFactory(GraphFactory):
 class TransformFactory(GraphFactory):
     def _validate(self):
         pass
+
+    def _init(self):
+        self.magic_dispatch['__inherit__'] = self._process_inherit
 
     def _get_input(self, name, annotation, input_nodes):
         # 3 cases here:
@@ -359,12 +359,14 @@ class TransformFactory(GraphFactory):
 
         return inputs
 
-    # TODO: magic_dispatch
     def _process_inherit(self, value):
         if isinstance(value, str):
             value = [value]
 
-        if value != INHERIT_ALL:
+        if isinstance(value, bool):
+            # TODO exception
+            assert value
+        else:
             for node_name in value:
                 # TODO exception
                 assert isinstance(node_name, str)

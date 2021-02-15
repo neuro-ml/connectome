@@ -1,6 +1,6 @@
 from typing import Callable, Dict, Iterable
 
-from .transform import TransformLayer, INHERIT_ALL
+from .transform import TransformLayer
 from ..engine.base import Node
 from ..engine.edges import FunctionEdge, IdentityEdge
 
@@ -14,7 +14,7 @@ class ApplyLayer(TransformLayer):
             outputs.append(out)
             edges.append(FunctionEdge(func, arity=1).bind(inp, out))
 
-        super().__init__(inputs, outputs, edges, inherit_nodes=INHERIT_ALL)
+        super().__init__(inputs, outputs, edges, inherit_nodes=True)
 
 
 class IdentityLayer(TransformLayer):
@@ -26,4 +26,4 @@ class IdentityLayer(TransformLayer):
             outputs.append(out)
             edges.append(IdentityEdge().bind(inp, out))
 
-        super().__init__(inputs, outputs, edges, inherit_nodes=INHERIT_ALL)
+        super().__init__(inputs, outputs, edges, inherit_nodes=True)

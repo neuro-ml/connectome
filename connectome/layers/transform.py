@@ -1,4 +1,4 @@
-from typing import Tuple, Sequence
+from typing import Tuple, Sequence, Union
 
 from .base import Context, EdgesBag, update_map
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
@@ -7,19 +7,23 @@ from ..engine.graph import count_entries
 from ..utils import check_for_duplicates, node_to_dict
 
 INHERIT_ALL = True
+# TODO: Literal
+InheritType = Union[str, Sequence[str], bool]
 
 
 class TransformLayer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
                  backward_outputs: Nodes = (), optional_nodes: Sequence[str] = (),
-                 inherit_nodes: Sequence[str] = (), persistent_nodes: Sequence[str] = ()):
+                 inherit_nodes: InheritType = (), persistent_nodes: Sequence[str] = ()):
         super().__init__(
             inputs, outputs, edges,
             BagContext(backward_inputs, backward_outputs, inherit_nodes)
         )
         check_for_duplicates(node_to_dict(inputs).keys())
 
-        if inherit_nodes != INHERIT_ALL:
+        if isinstance(inherit_nodes, bool):
+            assert inherit_nodes
+        else:
             inherit_nodes = tuple(inherit_nodes)
 
         self.inherit_nodes = inherit_nodes
