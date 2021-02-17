@@ -123,7 +123,7 @@ class PipelineContext(Context):
 
 
 class BagContext(Context):
-    def __init__(self, inputs: Nodes, outputs: Nodes, inherit: Sequence[str]):
+    def __init__(self, inputs: Nodes, outputs: Nodes, inherit: InheritType):
         self.inputs = inputs
         self.outputs = outputs
         self.inherit = inherit

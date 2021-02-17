@@ -7,6 +7,7 @@ from connectome import Source, Transform, inverse, optional, positional
 class FirstDS(Source):
     _first_constant = 1
     _ids_arg = 4
+    _annotated: tuple
 
     @staticmethod
     def ids(_ids_arg):

@@ -68,7 +68,6 @@ class TreeNode:
     __slots__ = 'name', '_edge'
 
     def __init__(self, name: str, edge: Optional[Tuple[Edge, Sequence['TreeNode']]]):
-        # TODO: rename edge to _edge
         self.name, self._edge = name, edge
 
     @property
