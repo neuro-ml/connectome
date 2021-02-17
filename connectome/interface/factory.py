@@ -88,7 +88,7 @@ def unwrap_transform(value):
 
 
 INIT_NAME = '__init__'
-SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__'}
+SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__', '__doc__'}
 
 
 class GraphFactory:
