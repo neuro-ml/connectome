@@ -1,4 +1,4 @@
-from typing import Callable, Sequence, Union
+from typing import Callable
 
 from .utils import MaybeStr
 from ..engine.base import TreeNode
@@ -131,27 +131,15 @@ class SourceBase(type):
         if flags.get('__root', False):
             def __init__(*args, **kwargs):
                 raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
+
+            scope = {'__init__': __init__}
+
         else:
             # TODO: exception
             assert bases == (Source,)
+            scope = SourceFactory.make_scope(namespace)
 
-            def __init__(*args, **kwargs):
-                assert args
-                if len(args) > 1:
-                    raise TypeError('This constructor accepts only keyword arguments.')
-                self = args[0]
-
-                # TODO: split into two objects: the first one holds the scope
-                #  the second one compiles the layer
-                factory = SourceFactory(namespace)
-                scope = factory.get_init_signature().bind_partial(**kwargs)
-                scope.apply_defaults()
-                # TODO: should only build if not called from super
-                factory.build(scope.kwargs)
-                self._layer = factory.get_layer()
-                self._methods = self._layer.compile()
-
-        return super().__new__(mcs, class_name, bases, {'__init__': __init__})
+        return super().__new__(mcs, class_name, bases, scope)
 
 
 class TransformBase(type):
@@ -174,32 +162,17 @@ class TransformBase(type):
                     assert callable(value)
                     local[name] = staticmethod(value)
 
-                factory = TransformFactory(local)
-                factory.build({})
-                self._layer = factory.get_layer()
+                self._layer = TransformFactory(local).build({})
                 self._methods = self._layer.compile()
+
+            scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
 
         else:
             # TODO: exception
             assert bases == (Transform,)
+            scope = TransformFactory.make_scope(namespace)
 
-            def __init__(*args, **kwargs):
-                assert args
-                if len(args) > 1:
-                    raise TypeError('This constructor accepts only keyword arguments.')
-                self, = args
-
-                # TODO: split into two objects: the first one holds the scope
-                #  the second one compiles the layer
-                factory = TransformFactory(namespace)
-                scope = factory.get_init_signature().bind_partial(**kwargs)
-                scope.apply_defaults()
-                # TODO: should only build if not called from super
-                factory.build(scope.kwargs)
-                self._layer = factory.get_layer()
-                self._methods = self._layer.compile()
-
-        return super().__new__(mcs, class_name, bases, {'__init__': __init__})
+        return super().__new__(mcs, class_name, bases, scope)
 
 
 class Transform(CallableBlock, metaclass=TransformBase, __root=True):

@@ -44,7 +44,7 @@ class IdentityEdge(Edge):
         return FULL_MASK
 
 
-class ValueEdge(Edge):
+class ConstantEdge(Edge):
     """
     Used in interface to provide constant parameters.
     """

@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Sequence
 
-from ..engine.edges import ValueEdge
+from ..engine.edges import ConstantEdge
 from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode
 from ..engine.graph import Graph
 from ..engine.node_hash import HashType
@@ -43,7 +43,7 @@ class SwitchLayer(EdgesBag):
         # and ids
         ids = Node('ids')
         outputs.append(ids)
-        edges.append(ValueEdge(tuple(sorted(self.id_to_index))).bind([], ids))
+        edges.append(ConstantEdge(tuple(sorted(self.id_to_index))).bind([], ids))
 
         return [inp], outputs, edges
 
