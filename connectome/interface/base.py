@@ -18,6 +18,10 @@ class CallableBlock(BaseBlock):
     _layer: EdgesBag
     _methods: dict
 
+    def __init__(self, layer: EdgesBag):
+        self._layer = layer
+        self._methods = layer.compile()
+
     def __getattr__(self, name):
         method = self._methods[name]
         # FIXME: hardcoded
@@ -96,11 +100,11 @@ class FromLayer(BaseBlock):
 
 
 class Chain(CallableBlock):
+    _layer: PipelineLayer
+
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
-        super().__init__()
+        super().__init__(PipelineLayer(head._layer, *(layer._layer for layer in tail)))
         self._blocks = [head, *tail]
-        self._layer: PipelineLayer = PipelineLayer(head._layer, *(layer._layer for layer in tail))
-        self._methods = self._layer.compile()
 
     def __getitem__(self, index):
         if isinstance(index, int):
@@ -138,6 +142,7 @@ class SourceBase(type):
             # TODO: exception
             assert bases == (Source,)
             scope = SourceFactory.make_scope(namespace)
+            bases = CallableBlock,
 
         return super().__new__(mcs, class_name, bases, scope)
 
@@ -171,6 +176,7 @@ class TransformBase(type):
             # TODO: exception
             assert bases == (Transform,)
             scope = TransformFactory.make_scope(namespace)
+            bases = CallableBlock,
 
         return super().__new__(mcs, class_name, bases, scope)
 

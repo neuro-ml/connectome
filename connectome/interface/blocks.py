@@ -16,8 +16,6 @@ from .utils import MaybeStr
 
 class Merge(CallableBlock):
     def __init__(self, *blocks: CallableBlock):
-        super().__init__()
-
         id2dataset_index = {}
         for index, dataset in enumerate(blocks):
             ids = dataset.ids
@@ -27,8 +25,7 @@ class Merge(CallableBlock):
 
             id2dataset_index.update({i: index for i in ids})
 
-        self._layer = SwitchLayer(id2dataset_index, [s._layer for s in blocks])
-        self._methods = self._layer.compile()
+        super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks]))
 
 
 class Filter(FromLayer):

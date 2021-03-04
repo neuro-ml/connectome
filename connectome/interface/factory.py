@@ -219,8 +219,7 @@ class GraphFactory:
 
             arguments = signature.bind_partial(**kwargs)
             arguments.apply_defaults()
-            self._layer = factory.build(arguments.arguments)
-            self._methods = self._layer.compile()
+            super(type(self), self).__init__(factory.build(arguments.arguments))
 
         __init__.__signature__ = signature
         scope = {'__init__': __init__}
