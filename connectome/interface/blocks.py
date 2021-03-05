@@ -4,6 +4,7 @@ from paramiko.config import SSH_PORT
 
 from .base import FromLayer, CallableBlock
 from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
+from ..layers.debug import HashDigestLayer
 from ..layers.filter import FilterLayer
 from ..layers.goup import GroupLayer
 from ..layers.merge import SwitchLayer
@@ -122,3 +123,8 @@ class RemoteStorage(RemoteStorageBase):
         names = to_seq(names)
         options = [RemoteOptions(hostname, Path(path), port, username, password) for path in storage]
         super().__init__(options, _resolve_serializer(serializer), names)
+
+
+class HashDigest(FromLayer):
+    def __init__(self, names: Sequence[str]):
+        super().__init__(HashDigestLayer(names))
