@@ -1,12 +1,12 @@
 from typing import Iterable, Sequence
 
-from .transform import TransformLayer, INHERIT_ALL
+from .transform import TransformLayer
 from ..cache.disk import key_to_relative
 from ..engine.base import Node, NodeHash, NodesMask
 from ..engine.edges import IdentityEdge
 
 
-class HashDigest(IdentityEdge):
+class HashDigestEdge(IdentityEdge):
     def __init__(self):
         super().__init__()
         self._uses_hash = True
@@ -23,6 +23,6 @@ class HashDigestLayer(TransformLayer):
             inp, out = Node(name), Node(name)
             inputs.append(inp)
             outputs.append(out)
-            edges.append(HashDigest().bind(inp, out))
+            edges.append(HashDigestEdge().bind(inp, out))
 
         super().__init__(inputs, outputs, edges, inherit_nodes=True)
