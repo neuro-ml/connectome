@@ -1,6 +1,6 @@
 from collections import Counter
 
-from connectome import positional, Local, Source, Chain, Transform, Merge
+from connectome import positional, Local, Source, Chain, Transform, Merge, meta
 
 
 def test_single_with_params():
@@ -8,19 +8,16 @@ def test_single_with_params():
         _some_constant = 1
         _ids_arg = 4
 
-        @staticmethod
+        @meta
         def ids(_ids_arg):
             return _ids_arg
 
-        @staticmethod
         def output_method(i, _some_constant, _second_param):
             return f'<output>_{i}_{_some_constant}_{_second_param}'
 
-        @staticmethod
         def _second_param(i, _first_param, _some_constant):
             return f'<second>_{i}_{_some_constant}_{_first_param}'
 
-        @staticmethod
         def _first_param(i, _some_constant):
             return f'<first>_{i}_{_some_constant}'
 
@@ -185,24 +182,19 @@ def test_instance(block_maker):
 
 def test_locals(block_maker):
     class NoLocal(Transform):
-        @staticmethod
         def _shape(image):
             return len(image)
 
-        @staticmethod
         def shape(_shape):
             return _shape
 
-        @staticmethod
         def image(image, _shape):
             return f'{image} shape: {_shape}'
 
     class WithLocal(Transform):
-        @staticmethod
         def shape(image):
             return len(image)
 
-        @staticmethod
         def image(image, shape: Local):
             return f'{image} shape: {shape}'
 

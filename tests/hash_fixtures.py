@@ -3,7 +3,7 @@ from typing import Sequence, Tuple
 import pytest
 
 from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node, NodeHashes
-from connectome.interface.base import FromLayer
+from connectome.interface.base import BaseBlock
 from connectome.layers.base import Wrapper, EdgesBag
 from connectome.layers.transform import TransformLayer
 
@@ -40,4 +40,4 @@ class HashLayer(Wrapper):
 
 @pytest.fixture
 def hash_layer():
-    return FromLayer(HashLayer())
+    return BaseBlock(HashLayer())

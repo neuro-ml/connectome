@@ -1,21 +1,17 @@
-from connectome import Source
-from connectome.interface.blocks import GroupBy
+from connectome import Source, GroupBy, meta
 
 
 class DS(Source):
-    @staticmethod
+    @meta
     def ids():
         return tuple('0123456789')
 
-    @staticmethod
     def same(i):
         return i
 
-    @staticmethod
     def two(i):
         return str(int(i) // 2)
 
-    @staticmethod
     def three(i):
         return str(int(i) // 3)
 

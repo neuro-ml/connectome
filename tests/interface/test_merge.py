@@ -1,33 +1,30 @@
-from connectome import Source, Merge, Transform, Chain, positional
+from connectome import Source, Merge, Transform, Chain, positional, meta
 from connectome.engine.base import NodeHash
 
 
 class One(Source):
-    @staticmethod
+    @meta
     def ids():
         return tuple('123')
 
-    @staticmethod
     def image(i):
         return f'One: {i}'
 
 
 class Two(Source):
-    @staticmethod
+    @meta
     def ids():
         return tuple('456')
 
-    @staticmethod
     def image(i):
         return f'Two: {i}'
 
 
 class Three(Source):
-    @staticmethod
+    @meta
     def ids():
         return tuple('789')
 
-    @staticmethod
     def image(i):
         return f'Three: {i}'
 
@@ -64,7 +61,6 @@ def test_simple(hash_layer):
 
 def test_chained():
     class Underscore(Transform):
-        @staticmethod
         @positional
         def image(x):
             return f'_{x}'

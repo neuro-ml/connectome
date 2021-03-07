@@ -1,4 +1,4 @@
-from typing import Tuple, Sequence, Union
+from typing import Tuple, Sequence, Union, Iterable
 
 from .base import Context, EdgesBag, update_map
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
@@ -8,7 +8,7 @@ from ..utils import check_for_duplicates, node_to_dict
 
 INHERIT_ALL = True
 # TODO: Literal
-InheritType = Union[str, Sequence[str], bool]
+InheritType = Union[str, Iterable[str], bool]
 
 
 class TransformLayer(EdgesBag):

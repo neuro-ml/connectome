@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Union, Sequence, Callable
 from paramiko.config import SSH_PORT
 
-from .base import FromLayer, CallableBlock
+from .base import BaseBlock, CallableBlock
 from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
 from ..layers.debug import HashDigestLayer
 from ..layers.filter import FilterLayer
@@ -17,19 +17,31 @@ from .utils import MaybeStr
 
 class Merge(CallableBlock):
     def __init__(self, *blocks: CallableBlock):
+        properties = [set(block._properties) for block in blocks]
+        inter = set.intersection(*properties)
+        union = set.union(*properties)
+        if inter != union:
+            raise ValueError(f'All inputs must have the same properties: {properties}')
+        properties = inter
+        if not properties:
+            raise ValueError('The datasets do not contain properties.')
+        if len(properties) > 1:
+            raise ValueError(f'Can\'t decide which property to use as ids.')
+        ids_name, = properties
+
         id2dataset_index = {}
         for index, dataset in enumerate(blocks):
-            ids = dataset.ids
+            ids = getattr(dataset, ids_name)
             intersection = set(ids) & set(id2dataset_index)
             if intersection:
                 raise RuntimeError(f'Ids {intersection} are duplicated in merged datasets.')
 
             id2dataset_index.update({i: index for i in ids})
 
-        super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks]))
+        super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks]), properties)
 
 
-class Filter(FromLayer):
+class Filter(BaseBlock):
     """
     Filters the `ids` of the current pipeline given a ``predicate``.
 
@@ -53,18 +65,18 @@ class Filter(FromLayer):
 
     @classmethod
     def keep(cls, ids: Sequence[str]):
-        """Removes the all the ids not present in ``ids``."""
+        """Removes all the ids not present in ``ids``."""
         assert all(isinstance(i, str) for i in ids)
         ids = set(ids)
         return cls(lambda id: id in ids)
 
 
-class GroupBy(FromLayer):
+class GroupBy(BaseBlock):
     def __init__(self, name: str):
         super().__init__(GroupLayer(name))
 
 
-class Apply(FromLayer):
+class Apply(BaseBlock):
     def __init__(self, **transform: Callable):
         super().__init__(ApplyLayer(transform))
 
@@ -81,12 +93,16 @@ def _resolve_serializer(serializer):
     return serializer
 
 
-class CacheToRam(FromLayer):
+class CacheBlock(BaseBlock):
+    pass
+
+
+class CacheToRam(CacheBlock):
     def __init__(self, names: MaybeStr = None, size: int = None):
         super().__init__(MemoryCacheLayer(names, size))
 
 
-class CacheToDisk(FromLayer):
+class CacheToDisk(CacheBlock):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
@@ -95,7 +111,7 @@ class CacheToDisk(FromLayer):
         super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
-class CacheRows(FromLayer):
+class CacheRows(CacheBlock):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
@@ -104,7 +120,7 @@ class CacheRows(FromLayer):
         super().__init__(CacheRowsLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
-class RemoteStorageBase(FromLayer):
+class RemoteStorageBase(CacheBlock):
     def __init__(self, options: Sequence[RemoteOptions],
                  serializer: Union[Serializer, Sequence[Serializer]], names: MaybeStr = None):
         names = to_seq(names)
@@ -122,6 +138,6 @@ class RemoteStorage(RemoteStorageBase):
         super().__init__(options, _resolve_serializer(serializer), names)
 
 
-class HashDigest(FromLayer):
+class HashDigest(BaseBlock):
     def __init__(self, names: Sequence[str]):
         super().__init__(HashDigestLayer(names))

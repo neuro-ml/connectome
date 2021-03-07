@@ -5,7 +5,7 @@ from ..engine.base import Node, BoundEdge
 from ..layers.transform import TransformLayer
 from ..utils import extract_signature, MultiDict
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
-    PositionalDecoratorAdapter
+    PositionalDecoratorAdapter, PropertyDecoratorAdapter
 from .utils import Local
 
 
@@ -35,19 +35,22 @@ def is_private(name: str):
     return name.startswith('_')
 
 
+def is_callable(value):
+    return callable(value) or isinstance(value, DecoratorAdapter)
+
+
 def is_constant(name: str, value):
-    return is_private(name) and not isinstance(value, staticmethod)
+    return is_private(name) and not is_callable(value)
 
 
 def is_parameter(name: str, value):
-    return is_private(name) and isinstance(value, staticmethod)
+    return is_private(name) and is_callable(value)
 
 
 def is_forward(name: str, value):
     return (
             not is_private(name)
-            # TODO: enforce staticmethod
-            and isinstance(value, staticmethod)
+            and is_callable(value)
             and InverseDecoratorAdapter not in get_decorators(value)
     )
 
@@ -55,9 +58,13 @@ def is_forward(name: str, value):
 def is_backward(name: str, value):
     return (
             not is_private(name)
-            and isinstance(value, staticmethod)
+            and is_callable(value)
             and InverseDecoratorAdapter in get_decorators(value)
     )
+
+
+def is_property(value):
+    return PropertyDecoratorAdapter in get_decorators(value)
 
 
 def is_local(annotation):
@@ -65,8 +72,6 @@ def is_local(annotation):
 
 
 def get_decorators(value):
-    assert isinstance(value, staticmethod)
-    value = value.__func__
     decorators = []
     while isinstance(value, DecoratorAdapter):
         decorators.append(type(value))
@@ -80,8 +85,6 @@ def to_argument(name):
 
 
 def unwrap_transform(value):
-    assert isinstance(value, staticmethod)
-    value = value.__func__
     while isinstance(value, DecoratorAdapter):
         value = value.__func__
     return value
@@ -109,17 +112,25 @@ class GraphFactory:
         # placeholders for constant parameters
         self.constants = NodeStorage()
         # names of optional nodes
-        self.optional_node_names = []
+        self.optional_names = set()
         # names of inherited nodes
-        self.inherited_node_names = []
+        self.inherited_names = set()
+        # metadata
+        self.property_names = set()
         # names of persistent nodes
         # TODO move it somewhere
-        self.persistent_node_names = ['ids', 'id']
+        self.persistent_names = {'ids', 'id'}
         self.docstring = None
         self.magic_dispatch = {'__doc__': self._process_doc}
         self._init()
-        self._validate()
         self._collect_nodes()
+        self._validate()
+
+    @staticmethod
+    def _remove_staticmethod(value):
+        if isinstance(value, staticmethod):
+            value = value.__func__
+        return value
 
     def _init(self):
         pass
@@ -127,7 +138,7 @@ class GraphFactory:
     def _validate(self):
         # e.g. check allowed magic here
         # or names and values
-        raise NotImplementedError
+        pass
 
     def _process_parameter(self, name, value) -> BoundEdge:
         raise NotImplementedError
@@ -150,12 +161,15 @@ class GraphFactory:
     def _collect_nodes(self):
         # gather parameters
         for name, value in self.scope.items():
+            value = self._remove_staticmethod(value)
             if is_parameter(name, value):
                 self.parameters.add(name)
 
         self.parameters.freeze()
         # gather, inputs, outputs and their edges
         for name, value in self.scope.items():
+            value = self._remove_staticmethod(value)
+
             if name.startswith('__'):
                 if name in SILENT_MAGIC:
                     continue
@@ -166,12 +180,18 @@ class GraphFactory:
 
             elif is_parameter(name, value):
                 self.edges.append(self._process_parameter(name, value))
+                if is_property(value):
+                    raise TypeError(f'Parameters can\'t also be properties: "{name}".')
 
             elif is_forward(name, value):
                 self.edges.append(self._process_forward(name, value))
+                if is_property(value):
+                    self.property_names.add(name)
 
             elif is_backward(name, value):
                 self.edges.append(self._process_backward(name, value))
+                if is_property(value):
+                    self.property_names.add(name)
 
             elif is_constant(name, value):
                 self.constants.add(name)
@@ -219,7 +239,7 @@ class GraphFactory:
 
             arguments = signature.bind_partial(**kwargs)
             arguments.apply_defaults()
-            super(type(self), self).__init__(factory.build(arguments.arguments))
+            super(type(self), self).__init__(factory.build(arguments.arguments), factory.property_names)
 
         __init__.__signature__ = signature
         scope = {'__init__': __init__}
@@ -236,9 +256,8 @@ class GraphFactory:
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            self.optional_node_names,
-            self.inherited_node_names,
-            self.persistent_node_names
+            optional_nodes=tuple(self.optional_names), inherit_nodes=self.inherited_names,
+            persistent_nodes=tuple(self.persistent_names),
         )
 
 
@@ -247,14 +266,14 @@ class SourceFactory(GraphFactory):
         self.ID = self.inputs['id']
         self.inputs.freeze()
         self.edges.append(IdentityEdge().bind(self.ID, self.outputs['id']))
+        self.property_names.add('ids')
 
     def _validate(self):
-        # TODO: ids, id, magic
-        # require docstring
         pass
 
     def _get_first(self, name, annotations):
         if is_local(annotations[name]):
+            # TODO: no need
             raise TypeError('The first argument cannot be local')
         if is_private(name):
             return self._get_private(name)
@@ -289,9 +308,6 @@ class SourceFactory(GraphFactory):
 
 
 class TransformFactory(GraphFactory):
-    def _validate(self):
-        pass
-
     def _init(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit
 
@@ -350,13 +366,13 @@ class TransformFactory(GraphFactory):
 
             value = tuple(value)
 
-        self.inherited_node_names = value
+        self.inherited_names = value
 
     def _process_forward(self, name, value) -> BoundEdge:
         decorators = get_decorators(value)
         value = unwrap_transform(value)
         if OptionalDecoratorAdapter in decorators:
-            self.optional_node_names.append(name)
+            self.optional_names.add(name)
 
         inputs = self._get_inputs(name, value, self.inputs, decorators)
         return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])

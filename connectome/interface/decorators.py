@@ -2,9 +2,11 @@ from typing import Callable
 
 
 class DecoratorAdapter:
-    name = None
+    name: str
 
     def __init__(self, func: Callable):
+        if not callable(func):
+            raise TypeError('Can only decorate callable objects')
         self.__func__ = func
 
     def __get__(self, instance, owner):
@@ -31,6 +33,10 @@ class PositionalDecoratorAdapter(DecoratorAdapter):
     name = 'positional'
 
 
+class PropertyDecoratorAdapter(DecoratorAdapter):
+    name = 'property'
+
+
 def inverse(func: Callable):
     return InverseDecoratorAdapter(func)
 
@@ -45,3 +51,7 @@ def positional(func: Callable):
 
 def insert(func: Callable):
     return InsertDecoratorAdapter(func)
+
+
+def meta(func: Callable):
+    return PropertyDecoratorAdapter(func)

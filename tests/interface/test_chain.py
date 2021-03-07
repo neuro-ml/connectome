@@ -2,7 +2,6 @@ from connectome import Source, Transform, Chain, CacheToRam, insert
 
 
 class DS(Source):
-    @staticmethod
     def image(i):
         return i
 
@@ -11,12 +10,10 @@ class DS(Source):
 class Some(Transform):
     __inherit__ = True
 
-    @staticmethod
     @insert
     def shape(image):
         return image.shape
 
-    @staticmethod
     @insert
     def some_false():
         return False

@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Iterable
 
 from .utils import MaybeStr
 from ..engine.base import TreeNode
@@ -11,29 +11,23 @@ from .factory import SourceFactory, TransformFactory
 
 
 class BaseBlock:
-    _layer: Layer
+    def __init__(self, layer: Layer):
+        self._layer: Layer = layer
 
 
 class CallableBlock(BaseBlock):
     _layer: EdgesBag
     _methods: dict
 
-    def __init__(self, layer: EdgesBag):
-        self._layer = layer
-        self._methods = layer.compile()
+    def __init__(self, layer: EdgesBag, properties: Iterable[str]):
+        super().__init__(layer)
+        self._methods = self._layer.compile()
+        self._properties = set(properties)
 
     def __getattr__(self, name):
         method = self._methods[name]
-        # FIXME: hardcoded
-        if name == 'ids':
-            ids = method()
-            if not isinstance(ids, (tuple, list)):
-                raise ValueError(f'The ids must be a tuple of strings, not {type(ids)}')
-            if not all(isinstance(x, str) for x in ids):
-                raise ValueError(f'The ids must be a tuple of strings, not tuple of {type(ids[0])}')
-
-            return ids
-
+        if name in self._properties:
+            return method()
         return method
 
     def __rshift__(self, block: BaseBlock) -> 'Chain':
@@ -93,17 +87,14 @@ class Instance:
         return dir(self._block)
 
 
-class FromLayer(BaseBlock):
-    def __init__(self, layer):
-        super().__init__()
-        self._layer = layer
-
-
 class Chain(CallableBlock):
     _layer: PipelineLayer
 
     def __init__(self, head: CallableBlock, *tail: BaseBlock):
-        super().__init__(PipelineLayer(head._layer, *(layer._layer for layer in tail)))
+        super().__init__(
+            PipelineLayer(head._layer, *(layer._layer for layer in tail)),
+            head._properties,
+        )
         self._blocks = [head, *tail]
 
     def __getitem__(self, index):
@@ -116,7 +107,16 @@ class Chain(CallableBlock):
         raise ValueError('The index can be either an int or slice.')
 
     def _drop_cache(self):
-        return Chain(*map(FromLayer, self._layer.remove_cache_layers().layers))
+        from .blocks import CacheBlock
+
+        not_cache = []
+        for block in self._blocks:
+            if isinstance(block, Chain):
+                block = block._drop_cache()
+            if not isinstance(block, CacheBlock):
+                not_cache.append(block)
+
+        return Chain(*not_cache)
 
 
 def chained(*blocks: BaseBlock):
@@ -165,7 +165,7 @@ class TransformBase(type):
                 local['__inherit__'] = __inherit__
                 for name, value in kwargs.items():
                     assert callable(value)
-                    local[name] = staticmethod(value)
+                    local[name] = value
 
                 self._layer = TransformFactory(local).build({})
                 self._methods = self._layer.compile()
@@ -191,7 +191,6 @@ class Transform(CallableBlock, metaclass=TransformBase, __root=True):
     --------
     # class-based transforms
     >>> class Zoom(Transform):
-    >>>     @staticmethod
     >>>     def image(image):
     >>>         return zoom(image, scale_factor=2)
     # inplace transforms
@@ -199,7 +198,13 @@ class Transform(CallableBlock, metaclass=TransformBase, __root=True):
     """
     __inherit__: InheritType = ()
 
+    # these methods are ignored in the metaclass
+    # we use them only to help IDEs
+    def __init__(self, *args, **kwargs):
+        pass
+
 
 # TODO add inheritance
 class Source(CallableBlock, metaclass=SourceBase, __root=True):
-    pass
+    def __init__(self, *args, **kwargs):
+        pass

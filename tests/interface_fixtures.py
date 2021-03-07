@@ -1,7 +1,7 @@
 import re
 import pytest
 
-from connectome import Source, Transform, inverse, optional, positional
+from connectome import Source, Transform, inverse, optional, positional, meta
 
 
 class FirstDS(Source):
@@ -11,19 +11,16 @@ class FirstDS(Source):
     _ids_arg = 4
     _annotated: tuple
 
-    @staticmethod
+    @meta
     def ids(_ids_arg):
         return tuple(map(str, range(_ids_arg)))
 
-    @staticmethod
     def image(i, _first_constant):
         return f'image, {_first_constant}: {i}'
 
-    @staticmethod
     def lungs(i):
         return f'lungs: {i}'
 
-    @staticmethod
     def spacing(i):
         return f'spacing: {i}'
 
@@ -32,36 +29,30 @@ class SecondDS(Source):
     _ids_arg = 4
     _second_constant = 3
 
-    @staticmethod
+    @meta
     def ids(_ids_arg):
         return [f'second:{i}' for i in range(_ids_arg)]
 
-    @staticmethod
     def image(i, _second_constant):
         return f'second_ds_{_second_constant}_' + i
 
-    @staticmethod
     def lungs(i):
         return f'lungs: {i}'
 
-    @staticmethod
     def spacing(i):
         return f'spacing: {i}'
 
 
 class Crop(Transform):
-    @staticmethod
     def _size(image):
         return len(image)
 
-    @staticmethod
     @positional
     def image(x, _size):
         return x + f' transformed {_size}'
 
     spacing = lungs = image
 
-    @staticmethod
     @positional
     @inverse
     def image(x, _size):
@@ -73,14 +64,12 @@ class Crop(Transform):
 class Zoom(Transform):
     _spacing = None
 
-    @staticmethod
     @positional
     def image(x, _spacing):
         return x + _spacing
 
     spacing = lungs = image
 
-    @staticmethod
     @positional
     @inverse
     def image(x, _spacing):
@@ -92,25 +81,21 @@ class Zoom(Transform):
 class Optional(Transform):
     __inherit__ = ['image', 'spacing', 'lungs']
 
-    @staticmethod
     @optional
     @positional
     def first_optional(x):
         return x + 1
 
-    @staticmethod
     @positional
     @optional
     def second_optional(x):
         return str(x)
 
-    @staticmethod
     @positional
     @inverse
     def first_optional(x):
         return x - 1
 
-    @staticmethod
     @positional
     @inverse
     def second_optional(x):
