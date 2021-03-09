@@ -1,3 +1,4 @@
+import operator
 from pathlib import Path
 from typing import Union, Sequence, Callable
 from paramiko.config import SSH_PORT
@@ -6,7 +7,7 @@ from .base import BaseBlock, CallableBlock
 from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
 from ..layers.debug import HashDigestLayer
 from ..layers.filter import FilterLayer
-from ..layers.goup import GroupLayer
+from ..layers.goup import GroupLayer, MultiGroupLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, ChainSerializer
@@ -74,6 +75,13 @@ class Filter(BaseBlock):
 class GroupBy(BaseBlock):
     def __init__(self, name: str):
         super().__init__(GroupLayer(name))
+
+    @staticmethod
+    def _multiple(*names, **comparators):
+        assert set(comparators).issubset(names)
+        for name in names:
+            comparators.setdefault(name, operator.eq)
+        return BaseBlock(MultiGroupLayer(comparators))
 
 
 class Apply(BaseBlock):

@@ -12,6 +12,7 @@ class HashType(IntEnum):
     MAPPING = 3
     GROUPING = 4
     MERGE = 5
+    MULTI_MAPPING = 6
 
 
 class NodeHash:
