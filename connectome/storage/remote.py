@@ -51,8 +51,8 @@ class RelativeRemote:
         with SCPClient(self.ssh.get_transport()) as scp:
             try:
                 return scp.get(str(self.root / remote), str(local), recursive=True)
-            except (SCPException, socket.timeout):
-                raise FileNotFoundError from None
+            except (SCPException, socket.timeout) as e:
+                raise FileNotFoundError from e
 
     def __enter__(self):
         try:

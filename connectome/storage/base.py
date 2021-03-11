@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 
 import filecmp
@@ -10,6 +11,8 @@ from tqdm import tqdm
 from .local import StorageLocation, digest_file, digest_to_relative, FILENAME
 from .remote import RelativeRemote, RemoteOptions
 from ..utils import ChainDict, InsertError
+
+logger = logging.getLogger(__name__)
 
 
 class DiskOptions:
@@ -85,11 +88,13 @@ class BackupStorage(Storage):
             else:
                 missing.add(key)
 
+        logger.info(f'Fetch: {len(keys) - len(missing)} keys already present, fetching {len(missing)}')
         # extract as much as we can from each remote
         for remote in self.remotes:
             if not missing:
                 break
 
+            logger.info(f'Trying remote {remote.hostname}')
             with remote:
                 for key in list(missing):
                     relative = digest_to_relative(key) / FILENAME
@@ -97,7 +102,9 @@ class BackupStorage(Storage):
                         file = Path(temp_dir) / relative.name
                         try:
                             remote.get(relative, file)
+                            logger.info(f'Fetched {key[:8]}...')
                         except FileNotFoundError:
+                            logger.info(f'Key {key[:8]}... not found')
                             continue
 
                         self.local[key] = file
