@@ -1,6 +1,7 @@
 from typing import Sequence, Callable, Any
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes
+from .node_hash import HashType
 from ..cache import Cache
 
 
@@ -25,6 +26,16 @@ class FunctionEdge(Edge):
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
         return FULL_MASK
+
+
+class ComputableHashEdge(FunctionEdge):
+    def _calc_hash(self, inputs: NodeHashes):
+        args = []
+        for h in inputs:
+            assert h.kind == HashType.LEAF
+            args.append(h.data)
+
+        return NodeHash.from_leaf(self.function(*args))
 
 
 class IdentityEdge(Edge):

@@ -167,8 +167,8 @@ class TransformBase(type):
                     assert callable(value)
                     local[name] = value
 
-                self._layer = TransformFactory(local).build({})
-                self._methods = self._layer.compile()
+                factory = TransformFactory(local)
+                super(type(self), self).__init__(factory.build({}), factory.property_names)
 
             scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
 

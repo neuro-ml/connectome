@@ -1,9 +1,11 @@
 import inspect
+from typing import Dict, Callable, Any
 
-from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge
+from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge
 from ..engine.base import Node, BoundEdge
 from ..layers.transform import TransformLayer
 from ..utils import extract_signature, MultiDict
+from .prepared import ComputableHash, Prepared
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
     PositionalDecoratorAdapter, PropertyDecoratorAdapter
 from .utils import Local
@@ -121,7 +123,8 @@ class GraphFactory:
         # TODO move it somewhere
         self.persistent_names = {'ids', 'id'}
         self.docstring = None
-        self.magic_dispatch = {'__doc__': self._process_doc}
+        self.magic_dispatch: Dict[str, Callable[[Any], Any]] = {'__doc__': self._process_doc}
+        self.precomputed_dispatch: Dict[type, Callable] = {}
         self._init()
         self._collect_nodes()
         self._validate()
@@ -158,6 +161,12 @@ class GraphFactory:
             return self.parameters[name]
         return self.constants[name]
 
+    def _add_edges(self, value):
+        if isinstance(value, BoundEdge):
+            self.edges.append(value)
+        else:
+            self.edges.extend(value)
+
     def _collect_nodes(self):
         # gather parameters
         for name, value in self.scope.items():
@@ -178,18 +187,24 @@ class GraphFactory:
 
                 self.magic_dispatch[name](value)
 
+            elif isinstance(value, Prepared):
+                kind = type(value)
+                if kind not in self.precomputed_dispatch:
+                    raise RuntimeError(f'Unrecognized "prepared" method: "{name}"')
+                self._add_edges(self.precomputed_dispatch[kind](name, value))
+
             elif is_parameter(name, value):
-                self.edges.append(self._process_parameter(name, value))
+                self._add_edges(self._process_parameter(name, value))
                 if is_property(value):
                     raise TypeError(f'Parameters can\'t also be properties: "{name}".')
 
             elif is_forward(name, value):
-                self.edges.append(self._process_forward(name, value))
+                self._add_edges(self._process_forward(name, value))
                 if is_property(value):
                     self.property_names.add(name)
 
             elif is_backward(name, value):
-                self.edges.append(self._process_backward(name, value))
+                self._add_edges(self._process_backward(name, value))
                 if is_property(value):
                     self.property_names.add(name)
 
@@ -267,6 +282,7 @@ class SourceFactory(GraphFactory):
         self.inputs.freeze()
         self.edges.append(IdentityEdge().bind(self.ID, self.outputs['id']))
         self.property_names.add('ids')
+        self.precomputed_dispatch[ComputableHash] = self._process_precomputed
 
     def _validate(self):
         pass
@@ -285,6 +301,18 @@ class SourceFactory(GraphFactory):
         if not is_local(annotations[name]):
             raise ValueError('Source arguments must be either local or private')
         return self.outputs[name]
+
+    def _process_precomputed(self, name, value: ComputableHash):
+        names, annotations = extract_signature(value.precompute)
+        inputs = []
+        first, *names = names
+        inputs.append(self._get_first(first, annotations))
+        inputs.extend(self._get_internal(name, annotations) for name in names)
+        assert len(extract_signature(value.func)[0]) == 1
+
+        aux = Node('$aux')
+        yield ComputableHashEdge(value.precompute, len(inputs)).bind(inputs, aux)
+        yield FunctionEdge(value.func, 1).bind(aux, self.outputs[name])
 
     def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
@@ -305,6 +333,9 @@ class SourceFactory(GraphFactory):
         inputs = [self._get_first(first, annotations)]
         inputs.extend(self._get_internal(name, annotations) for name in names)
         return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
+
+    def _process_backward(self, name, value) -> BoundEdge:
+        raise RuntimeError('Source datasets do not support backward transformations')
 
 
 class TransformFactory(GraphFactory):

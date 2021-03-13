@@ -150,6 +150,8 @@ class BoundEdge(NamedTuple):
     inputs: 'Nodes'
     output: Node
 
+    __iter__ = None
+
 
 TreeNodes = Sequence[TreeNode]
 Nodes = Sequence[Node]
