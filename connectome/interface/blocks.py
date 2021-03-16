@@ -4,7 +4,7 @@ from typing import Union, Sequence, Callable
 from paramiko.config import SSH_PORT
 
 from .base import BaseBlock, CallableBlock
-from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheRowsLayer
+from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheColumnsLayer
 from ..layers.debug import HashDigestLayer
 from ..layers.filter import FilterLayer
 from ..layers.goup import GroupLayer, MultiGroupLayer
@@ -119,13 +119,13 @@ class CacheToDisk(CacheBlock):
         super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
-class CacheRows(CacheBlock):
+class CacheColumns(CacheBlock):
     def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
         storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
-        super().__init__(CacheRowsLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
+        super().__init__(CacheColumnsLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
 class RemoteStorageBase(CacheBlock):

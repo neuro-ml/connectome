@@ -73,7 +73,7 @@ class RemoteStorageLayer(CacheLayer):
         return self.storage
 
 
-class CacheRowsLayer(CacheBase):
+class CacheColumnsLayer(CacheBase):
     """
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
@@ -104,13 +104,13 @@ class CacheRowsLayer(CacheBase):
                 local = Node(name)
                 # build a graph for each node
                 graph = Graph(graph_inputs, mapping[outputs_copy[name]])
-                edges.append(BoundEdge(CachedRow(self.disk, self.ram, graph), [output, key, keys], local))
+                edges.append(BoundEdge(CachedColumn(self.disk, self.ram, graph), [output, key, keys], local))
                 outputs.append(local)
 
         return EdgesBag([key], outputs, edges, IdentityContext())
 
 
-class CachedRow(Edge):
+class CachedColumn(Edge):
     def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph):
         super().__init__(arity=3, uses_hash=True)
         self.graph = graph
