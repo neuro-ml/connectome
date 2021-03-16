@@ -11,9 +11,12 @@ PathLike = Union[Path, str]
 
 class MultiDict(dict):
     def items(self):
-        for key, values in super().items():
+        for key, values in self.groups():
             for value in values:
                 yield key, value
+
+    def groups(self):
+        return super().items()
 
     def __setitem__(self, key, value):
         if key not in self:
@@ -25,9 +28,7 @@ class MultiDict(dict):
         container.append(value)
 
     def __getitem__(self, key):
-        container = super().__getitem__(key)
-        # assert len(container) == 1
-        return container[-1]
+        return super().__getitem__(key)[-1]
 
 
 def extract_signature(func):

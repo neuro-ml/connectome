@@ -93,6 +93,7 @@ def unwrap_transform(value):
 
 
 SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__'}
+DOC_MAGIC = '__doc__'
 
 
 class GraphFactory:
@@ -123,7 +124,7 @@ class GraphFactory:
         # TODO move it somewhere
         self.persistent_names = {'ids', 'id'}
         self.docstring = None
-        self.magic_dispatch: Dict[str, Callable[[Any], Any]] = {'__doc__': self._process_doc}
+        self.magic_dispatch: Dict[str, Callable[[Any], Any]] = {DOC_MAGIC: self._process_doc}
         self.precomputed_dispatch: Dict[type, Callable] = {}
         self._init()
         self._collect_nodes()
@@ -259,7 +260,7 @@ class GraphFactory:
         __init__.__signature__ = signature
         scope = {'__init__': __init__}
         if factory.docstring is not None:
-            scope['__doc__'] = factory.docstring
+            scope[DOC_MAGIC] = factory.docstring
         return scope
 
     def build(self, arguments: dict) -> TransformLayer:
@@ -287,27 +288,25 @@ class SourceFactory(GraphFactory):
     def _validate(self):
         pass
 
-    def _get_first(self, name, annotations):
-        if is_local(annotations[name]):
-            # TODO: no need
-            raise TypeError('The first argument cannot be local')
-        if is_private(name):
-            return self._get_private(name)
-        return self.ID
+    def _get_inputs(self, names, annotations):
+        result = []
+        id_arg = None
+        for name in names:
+            if is_private(name):
+                result.append(self._get_private(name))
+            elif is_local(annotations[name]):
+                result.append(self.outputs[name])
+            else:
+                if id_arg is not None:
+                    raise TypeError(f'Trying to use multiple arguments as id: {name} and {id_arg}')
+                id_arg = name
+                result.append(self.ID)
 
-    def _get_internal(self, name, annotations):
-        if is_private(name):
-            return self._get_private(name)
-        if not is_local(annotations[name]):
-            raise ValueError('Source arguments must be either local or private')
-        return self.outputs[name]
+        return result
 
     def _process_precomputed(self, name, value: ComputableHash):
         names, annotations = extract_signature(value.precompute)
-        inputs = []
-        first, *names = names
-        inputs.append(self._get_first(first, annotations))
-        inputs.extend(self._get_internal(name, annotations) for name in names)
+        inputs = self._get_inputs(names, annotations)
         assert len(extract_signature(value.func)[0]) == 1
 
         aux = Node('$aux')
@@ -317,21 +316,13 @@ class SourceFactory(GraphFactory):
     def _process_forward(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
         names, annotations = extract_signature(value)
-
-        inputs = []
-        # FIXME: for now only ids is allowed to have no arguments
-        if name != 'ids':
-            first, *names = names
-            inputs.append(self._get_first(first, annotations))
-
-        inputs.extend(self._get_internal(name, annotations) for name in names)
+        inputs = self._get_inputs(names, annotations)
         return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
         value = unwrap_transform(value)
-        (first, *names), annotations = extract_signature(value)
-        inputs = [self._get_first(first, annotations)]
-        inputs.extend(self._get_internal(name, annotations) for name in names)
+        names, annotations = extract_signature(value)
+        inputs = self._get_inputs(names, annotations)
         return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
 
     def _process_backward(self, name, value) -> BoundEdge:

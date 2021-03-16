@@ -5,9 +5,6 @@ from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
 from ..layers.shortcuts import IdentityLayer
-from ..layers.transform import InheritType
-from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory
 
 
 class BaseBlock:
@@ -128,83 +125,3 @@ def chained(*blocks: BaseBlock):
         return Chained
 
     return decorator
-
-
-class SourceBase(type):
-    def __new__(mcs, class_name, bases, namespace, **flags):
-        if flags.get('__root', False):
-            def __init__(*args, **kwargs):
-                raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
-
-            scope = {'__init__': __init__}
-
-        else:
-            # TODO: exception
-            assert bases == (Source,)
-            scope = SourceFactory.make_scope(namespace)
-            bases = CallableBlock,
-
-        return super().__new__(mcs, class_name, bases, scope)
-
-
-class TransformBase(type):
-    @classmethod
-    def __prepare__(mcs, *args, **kwargs):
-        return MultiDict()
-
-    def __new__(mcs, class_name, bases, namespace, **flags):
-        if flags.get('__root', False):
-            # we can construct transforms on the fly
-            def __init__(*args, __inherit__=(), **kwargs):
-                assert args
-                if len(args) > 1:
-                    raise TypeError('This constructor accepts only keyword arguments.')
-                self, = args
-
-                local = MultiDict()
-                local['__inherit__'] = __inherit__
-                for name, value in kwargs.items():
-                    assert callable(value)
-                    local[name] = value
-
-                factory = TransformFactory(local)
-                super(type(self), self).__init__(factory.build({}), factory.property_names)
-
-            scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
-
-        else:
-            # TODO: exception
-            assert bases == (Transform,)
-            scope = TransformFactory.make_scope(namespace)
-            bases = CallableBlock,
-
-        return super().__new__(mcs, class_name, bases, scope)
-
-
-class Transform(CallableBlock, metaclass=TransformBase, __root=True):
-    """
-    Base class for all transforms.
-
-    Can also be used as an inplace factory for transforms.
-
-    Examples
-    --------
-    # class-based transforms
-    >>> class Zoom(Transform):
-    >>>     def image(image):
-    >>>         return zoom(image, scale_factor=2)
-    # inplace transforms
-    >>> Transform(image=lambda image: zoom(image, scale_factor=2))
-    """
-    __inherit__: InheritType = ()
-
-    # these methods are ignored in the metaclass
-    # we use them only to help IDEs
-    def __init__(self, *args, **kwargs):
-        pass
-
-
-# TODO add inheritance
-class Source(CallableBlock, metaclass=SourceBase, __root=True):
-    def __init__(self, *args, **kwargs):
-        pass
