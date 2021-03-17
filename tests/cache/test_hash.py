@@ -1,6 +1,6 @@
 from tempfile import TemporaryDirectory
 
-from connectome import Chain, CacheToRam, CacheToDisk, CacheRows
+from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns
 from connectome.serializers import JsonSerializer
 from connectome.storage import DiskOptions
 
@@ -16,7 +16,7 @@ def test_hash(block_maker, hash_layer):
     with TemporaryDirectory() as root, TemporaryDirectory() as storage:
         storage = DiskOptions(storage)
         disk = Chain(pipeline, CacheToDisk(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)
-        rows = Chain(pipeline, CacheRows(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)
+        rows = Chain(pipeline, CacheColumns(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)
 
         rows.image(pipeline.ids[0])
         for i in pipeline.ids:
