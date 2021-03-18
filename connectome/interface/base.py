@@ -120,6 +120,13 @@ class Chain(CallableBlock):
 
         return Chain(*not_cache)
 
+    def __str__(self):
+        args = ', '.join(map(str, self._blocks))
+        return f'Chain({args})'
+
+    def __repr__(self):
+        return str(self)
+
 
 def chained(*blocks: BaseBlock):
     def decorator(klass):

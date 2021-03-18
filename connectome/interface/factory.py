@@ -260,8 +260,11 @@ class GraphFactory:
             arguments.apply_defaults()
             super(type(self), self).__init__(factory.build(arguments.arguments), factory.property_names)
 
+        def __str__(self):
+            return namespace.get('__qualname__', [None])[0] or super(type(self), self).__str__()
+
         __init__.__signature__ = signature
-        scope = {'__init__': __init__}
+        scope = {'__init__': __init__, '__str__': __str__, '__repr__': __str__}
         if factory.docstring is not None:
             scope[DOC_MAGIC] = factory.docstring
         return scope
