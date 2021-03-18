@@ -1,4 +1,5 @@
 import inspect
+import logging
 from typing import Dict, Callable, Any
 
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge
@@ -9,6 +10,8 @@ from .prepared import ComputableHash, Prepared
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
     PositionalDecoratorAdapter, PropertyDecoratorAdapter
 from .utils import Local
+
+logger = logging.getLogger(__name__)
 
 
 class NodeStorage(dict):
@@ -268,6 +271,10 @@ class GraphFactory:
         if diff:
             raise ValueError(f'Missing required arguments: {diff}.')
 
+        logger.info(
+            'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
+            list(self.inputs), list(self.outputs), list(self.backward_inputs), list(self.backward_outputs),
+        )
         return TransformLayer(
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
