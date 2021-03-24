@@ -106,7 +106,7 @@ class CacheEdge(Edge):
 
 class ProductEdge(Edge):
     def __init__(self, arity: int):
-        super().__init__(arity, uses_hash=True)
+        super().__init__(arity, uses_hash=False)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return tuple(arguments)
