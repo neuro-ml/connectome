@@ -1,3 +1,4 @@
+import logging
 from operator import itemgetter
 from typing import Tuple, Optional
 
@@ -5,6 +6,8 @@ from ..engine.edges import FunctionEdge, ProductEdge
 from ..engine.graph import compile_graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..utils import node_to_dict
+
+logger = logging.getLogger(__name__)
 
 
 class Layer:
@@ -113,13 +116,16 @@ def bake_methods(inputs: Nodes, outputs: Nodes, edges: BoundEdges):
 class GraphContainer:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges):
         tree_node_map = TreeNode.from_edges(edges)
+        self._edges = edges
         self.inputs = [tree_node_map[x] for x in inputs]
         self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
         self.methods = {node.name: compile_graph(self.inputs, node) for node in self.outputs.values()}
 
     def __getitem__(self, item):
         if item not in self.methods:
-            assert isinstance(item, tuple), item
+            if not isinstance(item, tuple):
+                raise AttributeError(item)
+
             outputs = []
             for name in item:
                 if name not in self.outputs:

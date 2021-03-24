@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, Iterable
 
 from .utils import MaybeStr
@@ -5,6 +6,8 @@ from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
 from ..layers.shortcuts import IdentityLayer
+
+logger = logging.getLogger(__name__)
 
 
 class BaseBlock:
@@ -55,7 +58,9 @@ class CallableBlock(BaseBlock):
             layer = PipelineLayer(IdentityLayer(set(inputs) | {node.name for node in layer.inputs}), layer)
 
         def decorator(func: Callable) -> Callable:
-            return layer.loopback(func, inputs, outputs)[final]
+            loopback = layer.loopback(func, inputs, outputs)
+            logger.info('Loopback compiled: %s', list(loopback.methods))
+            return loopback[final]
 
         return decorator
 
@@ -114,6 +119,13 @@ class Chain(CallableBlock):
                 not_cache.append(block)
 
         return Chain(*not_cache)
+
+    def __str__(self):
+        args = ', '.join(map(str, self._blocks))
+        return f'Chain({args})'
+
+    def __repr__(self):
+        return str(self)
 
 
 def chained(*blocks: BaseBlock):

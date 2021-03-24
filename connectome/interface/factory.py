@@ -1,4 +1,5 @@
 import inspect
+import logging
 from typing import Dict, Callable, Any
 
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge
@@ -9,6 +10,8 @@ from .prepared import ComputableHash, Prepared
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
     PositionalDecoratorAdapter, PropertyDecoratorAdapter
 from .utils import Local
+
+logger = logging.getLogger(__name__)
 
 
 class NodeStorage(dict):
@@ -257,8 +260,11 @@ class GraphFactory:
             arguments.apply_defaults()
             super(type(self), self).__init__(factory.build(arguments.arguments), factory.property_names)
 
+        def __str__(self):
+            return namespace.get('__qualname__', [None])[0] or super(type(self), self).__str__()
+
         __init__.__signature__ = signature
-        scope = {'__init__': __init__}
+        scope = {'__init__': __init__, '__str__': __str__, '__repr__': __str__}
         if factory.docstring is not None:
             scope[DOC_MAGIC] = factory.docstring
         return scope
@@ -268,6 +274,10 @@ class GraphFactory:
         if diff:
             raise ValueError(f'Missing required arguments: {diff}.')
 
+        logger.info(
+            'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
+            list(self.inputs), list(self.outputs), list(self.backward_inputs), list(self.backward_outputs),
+        )
         return TransformLayer(
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),

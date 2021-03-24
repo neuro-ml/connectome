@@ -127,7 +127,7 @@ class TreeNode:
 
         UniqueDotExporter(
             convert(self),
-            edgeattrfunc=lambda parent, child: (parent.edge, parent.parents),
+            edgeattrfunc=lambda parent, child: (parent.edge, ),
             nodeattrfunc=lambda
                 node: f"shape={'box' if node.original not in cache else 'ellipse'}, label=\"{node.name}\"",
             nodenamefunc=lambda node: hex(id(node.original))

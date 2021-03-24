@@ -1,8 +1,12 @@
+import logging
+
 from .base import CallableBlock
 
 from ..layers.transform import InheritType
 from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory, SILENT_MAGIC, DOC_MAGIC
+from .factory import SourceFactory, TransformFactory
+
+logger = logging.getLogger(__name__)
 
 
 class APIMeta(type):
@@ -67,6 +71,7 @@ class TransformBase(APIMeta):
             if bases != (Transform,):
                 raise TypeError('Transforms can only inherit directly from the "Transform" class.')
             bases = CallableBlock,
+            logger.info('Compiling the block "%s"', class_name)
             scope = TransformFactory.make_scope(namespace)
 
         return super().__new__(mcs, class_name, bases, scope)
