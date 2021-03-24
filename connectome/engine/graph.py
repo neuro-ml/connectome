@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import Sequence, Dict
 
 from .base import TreeNode, NodeHash, TreeNodes
+from .compilers import execute_sequential
 from .utils import ExpirationCache
 
 
@@ -17,10 +18,9 @@ class Graph:
         validate_graph(inputs, output)
         counts = count_entries(inputs, output)
         inputs = [x for x in inputs if counts.get(x, 0)]
-        inputs_map = {x.name: x for x in inputs}
         signature = inspect.Signature([
-            inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            for name in inputs_map
+            inspect.Parameter(x.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            for x in inputs
         ])
         use_hash = uses_hash(output)
         self.inputs = inputs
@@ -30,24 +30,13 @@ class Graph:
             scope = signature.bind(*args, **kwargs)
             # put objects into inputs if hashes are not required
             input_hashes = {
-                node: NodeHash.from_leaf(scope.arguments[name] if use_hash else object())
-                for name, node in inputs_map.items()
+                node: NodeHash.from_leaf(scope.arguments[node.name] if use_hash else object())
+                for node in inputs
             }
             hashes = compute_hashes(input_hashes, output)
             masks = compute_masks(output, hashes)
-            # prepare for render
-            local_counts = counts.copy()
-            # TODO: use masks to drop unneeded hashes?
-            hashes = ExpirationCache(local_counts, hashes)
 
-            local_counts = count_entries(inputs, output, masks)
-            cache = ExpirationCache(local_counts)
-
-            for name, n in inputs_map.items():
-                if n in local_counts:
-                    cache[n] = scope.arguments[name]
-
-            return render(output, cache, masks, hashes)
+            return execute_sequential(scope.arguments, inputs, output, hashes, masks)
 
         caller.__signature__ = signature
         self.eval = caller
