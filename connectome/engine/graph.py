@@ -9,7 +9,7 @@ from collections import defaultdict
 from typing import Sequence, Dict
 
 from .base import TreeNode, NodeHash, TreeNodes
-from .compilers import execute_sequential
+from .compilers import execute_sequential, execute_sequential_async
 from .utils import ExpirationCache
 
 
@@ -36,6 +36,7 @@ class Graph:
             hashes = compute_hashes(input_hashes, output)
             masks = compute_masks(output, hashes)
 
+            #return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
             return execute_sequential(scope.arguments, inputs, output, hashes, masks)
 
         caller.__signature__ = signature
