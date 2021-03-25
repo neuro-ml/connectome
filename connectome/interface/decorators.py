@@ -37,6 +37,10 @@ class PropertyDecoratorAdapter(DecoratorAdapter):
     name = 'property'
 
 
+class ImpureFunction(DecoratorAdapter):
+    name = 'impure'
+
+
 def inverse(func: Callable):
     return InverseDecoratorAdapter(func)
 
@@ -55,3 +59,7 @@ def insert(func: Callable):
 
 def meta(func: Callable):
     return PropertyDecoratorAdapter(func)
+
+
+def impure(func: Callable):
+    return ImpureFunction(func)

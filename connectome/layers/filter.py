@@ -6,7 +6,7 @@ from ..engine import NodeHash
 from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, FULL_MASK, Edge
 from ..engine.edges import ProductEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import NodeHashes, HashType
+from ..engine.node_hash import NodeHashes, HashType, CompoundHash, LeafHash
 from ..utils import extract_signature, node_to_dict
 
 
@@ -66,8 +66,8 @@ class FilterEdge(Edge):
     def _make_hash(self, hashes):
         keys, = hashes
         args = self.graph.hash()
-        return NodeHash.from_hash_nodes(
-            NodeHash.from_leaf(self.func), keys, args,
+        return CompoundHash(
+            LeafHash(self.func), keys, args,
             kind=HashType.FILTER,
         )
 

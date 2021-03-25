@@ -5,7 +5,7 @@ from ..engine import NodeHash
 from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, Edge
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import NodeHashes
+from ..engine.node_hash import NodeHashes, LeafHash, CompoundHash
 from ..utils import node_to_dict
 from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
@@ -145,11 +145,11 @@ class CachedColumn(Edge):
 
         hashes = []
         for k in keys:
-            h = self.graph.eval_hash(NodeHash.from_leaf(k))
+            h = self.graph.eval_hash(LeafHash(k))
             hashes.append(h)
             if k == key:
                 assert node_hash == h
-        compound = NodeHash.from_hash_nodes(*hashes)
+        compound = CompoundHash(*hashes)
 
         if not self.disk.contains(compound):
             values = [self.graph.eval(k) for k in keys]

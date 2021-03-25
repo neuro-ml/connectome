@@ -4,7 +4,7 @@ from typing import Sequence
 from ..engine.edges import ConstantEdge
 from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode
 from ..engine.graph import Graph
-from ..engine.node_hash import HashType
+from ..engine.node_hash import HashType, CompoundHash, LeafHash
 from ..utils import node_to_dict
 from .base import EdgesBag
 
@@ -62,7 +62,7 @@ class SwitchEdge(Edge):
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         node_hash, = inputs
-        assert node_hash.kind == HashType.LEAF
+        assert isinstance(node_hash, LeafHash)
         graph = self._select_graph(node_hash.data)
         return graph.eval_hash(*inputs)
 
@@ -75,7 +75,7 @@ class SwitchEdge(Edge):
         return graph.eval(key)
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return NodeHash.from_hash_nodes(
+        return CompoundHash(
             *inputs, *(graph.hash() for graph in self.graphs),
             kind=HashType.MERGE
         )

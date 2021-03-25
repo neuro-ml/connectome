@@ -10,7 +10,7 @@ from typing import Sequence, Dict
 
 from .base import TreeNode, NodeHash, TreeNodes
 from .compilers import execute_sequential, execute_sequential_async
-from .utils import ExpirationCache
+from .node_hash import LeafHash
 
 
 class Graph:
@@ -30,13 +30,13 @@ class Graph:
             scope = signature.bind(*args, **kwargs)
             # put objects into inputs if hashes are not required
             input_hashes = {
-                node: NodeHash.from_leaf(scope.arguments[node.name] if use_hash else object())
+                node: LeafHash(scope.arguments[node.name] if use_hash else object())
                 for node in inputs
             }
             hashes = compute_hashes(input_hashes, output)
             masks = compute_masks(output, hashes)
 
-            #return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
+            # return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
             return execute_sequential(scope.arguments, inputs, output, hashes, masks)
 
         caller.__signature__ = signature
@@ -177,4 +177,4 @@ def render(node, cache, masks, hashes):
 
 
 # a placeholder used to calculate the graph hash without inputs
-_PLACEHOLDER = NodeHash.from_leaf(object())
+_PLACEHOLDER = LeafHash(object())

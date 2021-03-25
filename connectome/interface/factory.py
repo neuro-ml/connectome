@@ -2,13 +2,13 @@ import inspect
 import logging
 from typing import Dict, Callable, Any
 
-from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge
+from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
 from ..engine.base import Node, BoundEdge
 from ..layers.transform import TransformLayer
 from ..utils import extract_signature, MultiDict
 from .prepared import ComputableHash, Prepared
 from .decorators import DecoratorAdapter, InverseDecoratorAdapter, OptionalDecoratorAdapter, InsertDecoratorAdapter, \
-    PositionalDecoratorAdapter, PropertyDecoratorAdapter
+    PositionalDecoratorAdapter, PropertyDecoratorAdapter, ImpureFunction
 from .utils import Local
 
 logger = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ class GraphFactory:
         self.persistent_names = {'ids', 'id'}
         self.docstring = None
         self.magic_dispatch: Dict[str, Callable[[Any], Any]] = {DOC_MAGIC: self._process_doc}
-        self.precomputed_dispatch: Dict[type, Callable] = {}
+        self.prepared_dispatch: Dict[type, Callable] = {}
         self._init()
         self._collect_nodes()
         self._validate()
@@ -171,6 +171,7 @@ class GraphFactory:
         else:
             self.edges.extend(value)
 
+    # TODO: need an adapters' preprocessor
     def _collect_nodes(self):
         # gather parameters
         for name, value in self.scope.items():
@@ -193,9 +194,9 @@ class GraphFactory:
 
             elif isinstance(value, Prepared):
                 kind = type(value)
-                if kind not in self.precomputed_dispatch:
+                if kind not in self.prepared_dispatch:
                     raise RuntimeError(f'Unrecognized "prepared" method: "{name}"')
-                self._add_edges(self.precomputed_dispatch[kind](name, value))
+                self._add_edges(self.prepared_dispatch[kind](name, value))
 
             elif is_parameter(name, value):
                 self._add_edges(self._process_parameter(name, value))
@@ -287,13 +288,19 @@ class GraphFactory:
         )
 
 
+def maybe_impure(decorators, func, inputs):
+    if ImpureFunction in decorators:
+        return ImpureFunctionEdge(func, len(inputs))
+    return FunctionEdge(func, len(inputs))
+
+
 class SourceFactory(GraphFactory):
     def _init(self):
         self.ID = self.inputs['id']
         self.inputs.freeze()
         self.edges.append(IdentityEdge().bind(self.ID, self.outputs['id']))
         self.property_names.add('ids')
-        self.precomputed_dispatch[ComputableHash] = self._process_precomputed
+        self.prepared_dispatch[ComputableHash] = self._process_precomputed
 
     def _validate(self):
         pass
@@ -324,16 +331,18 @@ class SourceFactory(GraphFactory):
         yield FunctionEdge(value.func, 1).bind(aux, self.outputs[name])
 
     def _process_forward(self, name, value) -> BoundEdge:
+        decorators = get_decorators(value)
         value = unwrap_transform(value)
         names, annotations = extract_signature(value)
         inputs = self._get_inputs(names, annotations)
-        return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])
+        return maybe_impure(decorators, value, inputs).bind(inputs, self.outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
+        decorators = get_decorators(value)
         value = unwrap_transform(value)
         names, annotations = extract_signature(value)
         inputs = self._get_inputs(names, annotations)
-        return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
+        return maybe_impure(decorators, value, inputs).bind(inputs, self.parameters[name])
 
     def _process_backward(self, name, value) -> BoundEdge:
         raise RuntimeError('Source datasets do not support backward transformations')
@@ -407,16 +416,17 @@ class TransformFactory(GraphFactory):
             self.optional_names.add(name)
 
         inputs = self._get_inputs(name, value, self.inputs, decorators)
-        return FunctionEdge(value, len(inputs)).bind(inputs, self.outputs[name])
+        return maybe_impure(decorators, value, inputs).bind(inputs, self.outputs[name])
 
     def _process_backward(self, name, value) -> BoundEdge:
         decorators = get_decorators(value)
         value = unwrap_transform(value)
         inputs = self._get_inputs(name, value, self.backward_inputs, decorators)
-        return FunctionEdge(value, len(inputs)).bind(inputs, self.backward_outputs[name])
+        return maybe_impure(decorators, value, inputs).bind(inputs, self.backward_outputs[name])
 
     def _process_parameter(self, name, value) -> BoundEdge:
+        decorators = get_decorators(value)
         value = unwrap_transform(value)
         names, annotations = extract_signature(value)
         inputs = [self._get_input(arg, annotations[arg], self.inputs) for arg in names]
-        return FunctionEdge(value, len(inputs)).bind(inputs, self.parameters[name])
+        return maybe_impure(decorators, value, inputs).bind(inputs, self.parameters[name])

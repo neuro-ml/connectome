@@ -1,7 +1,7 @@
 from typing import Sequence, Callable, Any
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes
-from .node_hash import HashType
+from .node_hash import LeafHash, CompoundHash
 from ..cache import Cache
 
 
@@ -10,10 +10,10 @@ class FunctionEdge(Edge):
         super().__init__(arity, uses_hash=False)
         self.function = function
         # TODO:
-        # self._function_hash = NodeHash.from_leaf(function)
+        # self._function_hash = LeafHash(function)
 
     def _calc_hash(self, hashes):
-        return NodeHash.from_hash_nodes(NodeHash.from_leaf(self.function), *hashes)
+        return CompoundHash(LeafHash(self.function), *hashes)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
         return self.function(*arguments)
@@ -29,13 +29,41 @@ class FunctionEdge(Edge):
 
 
 class ComputableHashEdge(FunctionEdge):
+    def __init__(self, function: Callable, arity: int):
+        super().__init__(function, arity)
+        self._uses_hash = True
+
     def _calc_hash(self, inputs: NodeHashes):
         args = []
         for h in inputs:
-            assert h.kind == HashType.LEAF
+            assert isinstance(h, LeafHash), h
             args.append(h.data)
 
-        return NodeHash.from_leaf(self.function(*args))
+        return LeafHash(self.function(*args))
+
+
+class ImpureFunctionEdge(Edge):
+    def __init__(self, function: Callable, arity: int):
+        super().__init__(arity, uses_hash=True)
+        self.function = function
+
+    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+        args = []
+        for h in inputs:
+            assert isinstance(h, LeafHash), h
+            args.append(h.data)
+
+        return LeafHash(self.function(*args))
+
+    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+        assert isinstance(node_hash, LeafHash), node_hash
+        return node_hash.data
+
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+        return []
+
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        raise RuntimeError("Impure edges can't be a part of a subgraph")
 
 
 class IdentityEdge(Edge):
@@ -63,7 +91,7 @@ class ConstantEdge(Edge):
     def __init__(self, value):
         super().__init__(arity=0, uses_hash=False)
         self.value = value
-        self._hash = NodeHash.from_leaf(self.value)
+        self._hash = LeafHash(self.value)
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
         return self.value
@@ -115,7 +143,7 @@ class ProductEdge(Edge):
         return FULL_MASK
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return NodeHash.from_hash_nodes(*inputs)
+        return CompoundHash(*inputs)
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return NodeHash.from_hash_nodes(*inputs)
+        return CompoundHash(*inputs)

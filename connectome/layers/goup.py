@@ -7,7 +7,7 @@ from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, NodeHashes, NodesMask, FULL_MASK, Edge
 from ..engine.edges import FunctionEdge, ProductEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import HashType
+from ..engine.node_hash import HashType, CompoundHash, LeafHash
 
 
 class GroupLayer(Wrapper):
@@ -63,7 +63,7 @@ class MappingEdge(Edge):
         self._mapping = None
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return NodeHash.from_hash_nodes(
+        return CompoundHash(
             *inputs, self.graph.hash(),
             kind=HashType.MAPPING,
         )
@@ -94,7 +94,7 @@ class GroupEdge(Edge):
         self.graph = graph
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return NodeHash.from_hash_nodes(
+        return CompoundHash(
             *inputs, self.graph.hash(),
             kind=HashType.GROUPING,
         )
@@ -187,8 +187,8 @@ class HashMappingEdge(Edge):
         self.hasher = sha256
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return NodeHash.from_hash_nodes(
-            *inputs, *(NodeHash.from_leaf(x) for x in self.comparators), NodeHash.from_leaf(self.hasher),
+        return CompoundHash(
+            *inputs, *(LeafHash(x) for x in self.comparators), LeafHash(self.hasher),
             self.graph.hash(),
             kind=HashType.MULTI_MAPPING,
         )
