@@ -55,3 +55,30 @@ def test_cache_removal(block_maker):
 
     for i in one.ids:
         assert simple.image(i) == cached.image(i) == nested.image(i)
+
+
+def test_inheritance():
+    class A(Transform):
+        __inherit__ = True
+
+        def f():
+            return 'A.f'
+
+    class B(Transform):
+        __inherit__ = 'g'
+
+        def h(f, g):
+            return f, g
+
+    class C(Transform):
+        __inherit__ = True
+
+        def h(f, g):
+            return f, g
+
+    ds = A() >> B()
+    assert ds.f() == 'A.f'
+    assert ds.h(g='input') == ('A.f', 'input')
+    ds = A() >> C()
+    assert ds.f() == 'A.f'
+    assert ds.h(g='input') == ('A.f', 'input')

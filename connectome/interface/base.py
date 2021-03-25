@@ -1,7 +1,7 @@
 import logging
-from typing import Callable, Iterable
+from typing import Callable, Iterable, TypeVar, Generic
 
-from .utils import MaybeStr
+from .utils import MaybeStr, format_arguments
 from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
 from ..layers.pipeline import PipelineLayer
@@ -9,19 +9,18 @@ from ..layers.shortcuts import IdentityLayer
 
 logger = logging.getLogger(__name__)
 
-
-class BaseBlock:
-    def __init__(self, layer: Layer):
-        self._layer: Layer = layer
+T = TypeVar('T', bound=Layer)
 
 
-class CallableBlock(BaseBlock):
-    _layer: EdgesBag
-    _methods: dict
+class BaseBlock(Generic[T]):
+    def __init__(self, layer: T):
+        self._layer: T = layer
 
+
+class CallableBlock(BaseBlock[EdgesBag]):
     def __init__(self, layer: EdgesBag, properties: Iterable[str]):
         super().__init__(layer)
-        self._methods = self._layer.compile()
+        self._methods: dict = self._layer.compile()
         self._properties = set(properties)
 
     def __getattr__(self, name):
@@ -121,8 +120,7 @@ class Chain(CallableBlock):
         return Chain(*not_cache)
 
     def __str__(self):
-        args = ', '.join(map(str, self._blocks))
-        return f'Chain({args})'
+        return 'Chain' + format_arguments(self._blocks)
 
     def __repr__(self):
         return str(self)

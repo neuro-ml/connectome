@@ -13,7 +13,7 @@ from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, ChainSerializer
 from ..storage import DiskOptions, RemoteOptions
 from ..utils import PathLike
-from .utils import MaybeStr
+from .utils import MaybeStr, format_arguments
 
 
 class Merge(CallableBlock):
@@ -40,9 +40,13 @@ class Merge(CallableBlock):
             id2dataset_index.update({i: index for i in ids})
 
         super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks]), properties)
+        self._blocks = blocks
+
+    def __str__(self):
+        return 'Merge' + format_arguments(self._blocks)
 
 
-class Filter(BaseBlock):
+class Filter(BaseBlock[FilterLayer]):
     """
     Filters the `ids` of the current pipeline given a ``predicate``.
 
@@ -71,8 +75,12 @@ class Filter(BaseBlock):
         ids = set(ids)
         return cls(lambda id: id in ids)
 
+    def __str__(self):
+        args = ', '.join(self._layer.names)
+        return f'Filter({args})'
 
-class GroupBy(BaseBlock):
+
+class GroupBy(BaseBlock[GroupLayer]):
     def __init__(self, name: str):
         super().__init__(GroupLayer(name))
 
@@ -83,10 +91,18 @@ class GroupBy(BaseBlock):
             comparators.setdefault(name, operator.eq)
         return BaseBlock(MultiGroupLayer(comparators))
 
+    def __str__(self):
+        return f'GroupBy({repr(self._layer.name)})'
 
-class Apply(BaseBlock):
+
+class Apply(BaseBlock[ApplyLayer]):
     def __init__(self, **transform: Callable):
+        self.names = sorted(transform)
         super().__init__(ApplyLayer(transform))
+
+    def __str__(self):
+        args = ', '.join(self.names)
+        return f'Apply({args})'
 
 
 def to_seq(x):
@@ -102,7 +118,8 @@ def _resolve_serializer(serializer):
 
 
 class CacheBlock(BaseBlock):
-    pass
+    def __str__(self):
+        return self.__class__.__name__
 
 
 class CacheToRam(CacheBlock):
