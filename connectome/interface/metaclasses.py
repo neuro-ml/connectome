@@ -1,6 +1,7 @@
 import logging
 
 from .base import CallableBlock
+from .compat import SafeMeta
 
 from ..layers.transform import InheritType
 from ..utils import MultiDict
@@ -9,7 +10,7 @@ from .factory import SourceFactory, TransformFactory
 logger = logging.getLogger(__name__)
 
 
-class APIMeta(type):
+class APIMeta(SafeMeta):
     @classmethod
     def __prepare__(mcs, *args, **kwargs):
         return MultiDict()

@@ -1,6 +1,7 @@
 import logging
-from typing import Callable, Iterable, TypeVar, Generic
+from typing import Callable, Iterable, TypeVar
 
+from .compat import Generic
 from .utils import MaybeStr, format_arguments
 from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
