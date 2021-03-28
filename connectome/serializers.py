@@ -6,6 +6,7 @@ from pathlib import Path
 
 import os
 import json
+import pickle
 import numpy as np
 
 
@@ -65,6 +66,29 @@ class JsonSerializer(Serializer):
 
         with open(folder / 'value.json', 'r') as file:
             return json.load(file)
+
+
+class PickleSerializer(Serializer):
+    def save(self, value, folder):
+        try:
+            value = pickle.dumps(value)
+        except TypeError as e:
+            raise SerializerError from e
+        
+        with open(folder / 'value.pkl', 'wb') as file:
+            file.write(value)
+
+    def load(self, folder):
+        paths = list(folder.iterdir())
+        if len(paths) != 1:
+            raise SerializerError
+
+        path, = paths
+        if path.name != 'value.pkl':
+            raise SerializerError
+
+        with open(folder / 'value.pkl', 'rb') as file:
+            return pickle.load(file)
 
 
 class NumpySerializer(Serializer):
