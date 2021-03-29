@@ -1,11 +1,10 @@
-import copy
 from collections import defaultdict
 from typing import Dict, Any
 
 from . import NodeHash
 from .base import TreeNode, NodesMask, TreeNodes
 from .utils import ExpirationCache
-from .execution import execute_graph_async
+from .execution import GraphTask, execute_graph_async
 
 
 def execute_sequential(arguments: Dict[str, Any], inputs: TreeNodes, output: TreeNode,
@@ -46,20 +45,18 @@ def compile_sequential(output: TreeNode, masks: Dict[TreeNode, NodesMask]):
     return operations, dict(counts)
 
 
-# TODO: remove this function
 def sequential_to_graph(arguments: Dict[str, Any], inputs: TreeNodes, output: TreeNode,
                         hashes: Dict[TreeNode, NodeHash], masks: Dict[TreeNode, NodesMask]):
     operations, counts = compile_sequential(output, masks)
     graph = {}
 
-    # TODO: incapsulate in objects
     def wrap_constant(values):
         def f(x):
             return values
 
         return f
 
-    def evaluate_edge(edge, m, h):
+    def wrap_edge(edge, m, h):
         def f(*args):
             return edge(*args, m, h)
 
@@ -67,11 +64,11 @@ def sequential_to_graph(arguments: Dict[str, Any], inputs: TreeNodes, output: Tr
 
     for node in inputs:
         if node in counts:
-            graph[node] = (wrap_constant(arguments[node.name]),)
+            graph[node] = GraphTask(evaluate=wrap_constant(arguments[node.name]), dependencies=[])
 
     for node, dependencies in operations:
-        graph[node] = (evaluate_edge(node.edge.evaluate, masks[node], hashes[node]), *dependencies)
-
+        graph[node] = GraphTask(evaluate=wrap_edge(node.edge.evaluate, masks[node], hashes[node]),
+                                dependencies=dependencies)
     return graph, output
 
 
@@ -80,5 +77,5 @@ def execute_sequential_async(arguments: Dict[str, Any], inputs: TreeNodes, outpu
     dep_graph, output = sequential_to_graph(arguments, inputs, output,
                                             hashes, masks)
 
-    res = execute_graph_async(dep_graph, [output], add_persistent_ids=False)
+    res = execute_graph_async(dep_graph, [output], replace_by_persistent_ids=True)
     return res[output]
