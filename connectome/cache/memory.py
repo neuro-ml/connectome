@@ -15,7 +15,7 @@ class MemoryCache(Cache):
         return param.value in self._cache
 
     def set(self, param: NodeHash, value):
-        assert not self.contains(param)
+        # assert not self.contains(param)
         self._cache[param.value] = value
 
     def get(self, param: NodeHash) -> Any:
