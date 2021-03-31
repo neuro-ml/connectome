@@ -1,6 +1,5 @@
 import tempfile
 from pathlib import Path
-from threading import RLock
 from typing import Sequence, Any
 
 from .base import Cache
@@ -9,20 +8,17 @@ from .disk import key_to_relative, check_consistency, DATA_FOLDER, HASH_FILENAME
 from ..storage import RemoteOptions, RelativeRemote
 from ..engine import NodeHash
 from ..serializers import Serializer
-from ..utils import atomize, ChainDict
+from ..utils import ChainDict
 
 
 class RemoteCache(Cache):
     def __init__(self, options: Sequence[RemoteOptions], serializer: Serializer):
         super().__init__()
-        self._lock = RLock()
         self.storage = ChainDict([RemoteDict(entry, serializer) for entry in options])
 
-    @atomize()
     def contains(self, param: NodeHash) -> bool:
         return param.value in self.storage
 
-    @atomize()
     def get(self, param: NodeHash) -> Any:
         return self.storage[param.value]
 

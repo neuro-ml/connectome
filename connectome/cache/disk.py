@@ -6,7 +6,6 @@ import shutil
 import time
 from hashlib import blake2b
 from pathlib import Path
-from threading import RLock
 from typing import Sequence
 
 from .base import Cache
@@ -16,7 +15,6 @@ from ..storage.base import DiskOptions, Storage, digest_to_relative
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
 from ..serializers import Serializer
-from ..utils import atomize
 
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
@@ -31,11 +29,8 @@ class DiskCache(Cache):
         self.serializer = serializer
         self.storage = Storage(options)
         self.root = Path(root)
-        # FIXME: a global lock is too slow
-        self._lock = RLock()
         self._file_lock = NoLock()
 
-    @atomize()
     def contains(self, param: NodeHash) -> bool:
         _, _, relative = key_to_relative(param.value)
         if (self.root / relative).exists():
@@ -51,7 +46,6 @@ class DiskCache(Cache):
 
         return False
 
-    @atomize()
     def set(self, param: NodeHash, value):
         pickled, _, relative = key_to_relative(param.value)
         root = self.root / relative
@@ -78,7 +72,6 @@ class DiskCache(Cache):
                 shutil.rmtree(root)
                 raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
-    @atomize()
     def get(self, param: NodeHash):
         pickled, _, relative = key_to_relative(param.value)
         return self._load(self.root / relative, pickled)
