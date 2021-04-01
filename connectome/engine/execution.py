@@ -6,7 +6,7 @@ import multiprocessing
 from collections import defaultdict
 from queue import Queue as ThreadQueue
 from multiprocessing.pool import ThreadPool
-from typing import Dict, Hashable, Sequence, Callable
+from typing import Dict, Hashable, Sequence, Callable, NamedTuple, Set
 
 executors = dict()
 default_executor = None
@@ -35,7 +35,22 @@ def get_thread_pool_executor(n_workers=None):
         return executor
 
 
+# tracks information about execution
+class State(NamedTuple):
+    ready: Set
+    running: Set
+    finished: Set
+    released: Set
+    cache: Dict
+    waiting: Dict
+    dependents: Dict
+    dependencies: Dict
+    waiting_data: Dict
+
+
 # TODO: move some of this logic to edge
+
+
 class GraphTask:
     def __init__(self, evaluate: Callable, dependencies, rerun_on_error=False):
         assert callable(evaluate)
@@ -64,47 +79,47 @@ def build_execution_state(dep_graph: Dict, cache: Dict = None):
     dependents = get_direct_dependents(dep_graph)
 
     waiting_data = {k: v for k, v in dependents.items() if v}
-    ready = [k for k, v in dependencies.items() if not v]
+    ready = {k for k, v in dependencies.items() if not v}
     waiting = {k: v for k, v in dependencies.items() if v}
 
-    state = {
-        'dependencies': dependencies,
-        'dependents': dependents,
-        'waiting': waiting,
-        'waiting_data': waiting_data,
-        'cache': cache,
-        'ready': ready,
-        'running': set(),
-        'finished': set(),
-        'released': set(),
-    }
+    state = State(
+        waiting=waiting,
+        dependents=dependents,
+        dependencies=dependencies,
+        waiting_data=waiting_data,
+        cache=cache,
+        ready=ready,
+        running=set(),
+        finished=set(),
+        released=set(),
+    )
     return state
 
 
-def release_data(key, state, delete=True):
-    if key in state['waiting_data']:
-        assert not state['waiting_data'][key]
-        del state['waiting_data'][key]
+def release_data(key, state: State, delete=True):
+    if key in state.waiting_data:
+        assert not state.waiting_data[key]
+        del state.waiting_data[key]
 
-    state['released'].add(key)
+    state.released.add(key)
     if delete:
-        del state['cache'][key]
+        del state.cache[key]
 
 
-def process_finished_task(key: Hashable, state: Dict, output_nodes: Sequence[Hashable], delete=True):
+def process_finished_task(key: Hashable, state: State, output_nodes: Sequence[Hashable], delete=True):
     # remove finished tasks from following node's dependencies
-    for dep in state['dependents'][key]:
-        s = state['waiting'][dep]
+    for dep in state.dependents[key]:
+        s = state.waiting[dep]
         s.remove(key)
         # run node if it ready
         if not s:
-            del state['waiting'][dep]
-            state['ready'].append(dep)
+            del state.waiting[dep]
+            state.ready.add(dep)
 
     # iterate over data dependencies
-    for dep in state['dependencies'][key]:
-        if dep in state['waiting_data']:
-            s = state['waiting_data'][dep]
+    for dep in state.dependencies[key]:
+        if dep in state.waiting_data:
+            s = state.waiting_data[dep]
             s.remove(key)
 
             if not s and dep not in output_nodes:
@@ -113,8 +128,8 @@ def process_finished_task(key: Hashable, state: Dict, output_nodes: Sequence[Has
         elif delete and dep not in output_nodes:
             release_data(dep, state, delete=delete)
 
-    state['finished'].add(key)
-    state['running'].remove(key)
+    state.finished.add(key)
+    state.running.remove(key)
     return state
 
 
@@ -136,7 +151,7 @@ def execute_task(task_id, func, args):
 
 def execute_graph_async(dep_graph: Dict, output_nodes, replace_by_persistent_ids=True, executor=None,
                         max_payload=None):
-    executor = executor or get_thread_pool_executor()
+    executor = ThreadPool(4)
     max_payload = max_payload or multiprocessing.cpu_count()
     if isinstance(executor, ThreadPool):
         queue = ThreadQueue()
@@ -160,26 +175,26 @@ def execute_graph_async(dep_graph: Dict, output_nodes, replace_by_persistent_ids
     state = build_execution_state(dep_graph, cache=cache)
 
     def deploy_task():
-        current_task_id = state['ready'].pop()
-        state['running'].add(current_task_id)
+        current_task_id = state.ready.pop()
+        state.running.add(current_task_id)
         current_task = dep_graph[current_task_id]
-        cur_data = [state['cache'][dep] for dep in current_task.dependencies]
+        cur_data = [state.cache[dep] for dep in current_task.dependencies]
         executor.apply_async(execute_task, args=(current_task_id, current_task.evaluate, cur_data), callback=queue.put)
 
     def cleanup_waiting_tasks():
-        while len(state['running']) != 0:
+        while len(state.running) != 0:
             t_id, _, _ = queue.get()
             process_finished_task(t_id, state, output_nodes)
 
-        for t_id in list(state['waiting']) + list(state['ready']):
+        for t_id in list(state.waiting) + list(state.ready):
             dep_graph[t_id].cleanup()
 
     # deploy initial tasks
-    while state['ready'] and len(state['running']) < max_payload:
+    while state.ready and len(state.running) < max_payload:
         deploy_task()
 
     # main execution loop
-    while state['waiting'] or state['ready'] or state['running']:
+    while state.waiting or state.ready or state.running:
         task_id, result, failed = queue.get()
         if failed:
             exc = result
@@ -188,7 +203,7 @@ def execute_graph_async(dep_graph: Dict, output_nodes, replace_by_persistent_ids
                 # try to rerun task if necessary
                 task = dep_graph[task_id]
                 try:
-                    data = [state['cache'][dep] for dep in task.dependencies]
+                    data = [state.cache[dep] for dep in task.dependencies]
                     result = task.evaluate(data)
                 except BaseException as e:
                     # inform waiting tasks
@@ -202,9 +217,10 @@ def execute_graph_async(dep_graph: Dict, output_nodes, replace_by_persistent_ids
                 cleanup_waiting_tasks()
                 raise exc
 
-        state['cache'][task_id] = result
+        state.cache[task_id] = result
         process_finished_task(task_id, state, output_nodes)
-        while state['ready'] and len(state['running']) < max_payload:
+        while state.ready and len(state.running) < max_payload:
             deploy_task()
 
-    return dict((reversed_mapping.get(name, name), state['cache'][name]) for name in output_nodes)
+    result = dict((reversed_mapping.get(name, name), state.cache[name]) for name in output_nodes)
+    return result

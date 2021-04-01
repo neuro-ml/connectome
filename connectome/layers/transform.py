@@ -15,9 +15,11 @@ class TransformLayer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
                  backward_outputs: Nodes = (), optional_nodes: Sequence[str] = (),
                  inherit_nodes: InheritType = (), persistent_nodes: Sequence[str] = ()):
+
         super().__init__(
             inputs, outputs, edges,
-            BagContext(backward_inputs, backward_outputs, inherit_nodes)
+            BagContext(backward_inputs, backward_outputs, inherit_nodes),
+            propagate_nodes=inherit_nodes
         )
         check_for_duplicates(node_to_dict(inputs).keys())
 
@@ -63,21 +65,41 @@ class TransformLayer(EdgesBag):
                 active_input_names.append(name)
                 edges.append(BoundEdge(IdentityEdge(), [prev_output], output))
 
-        # check that unused nodes are @optional
         unused_names = set(cur_inputs.keys()).difference(set(active_input_names))
+        propagated_nodes = []
         for name in unused_names:
             if name not in self.optional_nodes:
-                raise RuntimeError(f"Previous layer must contain '{name}' node.")
+                if previous.propagate_nodes == INHERIT_ALL or name in previous.propagate_nodes:
+                    # propagate identity transformation
+                    output = Node(name)
+                    input_node = cur_inputs[name]
+                    outputs.append(output)
+                    active_input_names.append(name)
+                    propagated_nodes.append(input_node)
+                    edges.append(BoundEdge(IdentityEdge(), [input_node], output))
+                else:
+                    raise RuntimeError(f"Previous layer must contain '{name}' node.")
 
-        essential_input_names = self.get_essential_input_names(current.inputs, current.outputs, current.edges)
+        essential_input_names = self.get_essential_input_names(current.inputs, current.outputs,
+                                                               current.edges)
         for o in current.outputs:
             # drop nodes that depend on inactive inputs
             if all(name in active_input_names for name in essential_input_names[o]):
                 outputs.append(o)
+        # remove created outputs from new propagated nodes
+        if isinstance(previous.propagate_nodes, bool):
+            new_propagate_nodes = previous.propagate_nodes
+        else:
+            new_propagate_nodes = []
+            for node_name in previous.propagate_nodes:
+                if node_name not in node_to_dict(propagated_nodes):
+                    new_propagate_nodes.append(node_name)
 
+        all_inputs = list(previous.inputs) + propagated_nodes
         return EdgesBag(
-            previous.inputs, outputs, edges,
+            all_inputs, outputs, edges,
             PipelineContext(previous.context, current.context),
+            propagate_nodes=new_propagate_nodes
         )
 
     @staticmethod

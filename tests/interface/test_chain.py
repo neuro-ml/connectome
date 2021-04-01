@@ -1,3 +1,4 @@
+import pytest
 from connectome import Source, Transform, Chain, CacheToRam, insert
 
 
@@ -58,27 +59,81 @@ def test_cache_removal(block_maker):
 
 
 def test_inheritance():
-    class A(Transform):
+    class FirstInheritAll(Transform):
         __inherit__ = True
 
         def f():
             return 'A.f'
 
-    class B(Transform):
+    class FirstInheritPart(Transform):
+        __inherit__ = 'g'
+
+        def f():
+            return 'A.f'
+
+    class SecondInheritPart(Transform):
         __inherit__ = 'g'
 
         def h(f, g):
             return f, g
 
-    class C(Transform):
+    class SecondInheritAll(Transform):
         __inherit__ = True
 
         def h(f, g):
             return f, g
 
-    ds = A() >> B()
-    assert ds.f() == 'A.f'
+    class ThirdInheritAll(Transform):
+        __inherit__ = True
+
+        def p(h, g, f):
+            return h, g, f
+
+    class ThirdInheritPart(Transform):
+        __inherit__ = 'h'
+
+        def p(h, g, f):
+            return h, g, f
+
+    ds = FirstInheritAll() >> SecondInheritPart()
+    assert ds.g('hello') == 'hello'
     assert ds.h(g='input') == ('A.f', 'input')
-    ds = A() >> C()
-    assert ds.f() == 'A.f'
+
+    with pytest.raises(AttributeError):
+        ds.f()
+
+    ds = FirstInheritAll() >> SecondInheritAll()
     assert ds.h(g='input') == ('A.f', 'input')
+    assert ds.g('hello') == 'hello'
+    assert ds.f() == 'A.f'
+
+    ds = FirstInheritPart() >> SecondInheritAll()
+    assert ds.h(g='input') == ('A.f', 'input')
+    assert ds.g('hello') == 'hello'
+    assert ds.f() == 'A.f'
+
+    ds = FirstInheritPart() >> SecondInheritPart()
+    assert ds.g('hello') == 'hello'
+    assert ds.h(g='input') == ('A.f', 'input')
+
+    with pytest.raises(AttributeError):
+        ds.f()
+
+    ds = FirstInheritAll() >> SecondInheritAll() >> ThirdInheritAll()
+    assert ds.p(g='hello') == (('A.f', 'hello'), 'hello', 'A.f')
+    assert ds.g('hello') == 'hello'
+    assert ds.h(g='input') == ('A.f', 'input')
+    assert ds.f() == 'A.f'
+
+    ds = FirstInheritAll() >> SecondInheritAll() >> ThirdInheritPart()
+    assert ds.p(g='hello') == (('A.f', 'hello'), 'hello', 'A.f')
+    assert ds.h(g='input') == ('A.f', 'input')
+
+    with pytest.raises(AttributeError):
+        ds.g('hello')
+
+    with pytest.raises(AttributeError):
+        ds.f()
+
+    with pytest.raises(RuntimeError):
+        FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll()

@@ -1,6 +1,6 @@
 import logging
 from operator import itemgetter
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union, Sequence
 
 from ..engine.edges import FunctionEdge, ProductEdge
 from ..engine.graph import compile_graph
@@ -36,10 +36,12 @@ class NoContext(Context):
 
 
 class EdgesBag(Wrapper):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context]):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
+                 propagate_nodes: Union[bool, Sequence[str]] = None):
         self.inputs = tuple(inputs)
         self.outputs = tuple(outputs)
         self.edges = tuple(edges)
+        self.propagate_nodes = propagate_nodes or ()
         self.context = context if context is not None else NoContext()
 
     def freeze(self) -> 'EdgesBag':
@@ -56,7 +58,8 @@ class EdgesBag(Wrapper):
             update_map(self.inputs, node_map),
             update_map(self.outputs, node_map),
             edges_copy,
-            self.context.update(node_map)
+            self.context.update(node_map),
+            propagate_nodes=self.propagate_nodes
         )
 
     def compile(self):
