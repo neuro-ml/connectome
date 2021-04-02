@@ -1,6 +1,7 @@
 import getpass
 import gzip
 import json
+import logging
 import os
 import shutil
 import time
@@ -15,6 +16,8 @@ from ..storage.base import DiskOptions, Storage, digest_to_relative
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
 from ..serializers import Serializer
+
+logger = logging.getLogger(__name__)
 
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
@@ -123,16 +126,18 @@ def key_to_relative(key, version=LATEST_VERSION):
 
 
 def check_consistency(hash_path, pickled):
-    try:
-        with gzip.GzipFile(hash_path, 'rb') as file:
+    def _check(cls):
+        with cls(hash_path, 'rb') as file:
             dumped = file.read()
-            assert dumped == pickled, (dumped, pickled)
+            if dumped != pickled:
+                raise RuntimeError(f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}')
+
+    try:
+        _check(gzip.GzipFile)
 
     except OSError:
         # transition from old non-gzipped hashes
-        with open(hash_path, 'rb') as file:
-            dumped = file.read()
-            assert dumped == pickled, (dumped, pickled)
+        _check(open)
 
 
 def save_hash(hash_path, pickled):
