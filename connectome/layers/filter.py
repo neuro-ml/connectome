@@ -3,7 +3,7 @@ from typing import Callable, Sequence, Any
 from .base import EdgesBag, Wrapper
 from .cache import IdentityContext
 from ..engine import NodeHash
-from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, FULL_MASK, Edge
+from ..engine.base import BoundEdge, Node, TreeNode, Edge
 from ..engine.edges import ProductEdge, FullMask
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, HashType, CompoundHash, LeafHash
@@ -77,11 +77,11 @@ class FilterEdge(FullMask, Edge):
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return self._make_hash(inputs)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         keys, = arguments
         result = []
         for key in keys:
-            args = self.graph.eval(key)
+            args = self.graph.call(key)
             if self.func(*args):
                 result.append(key)
 

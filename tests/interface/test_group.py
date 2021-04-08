@@ -1,5 +1,8 @@
 from hashlib import sha256
-from connectome import Source, GroupBy, meta
+
+import pytest
+from connectome import Source, GroupBy, meta, impure
+from connectome.engine.base import HashError
 
 
 class DS(Source):
@@ -41,6 +44,19 @@ def test_group_by():
         assert chain.three(i) == {i: str(n // 3)}
 
 
+def test_single_method():
+    class A(Source):
+        @meta
+        def ids():
+            return tuple('012')
+
+        def f(i):
+            return i
+
+    with pytest.raises(RuntimeError):
+        A() >> GroupBy('f')
+
+
 def test_multi_group_by():
     ds = DS()
     # test single group by
@@ -76,3 +92,24 @@ def test_multi_group_by():
     for group in id_groups:
         assert chain.two(compute_new_id(group)) == {idx: str(int(idx) // 2) for idx in group}
         assert chain.three(compute_new_id(group)) == {idx: str(int(idx) // 3) for idx in group}
+
+
+def test_impure():
+    class A(Source):
+        @meta
+        def ids():
+            return tuple('0123456789')
+
+        @impure
+        def _g():
+            pass
+
+        def f(i, _g):
+            return i
+
+        def g(i):
+            return i
+
+    ds = A() >> GroupBy('f')
+    with pytest.raises(HashError):
+        ds.ids

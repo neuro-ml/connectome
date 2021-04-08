@@ -48,6 +48,9 @@ class GroupLayer(Wrapper):
             edges.append(GroupEdge(Graph([mapping[inp]], mapping[node])).bind(
                 [changed_input, mapping_node], output))
 
+        if len(outputs) == 1:
+            raise RuntimeError(f'Previous layer must contain at least 2 fields in order to perform a GroupBy operation')
+
         # update ids
         output_ids = Node('ids')
         outputs.append(output_ids)
@@ -73,13 +76,13 @@ class MappingEdge(Edge):
             return [], None
         return FULL_MASK, None
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         if self._mapping is not None:
             return self._mapping
 
         mapping = defaultdict(list)
         for i in arguments[0]:
-            mapping[self.graph.eval(i)].append(i)
+            mapping[self.graph.call(i)].append(i)
 
         self._mapping = mapping = {k: tuple(sorted(v)) for k, v in mapping.items()}
         return mapping
@@ -99,13 +102,13 @@ class GroupEdge(FullMask, Edge):
             kind=HashType.GROUPING,
         )
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         # get the required ids
         ids = arguments[1][arguments[0]]
 
         result = {}
         for i in ids:
-            result[i] = self.graph.eval(i)
+            result[i] = self.graph.call(i)
 
         return result
 
@@ -195,13 +198,13 @@ class HashMappingEdge(Edge):
             return [], None
         return FULL_MASK, None
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         if self._mapping is not None:
             return self._mapping
 
         groups = []
         for i in arguments[0]:
-            keys = self.graph.eval(i)
+            keys = self.graph.call(i)
             assert len(keys) == len(self.comparators)
             # either find a group
             for entry, container in groups:

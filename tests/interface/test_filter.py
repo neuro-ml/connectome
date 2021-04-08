@@ -1,4 +1,6 @@
-from connectome import Chain, Filter
+import pytest
+from connectome import Chain, Filter, Source, meta, impure
+from connectome.engine.base import HashError
 
 
 def test_filter(block_maker, hash_layer):
@@ -22,3 +24,21 @@ def test_filter(block_maker, hash_layer):
         assert hashed.image(i) == pipeline.image(i)
         assert hashed.lungs(i) == pipeline.lungs(i)
         assert hashed.spacing(i) == pipeline.spacing(i)
+
+
+def test_impure():
+    class A(Source):
+        @meta
+        def ids():
+            return tuple('012')
+
+        @impure
+        def _g():
+            pass
+
+        def f(i, _g):
+            return i
+
+    ds = A() >> Filter(lambda f: f)
+    with pytest.raises(HashError):
+        ds.ids

@@ -1,4 +1,4 @@
-from connectome import Source, Merge, Transform, Chain, positional, meta
+from connectome import Source, Merge, Transform, Chain, positional, meta, impure
 from connectome.engine.base import NodeHash
 
 
@@ -93,3 +93,33 @@ def test_nested():
     for x in [a, b, c]:
         for i in x.ids:
             assert ds.image(i) == x.image(i)
+
+
+def test_impure():
+    def count():
+        nonlocal i
+        i += 1
+
+    i = 0
+
+    class A(Source):
+        _start: int
+
+        @meta
+        def ids(_start):
+            return tuple(map(str, range(_start, _start + 3)))
+
+        @impure
+        def f(i):
+            count()
+            return i
+
+    ds = Merge(
+        A(start=0),
+        A(start=10),
+    )
+
+    assert ds.f('0') == '0'
+    assert i == 1
+    assert ds.f('10') == '10'
+    assert i == 2

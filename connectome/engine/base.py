@@ -6,6 +6,7 @@ from .node_hash import NodeHash, NodeHashes
 FULL_MASK = None
 NodesMask = Union[Sequence[int], FULL_MASK]
 MaskOutput = Tuple[NodesMask, Any]
+HashOutput = Tuple[NodeHash, Any]
 
 
 class Edge(ABC):
@@ -13,13 +14,17 @@ class Edge(ABC):
         self.arity = arity
         self._uses_hash = uses_hash
 
-    def propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def propagate_hash(self, inputs: NodeHashes) -> HashOutput:
         """ Computes the hash of the output given the input hashes. """
         assert len(inputs) == self.arity
-        return self._propagate_hash(inputs)
+        # TODO: remove after transition
+        result = self._propagate_hash(inputs)
+        if isinstance(result, NodeHash):
+            result = result, None
+        return result
 
     @abstractmethod
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _propagate_hash(self, inputs: NodeHashes) -> HashOutput:
         pass
 
     def compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
@@ -36,13 +41,13 @@ class Edge(ABC):
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
         pass
 
-    def evaluate(self, inputs: Sequence, output: NodeHash, payload: Any) -> Any:
+    def evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         """ Computes the output value. """
         assert len(inputs) <= self.arity
-        return self._evaluate(inputs, output, payload)
+        return self._evaluate(inputs, output, hash_payload, mask_payload)
 
     @abstractmethod
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         pass
 
     def handle_exception(self, output: NodeHash, payload: Any):
@@ -161,3 +166,7 @@ TreeNodes = Sequence[TreeNode]
 Nodes = Sequence[Node]
 BoundEdges = Sequence[BoundEdge]
 Edges = Sequence[Edge]
+
+
+class HashError(RuntimeError):
+    pass

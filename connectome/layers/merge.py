@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Sequence, Any
 
 from ..engine.edges import ConstantEdge, FullMask
-from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode
+from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode, HashOutput
 from ..engine.graph import Graph
 from ..engine.node_hash import HashType, CompoundHash, LeafHash
 from ..utils import node_to_dict
@@ -60,16 +60,17 @@ class SwitchEdge(FullMask, Edge):
         except KeyError:
             raise ValueError(f'Identifier {key} not found.') from None
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _propagate_hash(self, inputs: NodeHashes) -> HashOutput:
         node_hash, = inputs
         assert isinstance(node_hash, LeafHash)
         graph = self._select_graph(node_hash.data)
-        return graph.eval_hash(*inputs)
+        return graph.propagate_hash(*inputs)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any):
+    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
         key, = arguments
         graph = self._select_graph(key)
-        return graph.eval(key)
+        hashes, payload = hash_payload
+        return graph.evaluate([key], hashes, payload)
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return CompoundHash(

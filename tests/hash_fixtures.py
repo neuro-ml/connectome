@@ -13,7 +13,7 @@ class HashEdge(FullMask, Edge):
     def __init__(self):
         super().__init__(arity=1, uses_hash=True)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any):
+    def _evaluate(self, arguments: Sequence, output: NodeHash, mask_payload: Any, hash_payload: Any):
         return arguments[0], output
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:

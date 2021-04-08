@@ -33,19 +33,29 @@ class Graph:
                 node: LeafHash(scope.arguments[node.name] if use_hash else object())
                 for node in inputs
             }
-            hashes = compute_hashes(input_hashes, output)
-            masks, payload = compute_masks(output, hashes)
+            hashes, hash_payload = compute_hashes(input_hashes, output)
+            masks, mask_payload = compute_masks(output, hashes)
 
             # return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
-            return execute_sequential(scope.arguments, inputs, output, hashes, masks, payload)
+            return execute_sequential(scope.arguments, inputs, output, hashes, masks, hash_payload, mask_payload)
 
         caller.__signature__ = signature
-        self.eval = caller
+        self.call = caller
+        self.eval = 1
 
-    def eval_hash(self, *inputs: NodeHash):
+    # TODO: remove duplicates
+    def propagate_hash(self, *inputs: NodeHash):
         assert len(inputs) == len(self.inputs)
-        hashes = compute_hashes(dict(zip(self.inputs, inputs)), self.output)
-        return hashes[self.output]
+        hashes, payload = compute_hashes(dict(zip(self.inputs, inputs)), self.output)
+        return hashes[self.output], (hashes, payload)
+
+    def evaluate(self, inputs: Sequence, hashes, payload):
+        assert len(inputs) == len(self.inputs)
+        masks, mask_payload = compute_masks(self.output, hashes)
+        inputs = {node.name: x for node, x in zip(self.inputs, inputs)}
+
+        # return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
+        return execute_sequential(inputs, self.inputs, self.output, hashes, masks, payload, mask_payload)
 
     def hash(self):
         return hash_graph(self.inputs, self.output)
@@ -53,7 +63,7 @@ class Graph:
 
 # TODO: deprecate?
 def compile_graph(inputs: Sequence[TreeNode], outputs: TreeNode):
-    return Graph(inputs, outputs).eval
+    return Graph(inputs, outputs).call
 
 
 def uses_hash(node: TreeNode) -> bool:
@@ -125,13 +135,14 @@ def count_entries(inputs: TreeNodes, output: TreeNode, masks=None):
 def compute_hashes(inputs: Dict[TreeNode, NodeHash], output: TreeNode):
     def visitor(node: TreeNode):
         if node not in cache:
-            cache[node] = node.edge.propagate_hash(list(map(visitor, node.parents)))
+            cache[node], payload[node] = node.edge.propagate_hash(list(map(visitor, node.parents)))
 
         return cache[node]
 
     cache = inputs.copy()
+    payload = dict.fromkeys(cache, None)
     visitor(output)
-    return cache
+    return cache, payload
 
 
 def compute_masks(output: TreeNode, hashes):
@@ -161,17 +172,6 @@ def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
 
     hashes = dict.fromkeys(inputs, _PLACEHOLDER)
     return visitor(output)
-
-
-def render(node, cache, masks, hashes):
-    if node not in cache:
-        inputs = node.parents
-        mask = masks[node]
-
-        inputs = [inputs[idx] for idx in mask]
-        cache[node] = node.edge.evaluate(tuple(render(x, cache, masks, hashes) for x in inputs), hashes[node], mask)
-
-    return cache[node]
 
 
 # a placeholder used to calculate the graph hash without inputs

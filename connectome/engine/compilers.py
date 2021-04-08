@@ -9,7 +9,7 @@ from .execution import GraphTask, execute_graph_async
 
 def execute_sequential(arguments: Dict[str, Any], inputs: TreeNodes, output: TreeNode,
                        hashes: Dict[TreeNode, NodeHash], masks: Dict[TreeNode, NodesMask],
-                       payload: Dict[TreeNode, Any]):
+                       hash_payload: Dict[TreeNode, Any], mask_payload: Dict[TreeNode, Any]):
     operations, counts = compile_sequential(output, masks)
     cache = ExpirationCache(counts)
 
@@ -21,7 +21,8 @@ def execute_sequential(arguments: Dict[str, Any], inputs: TreeNodes, output: Tre
     try:
         while operations:
             node, inputs = operations.pop()
-            cache[node] = node.edge.evaluate(tuple(cache[x] for x in inputs), hashes[node], payload[node])
+            cache[node] = node.edge.evaluate(
+                tuple(cache[x] for x in inputs), hashes[node], hash_payload[node], mask_payload[node])
 
         return cache[output]
 
@@ -29,7 +30,7 @@ def execute_sequential(arguments: Dict[str, Any], inputs: TreeNodes, output: Tre
         # cleanup
         while operations:
             node, inputs = operations.pop()
-            node.edge.handle_exception(hashes[node], payload[node])
+            node.edge.handle_exception(hashes[node], mask_payload[node])
 
         raise
 
