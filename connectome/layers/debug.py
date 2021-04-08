@@ -1,8 +1,8 @@
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Any
 
 from .transform import TransformLayer
 from ..cache.disk import key_to_relative
-from ..engine.base import Node, NodeHash, NodesMask
+from ..engine.base import Node, NodeHash
 from ..engine.edges import IdentityEdge
 
 
@@ -11,9 +11,9 @@ class HashDigestEdge(IdentityEdge):
         super().__init__()
         self._uses_hash = True
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        pickled, digest, _ = key_to_relative(node_hash.value)
-        return arguments[0], node_hash.value, digest, pickled
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any):
+        pickled, digest, _ = key_to_relative(output.value)
+        return arguments[0], output.value, digest, pickled
 
 
 class HashDigestLayer(TransformLayer):

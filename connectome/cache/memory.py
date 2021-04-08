@@ -1,4 +1,4 @@
-from typing import Union, Any
+from typing import Union, Any, Tuple
 # import pylru
 
 from .base import Cache
@@ -15,14 +15,14 @@ class MemoryCache(Cache):
         self._cache = {}
         self._transactions = ThreadedTransaction()
 
-    def reserve_write_or_read(self, param: NodeHash) -> bool:
+    def reserve_write_or_read(self, param: NodeHash) -> Tuple[bool, Any]:
         return self._transactions.reserve_write_or_read(param.value, self._cache.__contains__)
 
-    def fail(self, param: NodeHash):
-        return self._transactions.fail(param.value)
+    def fail(self, param: NodeHash, transaction: Any):
+        return self._transactions.fail(param.value, transaction)
 
-    def set(self, param: NodeHash, value: Any):
-        return self._transactions.set(param.value, value, self._cache.__setitem__)
+    def set(self, param: NodeHash, value: Any, transaction: Any):
+        return self._transactions.set(param.value, value, transaction, self._cache.__setitem__)
 
-    def get(self, param: NodeHash) -> Any:
-        return self._transactions.get(param.value, self._cache.__getitem__)
+    def get(self, param: NodeHash, transaction: Any) -> Any:
+        return self._transactions.get(param.value, transaction, self._cache.__getitem__)

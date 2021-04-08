@@ -4,7 +4,7 @@ from .base import EdgesBag, Wrapper
 from .cache import IdentityContext
 from ..engine import NodeHash
 from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, FULL_MASK, Edge
-from ..engine.edges import ProductEdge
+from ..engine.edges import ProductEdge, FullMask
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, HashType, CompoundHash, LeafHash
 from ..utils import extract_signature, node_to_dict
@@ -57,7 +57,7 @@ class FilterLayer(Wrapper):
         return EdgesBag(main.inputs, outputs, edges, IdentityContext())
 
 
-class FilterEdge(Edge):
+class FilterEdge(FullMask, Edge):
     def __init__(self, func: Callable, graph: Graph):
         super().__init__(arity=1, uses_hash=False)
         self.graph = graph
@@ -74,13 +74,10 @@ class FilterEdge(Edge):
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         return self._make_hash(inputs)
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        return FULL_MASK
-
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return self._make_hash(inputs)
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
         keys, = arguments
         result = []
         for key in keys:

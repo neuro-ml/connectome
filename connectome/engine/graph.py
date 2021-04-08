@@ -34,10 +34,10 @@ class Graph:
                 for node in inputs
             }
             hashes = compute_hashes(input_hashes, output)
-            masks = compute_masks(output, hashes)
+            masks, payload = compute_masks(output, hashes)
 
             # return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
-            return execute_sequential(scope.arguments, inputs, output, hashes, masks)
+            return execute_sequential(scope.arguments, inputs, output, hashes, masks, payload)
 
         caller.__signature__ = signature
         self.eval = caller
@@ -136,19 +136,20 @@ def compute_hashes(inputs: Dict[TreeNode, NodeHash], output: TreeNode):
 
 def compute_masks(output: TreeNode, hashes):
     def visitor(node: TreeNode):
-        if node not in cache:
+        if node not in masks:
             if node.is_leaf:
-                cache[node] = ()
+                masks[node] = ()
+                payloads[node] = None
                 return
 
             parents = node.parents
-            cache[node] = mask = node.edge.compute_mask([hashes[n] for n in parents], hashes[node])
+            masks[node], payloads[node] = mask, _ = node.edge.compute_mask([hashes[n] for n in parents], hashes[node])
             for idx in mask:
                 visitor(parents[idx])
 
-    cache = {}
+    masks, payloads = {}, {}
     visitor(output)
-    return cache
+    return masks, payloads
 
 
 def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
@@ -168,10 +169,7 @@ def render(node, cache, masks, hashes):
         mask = masks[node]
 
         inputs = [inputs[idx] for idx in mask]
-        cache[node] = node.edge.evaluate(
-            tuple(render(x, cache, masks, hashes) for x in inputs),
-            mask, hashes[node]
-        )
+        cache[node] = node.edge.evaluate(tuple(render(x, cache, masks, hashes) for x in inputs), hashes[node], mask)
 
     return cache[node]
 

@@ -1,25 +1,23 @@
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Any
 
 import pytest
 
 from connectome.engine.base import Edge, NodeHash, NodesMask, FULL_MASK, Node, NodeHashes
+from connectome.engine.edges import FullMask
 from connectome.interface.base import BaseBlock
 from connectome.layers.base import Wrapper, EdgesBag
 from connectome.layers.transform import TransformLayer
 
 
-class HashEdge(Edge):
+class HashEdge(FullMask, Edge):
     def __init__(self):
         super().__init__(arity=1, uses_hash=True)
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
-        return arguments[0], node_hash
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any):
+        return arguments[0], output
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
-
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        return FULL_MASK
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]

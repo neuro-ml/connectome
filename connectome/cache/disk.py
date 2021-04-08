@@ -8,7 +8,7 @@ import time
 from functools import partial
 from hashlib import blake2b
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Tuple, Any
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
@@ -35,39 +35,43 @@ class DiskCache(Cache):
         self.root = Path(root)
         self._transactions = ThreadedTransaction()
 
-    def reserve_write_or_read(self, param: NodeHash) -> bool:
+    def reserve_write_or_read(self, param: NodeHash) -> Tuple[bool, Any]:
         value = param.value
         pickled, digest, _ = key_to_relative(value)
-        empty = self._transactions.reserve_write_or_read(digest, self._digest_exists)
+        empty, transaction = self._transactions.reserve_write_or_read(digest, self._digest_exists)
         # we can already read from cache
         if not empty:
-            return empty
+            return empty, transaction
 
         # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
             local_pickled, local_digest, _ = key_to_relative(value, version)
-            contains = self._transactions.reserve_read(local_digest, self._digest_exists)
+            contains, local_transaction = self._transactions.reserve_read(local_digest, self._digest_exists)
             if contains:
                 # we can simply copy the previous version, because nothing really changed
-                value = self._transactions.get(local_digest, partial(self._load, pickled=local_pickled))
-                self._transactions.set(digest, value, partial(self._save, pickled=pickled))
-                empty = self._transactions.reserve_write_or_read(digest, self._digest_exists)
+                value = self._transactions.get(
+                    local_digest, local_transaction, partial(self._load, pickled=local_pickled))
+                self._transactions.set(digest, value, transaction, partial(self._save, pickled=pickled))
+                empty, transaction = self._transactions.reserve_write_or_read(digest, self._digest_exists)
                 assert not empty
-                return empty
+                return empty, transaction
 
-        return empty
+            else:
+                assert local_transaction is None
 
-    def fail(self, param: NodeHash):
+        return empty, transaction
+
+    def fail(self, param: NodeHash, transaction: Any):
         _, digest, _ = key_to_relative(param.value)
-        self._transactions.fail(digest)
+        self._transactions.fail(digest, transaction)
 
-    def set(self, param: NodeHash, value):
+    def set(self, param: NodeHash, value, transaction: Any):
         pickled, digest, _ = key_to_relative(param.value)
-        return self._transactions.set(digest, value, partial(self._save, pickled=pickled))
+        return self._transactions.set(digest, value, transaction, partial(self._save, pickled=pickled))
 
-    def get(self, param: NodeHash):
+    def get(self, param: NodeHash, transaction: Any):
         pickled, digest, _ = key_to_relative(param.value)
-        return self._transactions.get(digest, partial(self._load, pickled=pickled))
+        return self._transactions.get(digest, transaction, partial(self._load, pickled=pickled))
 
     def _digest_exists(self, digest: str):
         return (self.root / digest_to_relative(digest)).exists()

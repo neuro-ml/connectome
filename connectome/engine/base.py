@@ -5,6 +5,7 @@ from .node_hash import NodeHash, NodeHashes
 
 FULL_MASK = None
 NodesMask = Union[Sequence[int], FULL_MASK]
+MaskOutput = Tuple[NodesMask, Any]
 
 
 class Edge(ABC):
@@ -21,30 +22,30 @@ class Edge(ABC):
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         pass
 
-    def compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+    def compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
         """ Computes the mask of the essential inputs. """
         assert len(inputs) == self.arity
-        mask = self._compute_mask(inputs, output)
+        mask, payload = self._compute_mask(inputs, output)
         if mask == FULL_MASK:
             mask = range(self.arity)
         assert all(0 <= x < self.arity for x in mask)
         assert len(set(mask)) == len(mask)
-        return mask
+        return mask, payload
 
     @abstractmethod
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
         pass
 
-    def evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def evaluate(self, inputs: Sequence, output: NodeHash, payload: Any) -> Any:
         """ Computes the output value. """
-        assert len(arguments) == len(mask)
-        return self._evaluate(arguments, mask, node_hash)
+        assert len(inputs) <= self.arity
+        return self._evaluate(inputs, output, payload)
 
     @abstractmethod
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
         pass
 
-    def handle_exception(self, mask: NodesMask, node_hash: NodeHash):
+    def handle_exception(self, output: NodeHash, payload: Any):
         pass
 
     def hash_graph(self, inputs: NodeHashes) -> NodeHash:

@@ -128,17 +128,17 @@ class CachedColumn(Edge):
         return inputs[0]
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        empty = self.ram.reserve_write_or_read(output)
+        empty, transaction = self.ram.reserve_write_or_read(output)
         if empty:
-            return [1, 2]
-        return []
+            return [1, 2], transaction
+        return [], transaction
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return inputs[0]
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
         if not arguments:
-            return self.ram.get(node_hash)
+            return self.ram.get(output, payload)
 
         key, keys = arguments
         keys = sorted(keys)
@@ -149,21 +149,23 @@ class CachedColumn(Edge):
             h = self.graph.eval_hash(LeafHash(k))
             hashes.append(h)
             if k == key:
-                assert node_hash == h
+                assert output == h
         compound = CompoundHash(*hashes)
 
-        if self.disk.reserve_write_or_read(compound):
+        empty, transaction = self.disk.reserve_write_or_read(compound)
+        if empty:
             values = [self.graph.eval(k) for k in keys]
-            self.disk.set(compound, values)
+            self.disk.set(compound, values, transaction)
         else:
-            values = self.disk.get(compound)
+            values = self.disk.get(compound, transaction)
 
         for k, h, value in zip(keys, hashes, values):
             if k == key:
                 result = value
-                self.ram.set(h, value)
+                self.ram.set(h, value, payload)
 
-            elif self.ram.reserve_write_or_read(h):
-                self.ram.set(h, value)
+            else:
+                empty, transaction = self.ram.reserve_write_or_read(h)
+                self.ram.set(h, value, transaction)
 
         return result

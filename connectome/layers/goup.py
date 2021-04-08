@@ -5,7 +5,7 @@ from typing import Sequence, Any
 from .base import EdgesBag, Wrapper, NoContext
 from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, NodeHashes, NodesMask, FULL_MASK, Edge
-from ..engine.edges import FunctionEdge, ProductEdge
+from ..engine.edges import FunctionEdge, ProductEdge, FullMask
 from ..engine.graph import Graph
 from ..engine.node_hash import HashType, CompoundHash, LeafHash
 
@@ -70,10 +70,10 @@ class MappingEdge(Edge):
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
         if self._mapping is not None:
-            return []
-        return FULL_MASK
+            return [], None
+        return FULL_MASK, None
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
         if self._mapping is not None:
             return self._mapping
 
@@ -88,7 +88,7 @@ class MappingEdge(Edge):
         return self._propagate_hash(inputs)
 
 
-class GroupEdge(Edge):
+class GroupEdge(FullMask, Edge):
     def __init__(self, graph):
         super().__init__(arity=2, uses_hash=True)
         self.graph = graph
@@ -99,10 +99,7 @@ class GroupEdge(Edge):
             kind=HashType.GROUPING,
         )
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        return FULL_MASK
-
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
         # get the required ids
         ids = arguments[1][arguments[0]]
 
@@ -195,10 +192,10 @@ class HashMappingEdge(Edge):
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
         if self._mapping is not None:
-            return []
-        return FULL_MASK
+            return [], None
+        return FULL_MASK, None
 
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any) -> Any:
         if self._mapping is not None:
             return self._mapping
 

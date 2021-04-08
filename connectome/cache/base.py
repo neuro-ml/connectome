@@ -1,29 +1,29 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Callable
+from typing import Any, Callable, Tuple
 
 from ..engine import NodeHash
 
 
 class Cache:
-    def reserve_write_or_read(self, param: NodeHash) -> bool:
+    def reserve_write_or_read(self, param: NodeHash) -> Tuple[bool, Any]:
         """
         Notifies the cache that a read/write operation will be performed during evaluation.
 
-        Returns whether the cache is completely empty for the given key.
+        Returns whether the cache is completely empty for the given key, as well as a transaction id.
         """
         raise NotImplementedError
 
-    def fail(self, param: NodeHash):
+    def fail(self, param: NodeHash, transaction: Any):
         """
         Handles a failure during cache writing.
         """
         raise NotImplementedError
 
-    def set(self, param: NodeHash, value: Any):
+    def set(self, param: NodeHash, value: Any, transaction: Any):
         raise NotImplementedError
 
-    def get(self, param: NodeHash) -> Any:
+    def get(self, param: NodeHash, transaction: Any) -> Any:
         raise NotImplementedError
 
 
@@ -33,7 +33,7 @@ class TransactionState(Enum):
 
 class TransactionManager(ABC):
     @abstractmethod
-    def reserve_read(self, key: Any, contains: Callable) -> bool:
+    def reserve_read(self, key: Any, contains: Callable) -> Tuple[bool, Any]:
         """
         Notifies the cache that a read operation will be performed during evaluation.
 
@@ -41,7 +41,7 @@ class TransactionManager(ABC):
         """
 
     @abstractmethod
-    def reserve_write_or_read(self, key: Any, contains: Callable) -> bool:
+    def reserve_write_or_read(self, key: Any, contains: Callable) -> Tuple[bool, Any]:
         """
         Notifies the cache that a read/write operation will be performed during evaluation.
 
@@ -49,13 +49,13 @@ class TransactionManager(ABC):
         """
 
     @abstractmethod
-    def fail(self, key: Any):
+    def fail(self, key: Any, transaction: Any):
         """
         Handles a failure during cache writing.
         """
 
     @abstractmethod
-    def set(self, key: Any, value: Any, setter: Callable[[Any, Any], Any]):
+    def set(self, key: Any, value: Any, transaction: Any, setter: Callable[[Any, Any], Any]):
         """
         Notes
         -----
@@ -63,5 +63,5 @@ class TransactionManager(ABC):
         """
 
     @abstractmethod
-    def get(self, key: Any, getter: Callable[[Any], Any]) -> Any:
+    def get(self, key: Any, transaction: Any, getter: Callable[[Any], Any]) -> Any:
         pass

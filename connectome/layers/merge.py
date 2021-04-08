@@ -1,7 +1,7 @@
 from collections import defaultdict
-from typing import Sequence
+from typing import Sequence, Any
 
-from ..engine.edges import ConstantEdge
+from ..engine.edges import ConstantEdge, FullMask
 from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode
 from ..engine.graph import Graph
 from ..engine.node_hash import HashType, CompoundHash, LeafHash
@@ -48,7 +48,7 @@ class SwitchLayer(EdgesBag):
         return [inp], outputs, edges
 
 
-class SwitchEdge(Edge):
+class SwitchEdge(FullMask, Edge):
     def __init__(self, id_to_index: dict, graphs: Sequence[Graph]):
         super().__init__(arity=1, uses_hash=True)
         self.graphs = graphs
@@ -66,10 +66,7 @@ class SwitchEdge(Edge):
         graph = self._select_graph(node_hash.data)
         return graph.eval_hash(*inputs)
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        return FULL_MASK
-
-    def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash):
+    def _evaluate(self, arguments: Sequence, output: NodeHash, payload: Any):
         key, = arguments
         graph = self._select_graph(key)
         return graph.eval(key)
