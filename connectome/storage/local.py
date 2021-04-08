@@ -102,14 +102,14 @@ def digest_file(path: Path, block_size=2 ** 20):
     return hasher.hexdigest()
 
 
-def digest_to_relative(key):
-    assert len(key) == DIGEST_SIZE * 2, len(key)
+def digest_to_relative(digest):
+    assert len(digest) == DIGEST_SIZE * 2, len(digest)
 
     parts = []
     start = 0
     for level in FOLDER_LEVELS:
         stop = start + level * 2
-        parts.append(key[start:stop])
+        parts.append(digest[start:stop])
         start = stop
 
     return Path(*parts)

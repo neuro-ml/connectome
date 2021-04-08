@@ -44,6 +44,9 @@ class Edge(ABC):
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
         pass
 
+    def handle_exception(self, mask: NodesMask, node_hash: NodeHash):
+        pass
+
     def hash_graph(self, inputs: NodeHashes) -> NodeHash:
         """ Propagates the graph's hash without any control flow. """
         assert len(inputs) == self.arity
@@ -127,7 +130,7 @@ class TreeNode:
 
         UniqueDotExporter(
             convert(self),
-            edgeattrfunc=lambda parent, child: (parent.edge, ),
+            edgeattrfunc=lambda parent, child: (parent.edge,),
             nodeattrfunc=lambda
                 node: f"shape={'box' if node.original not in cache else 'ellipse'}, label=\"{node.name}\"",
             nodenamefunc=lambda node: hex(id(node.original))

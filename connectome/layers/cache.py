@@ -128,9 +128,10 @@ class CachedColumn(Edge):
         return inputs[0]
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        if self.ram.contains(output):
-            return []
-        return [1, 2]
+        empty = self.ram.reserve_write_or_read(output)
+        if empty:
+            return [1, 2]
+        return []
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return inputs[0]
@@ -151,15 +152,18 @@ class CachedColumn(Edge):
                 assert node_hash == h
         compound = CompoundHash(*hashes)
 
-        if not self.disk.contains(compound):
+        if self.disk.reserve_write_or_read(compound):
             values = [self.graph.eval(k) for k in keys]
             self.disk.set(compound, values)
         else:
             values = self.disk.get(compound)
 
         for k, h, value in zip(keys, hashes, values):
-            self.ram.set(h, value)
             if k == key:
                 result = value
+                self.ram.set(h, value)
+
+            elif self.ram.reserve_write_or_read(h):
+                self.ram.set(h, value)
 
         return result

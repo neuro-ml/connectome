@@ -16,10 +16,21 @@ def execute_sequential(arguments: Dict[str, Any], inputs: TreeNodes, output: Tre
         if node in counts:
             cache[node] = arguments[node.name]
 
-    for node, inputs in operations:
-        cache[node] = node.edge.evaluate(tuple(cache[x] for x in inputs), masks[node], hashes[node])
+    operations = operations[::-1]
+    try:
+        while operations:
+            node, inputs = operations.pop()
+            cache[node] = node.edge.evaluate(tuple(cache[x] for x in inputs), masks[node], hashes[node])
 
-    return cache[output]
+        return cache[output]
+
+    except BaseException:
+        # cleanup
+        while operations:
+            node, inputs = operations.pop()
+            node.edge.handle_exception(masks[node], hashes[node])
+
+        raise
 
 
 def compile_sequential(output: TreeNode, masks: Dict[TreeNode, NodesMask]):

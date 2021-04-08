@@ -5,13 +5,14 @@ import logging
 import os
 import shutil
 import time
+from functools import partial
 from hashlib import blake2b
 from pathlib import Path
 from typing import Sequence
 
 from .base import Cache
-from .locks import NoLock
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
+from .transactions import ThreadedTransaction
 from ..storage.base import DiskOptions, Storage, digest_to_relative
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
@@ -32,58 +33,73 @@ class DiskCache(Cache):
         self.serializer = serializer
         self.storage = Storage(options)
         self.root = Path(root)
-        self._file_lock = NoLock()
+        self._transactions = ThreadedTransaction()
 
-    def contains(self, param: NodeHash) -> bool:
-        _, _, relative = key_to_relative(param.value)
-        if (self.root / relative).exists():
-            return True
+    def reserve_write_or_read(self, param: NodeHash) -> bool:
+        value = param.value
+        pickled, digest, _ = key_to_relative(value)
+        empty = self._transactions.reserve_write_or_read(digest, self._digest_exists)
+        # we can already read from cache
+        if not empty:
+            return empty
 
+        # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
-            pickled, _, relative = key_to_relative(param.value, version)
-            local = self.root / relative
-            if local.exists():
+            local_pickled, local_digest, _ = key_to_relative(value, version)
+            contains = self._transactions.reserve_read(local_digest, self._digest_exists)
+            if contains:
                 # we can simply copy the previous version, because nothing really changed
-                self.set(param, self._load(local, pickled))
-                return True
+                value = self._transactions.get(local_digest, partial(self._load, pickled=local_pickled))
+                self._transactions.set(digest, value, partial(self._save, pickled=pickled))
+                empty = self._transactions.reserve_write_or_read(digest, self._digest_exists)
+                assert not empty
+                return empty
 
-        return False
+        return empty
+
+    def fail(self, param: NodeHash):
+        _, digest, _ = key_to_relative(param.value)
+        self._transactions.fail(digest)
 
     def set(self, param: NodeHash, value):
-        pickled, _, relative = key_to_relative(param.value)
-        root = self.root / relative
-        if root.exists():
-            # idempotency
-            with self._file_lock.read(root):
-                check_consistency(root / HASH_FILENAME, pickled)
-                return
-
-        with self._file_lock.write(root):
-            data_folder = root / DATA_FOLDER
-            create_folders(data_folder, self.root)
-
-            try:
-                # data
-                self.serializer.save(value, data_folder)
-                # meta
-                self._save_meta(root, pickled)
-
-                copy_group_permissions(root, self.root, recursive=True)
-                self._mirror_to_storage(data_folder)
-
-            except BaseException as e:
-                shutil.rmtree(root)
-                raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
+        pickled, digest, _ = key_to_relative(param.value)
+        return self._transactions.set(digest, value, partial(self._save, pickled=pickled))
 
     def get(self, param: NodeHash):
-        pickled, _, relative = key_to_relative(param.value)
-        return self._load(self.root / relative, pickled)
+        pickled, digest, _ = key_to_relative(param.value)
+        return self._transactions.get(digest, partial(self._load, pickled=pickled))
 
-    def _load(self, root, pickled):
-        with self._file_lock.read(root):
-            # TODO: how slow is this?
+    def _digest_exists(self, digest: str):
+        return (self.root / digest_to_relative(digest)).exists()
+
+    def _load(self, digest, pickled):
+        root = self.root / digest_to_relative(digest)
+        # TODO: how slow is this?
+        check_consistency(root / HASH_FILENAME, pickled)
+        return self.serializer.load(root / DATA_FOLDER)
+
+    def _save(self, digest: str, value, pickled):
+        root = self.root / digest_to_relative(digest)
+        if root.exists():
             check_consistency(root / HASH_FILENAME, pickled)
-            return self.serializer.load(root / DATA_FOLDER)
+            # TODO: also compare the raw bytes of `value` and dumped value
+            return
+
+        data_folder = root / DATA_FOLDER
+        create_folders(data_folder, self.root)
+
+        try:
+            # data
+            self.serializer.save(value, data_folder)
+            # meta
+            self._save_meta(root, pickled)
+
+            copy_group_permissions(root, self.root, recursive=True)
+            self._mirror_to_storage(data_folder)
+
+        except BaseException as e:
+            shutil.rmtree(root)
+            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
         # hash

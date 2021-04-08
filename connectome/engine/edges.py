@@ -109,24 +109,32 @@ class ConstantEdge(Edge):
 class CacheEdge(Edge):
     def __init__(self, storage: Cache):
         super().__init__(arity=1, uses_hash=True)
-        self.storage = storage
+        self.cache = storage
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        if self.storage.contains(output):
-            return []
-        return FULL_MASK
+        empty = self.cache.reserve_write_or_read(output)
+        if empty:
+            return FULL_MASK
+        return []
 
     def _evaluate(self, arguments: Sequence, mask: NodesMask, node_hash: NodeHash) -> Any:
         # no arguments means that the value is cached
         if not arguments:
-            return self.storage.get(node_hash)
+            return self.cache.get(node_hash)
 
         value, = arguments
-        self.storage.set(node_hash, value)
+        # TODO: what to do in case of a collision:
+        #   overwrite?
+        #   add consistency check?
+        #   get the value from cache?
+        self.cache.set(node_hash, value)
         return value
+
+    def handle_exception(self, mask: NodesMask, node_hash: NodeHash):
+        self.cache.fail(node_hash)
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return inputs[0]

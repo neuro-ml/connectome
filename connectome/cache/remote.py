@@ -17,7 +17,7 @@ class RemoteCache(Cache):
         self.storage = ChainDict([RemoteDict(entry, serializer) for entry in options])
 
     def contains(self, param: NodeHash) -> bool:
-        return param.value in self.storage
+        return param.value not in self.storage
 
     def get(self, param: NodeHash) -> Any:
         return self.storage[param.value]
