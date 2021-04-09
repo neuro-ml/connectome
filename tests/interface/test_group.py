@@ -110,6 +110,5 @@ def test_impure():
         def g(i):
             return i
 
-    ds = A() >> GroupBy('f')
     with pytest.raises(HashError):
-        ds.ids
+        A() >> GroupBy('f')

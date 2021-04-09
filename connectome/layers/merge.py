@@ -2,9 +2,9 @@ from collections import defaultdict
 from typing import Sequence, Any
 
 from ..engine.edges import ConstantEdge, FullMask
-from ..engine.base import Node, NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, TreeNode, HashOutput
+from ..engine.base import Node, NodeHash, Edge, NodeHashes, TreeNode, HashOutput
 from ..engine.graph import Graph
-from ..engine.node_hash import HashType, CompoundHash, LeafHash
+from ..engine.node_hash import LeafHash, MergeHash
 from ..utils import node_to_dict
 from .base import EdgesBag
 
@@ -72,8 +72,6 @@ class SwitchEdge(FullMask, Edge):
         hashes, payload = hash_payload
         return graph.evaluate([key], hashes, payload)
 
-    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return CompoundHash(
-            *inputs, *(graph.hash() for graph in self.graphs),
-            kind=HashType.MERGE
-        )
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        # TODO: wind a way to cache these graphs
+        return MergeHash(*(graph.hash() for graph in self.graphs), *inputs)

@@ -2,12 +2,13 @@ from abc import ABC
 from typing import Sequence, Callable, Any
 
 from .base import NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, MaskOutput, HashOutput, HashError
-from .node_hash import LeafHash, CompoundHash
+from .node_hash import LeafHash, ApplyHash, TupleHash
 from ..cache import Cache
 
 
 class FullMask:
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
+    @staticmethod
+    def _compute_mask(inputs: NodeHashes, output: NodeHash) -> MaskOutput:
         return FULL_MASK, None
 
 
@@ -15,14 +16,12 @@ class FunctionEdge(FullMask, Edge):
     def __init__(self, function: Callable, arity: int):
         super().__init__(arity, uses_hash=False)
         self.function = function
-        # TODO:
-        # self._function_hash = LeafHash(function)
 
     def _calc_hash(self, hashes):
-        return CompoundHash(LeafHash(self.function), *hashes)
+        return ApplyHash(self.function, *hashes)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
-        return self.function(*arguments)
+    def _evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+        return self.function(*inputs)
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
         return self._calc_hash(inputs)
@@ -137,11 +136,11 @@ class ProductEdge(FullMask, Edge):
     def __init__(self, arity: int):
         super().__init__(arity, uses_hash=False)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
-        return tuple(arguments)
+    def _evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
+        return tuple(inputs)
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return CompoundHash(*inputs)
+        return TupleHash(*inputs)
 
-    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return CompoundHash(*inputs)
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        return TupleHash(*inputs)

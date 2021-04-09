@@ -39,6 +39,5 @@ def test_impure():
         def f(i, _g):
             return i
 
-    ds = A() >> Filter(lambda f: f)
     with pytest.raises(HashError):
-        ds.ids
+        A() >> Filter(lambda f: f)

@@ -10,7 +10,7 @@ from typing import Sequence, Dict
 
 from .base import TreeNode, NodeHash, TreeNodes
 from .compilers import execute_sequential, execute_sequential_async
-from .node_hash import LeafHash
+from .node_hash import LeafHash, GraphHash
 
 
 class Graph:
@@ -58,7 +58,7 @@ class Graph:
         return execute_sequential(inputs, self.inputs, self.output, hashes, masks, payload, mask_payload)
 
     def hash(self):
-        return hash_graph(self.inputs, self.output)
+        return GraphHash(hash_graph(self.inputs, self.output))
 
 
 # TODO: deprecate?

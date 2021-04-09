@@ -5,7 +5,7 @@ from ..engine import NodeHash
 from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, Edge
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import NodeHashes, LeafHash, CompoundHash
+from ..engine.node_hash import NodeHashes, LeafHash, TupleHash
 from ..utils import node_to_dict
 from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
@@ -151,7 +151,7 @@ class CachedColumn(Edge):
             payloads.append(payload)
             if k == key:
                 assert output == h
-        compound = CompoundHash(*hashes)
+        compound = TupleHash(*hashes)
 
         empty, transaction = self.disk.reserve_write_or_read(compound)
         if empty:

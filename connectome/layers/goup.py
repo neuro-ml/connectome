@@ -7,7 +7,7 @@ from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, NodeHashes, NodesMask, FULL_MASK, Edge
 from ..engine.edges import FunctionEdge, ProductEdge, FullMask
 from ..engine.graph import Graph
-from ..engine.node_hash import HashType, CompoundHash, LeafHash
+from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
 
 
 class GroupLayer(Wrapper):
@@ -60,16 +60,16 @@ class GroupLayer(Wrapper):
 
 
 class MappingEdge(Edge):
+    """ Groups the incoming values using `graph` as a key function."""
+
     def __init__(self, graph):
         super().__init__(arity=1, uses_hash=True)
         self.graph = graph
         self._mapping = None
+        self._hash = self.graph.hash()
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return CompoundHash(
-            *inputs, self.graph.hash(),
-            kind=HashType.MAPPING,
-        )
+        return GroupByHash(self._hash, *inputs)
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
         if self._mapping is not None:
@@ -95,14 +95,13 @@ class GroupEdge(FullMask, Edge):
     def __init__(self, graph):
         super().__init__(arity=2, uses_hash=True)
         self.graph = graph
+        self._hash = self.graph.hash()
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return CompoundHash(
-            *inputs, self.graph.hash(),
-            kind=HashType.GROUPING,
-        )
+        return DictFromKeys(self._hash, *inputs)
 
     def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+        """ arguments: id, mapping """
         # get the required ids
         ids = arguments[1][arguments[0]]
 
@@ -187,10 +186,9 @@ class HashMappingEdge(Edge):
         self.hasher = sha256
 
     def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return CompoundHash(
+        return MultiMappingHash(
             *inputs, *(LeafHash(x) for x in self.comparators), LeafHash(self.hasher),
             self.graph.hash(),
-            kind=HashType.MULTI_MAPPING,
         )
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
