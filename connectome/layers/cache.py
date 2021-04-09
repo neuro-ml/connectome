@@ -168,6 +168,9 @@ class CachedColumn(Edge):
             else:
                 # TODO: need an immediate set operation
                 empty, transaction = self.ram.reserve_write_or_read(h)
-                self.ram.set(h, value, transaction)
+                if empty:
+                    self.ram.set(h, value, transaction)
+                else:
+                    self.ram.get(h, transaction)
 
         return result

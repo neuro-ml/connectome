@@ -12,6 +12,7 @@ import pickletools
 import struct
 import sys
 import types
+from operator import itemgetter
 from typing import NamedTuple, Any
 from weakref import WeakSet
 from collections import OrderedDict
@@ -26,9 +27,8 @@ from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild
 NEWER_THAN_38 = sys.version_info[:2] > (3, 8)
 
 
-# TODO: replace by tuple
-def sort_dict(d: dict):
-    return OrderedDict([(k, d[k]) for k in sorted(d)])
+def sort_dict(d):
+    return tuple(sorted(d.items()))
 
 
 # we use a set of weak refs, because we don't want to cause memory leaks
@@ -149,13 +149,10 @@ class PortablePickler(CloudPickler):
         save = self.save
         write = self.write
 
-        code, f_globals, defaults, closure_values, dct, base_globals = self.extract_func_data(func)
-        f_globals, dct, base_globals = map(sort_dict, [f_globals, dct, base_globals])
+        # base globals are only needed for unpickling
+        code, f_globals, defaults, closure_values, dct, _ = self.extract_func_data(func)
+        f_globals, dct = map(sort_dict, [f_globals, dct])
 
-        base_globals = base_globals.copy()
-        assert set(base_globals).issubset({'__package__', '__name__', '__path__', '__file__'})
-        if '__file__' in base_globals:
-            base_globals.pop('__file__')
         # as of py3.8 the docstring is always stored in co_consts[0]
         # need this assertion to detect any changes in further versions
         if func.__doc__ is not None and NEWER_THAN_38:
@@ -167,11 +164,11 @@ class PortablePickler(CloudPickler):
 
         submodules = _find_imported_submodules(
             code,
-            itertools.chain(f_globals.values(), closure_values or ()),
+            # same as f_globals.values()
+            itertools.chain(map(itemgetter(1), f_globals), closure_values or ()),
         )
 
         save(_make_skel_func)
-        # base globals are only needed for unpickling
         save((
             code,
             len(closure_values) if closure_values is not None else -1,
@@ -193,7 +190,7 @@ class PortablePickler(CloudPickler):
 
         state = sort_dict(state)
 
-        save(tuple(state.items()))
+        save(state)
         write(pickle.TUPLE)
         write(pickle.REDUCE)
 
@@ -226,29 +223,25 @@ class PortablePickler(CloudPickler):
         save = self.save
         write = self.write
 
-        write(pickle.MARK)
-
         # reproducibility
         clsdict.pop('__doc__', None)
         clsdict.pop('__module__', None)
-        clsdict = sort_dict(clsdict)
         type_kwargs = sort_dict(type_kwargs)
 
         save(types.ClassType)
         if issubclass(obj, Enum):
-            members = sort_dict(dict((e.name, e.value) for e in obj))
+            members = tuple(sorted([(e.name, e.value) for e in obj]))
             # __qualname__ is only used for debug
             save((obj.__bases__, obj.__name__, members, obj.__module__))
 
             for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
-                             "_value2member_map_"] + list(members):
+                             "_value2member_map_"] + list(map(itemgetter(0), members)):
                 clsdict.pop(attrname, None)
         else:
             save((type(obj), obj.__name__, obj.__bases__, type_kwargs))
 
-        write(pickle.REDUCE)
-        save(clsdict)
-        write(pickle.TUPLE)
+        save(sort_dict(clsdict))
+        write(pickle.TUPLE2)
         write(pickle.REDUCE)
 
     def save_global(self, obj, name=None, pack=struct.pack):
