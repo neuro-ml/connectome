@@ -80,6 +80,15 @@ def test_different_functions():
     # defaults should affect pickling
     assert dumps(lambda x: x) != dumps(lambda x=1: x)
 
-# def test_class():
-#     reference = dumps(classes.One)
-#     assert reference == dumps(classes2.One)
+
+def test_class():
+    reference = dumps(classes.One)
+    assert reference == dumps(classes2.One)
+
+    reference = dumps(classes.A)
+    assert reference != dumps(classes.B)
+
+    classes.A.y = 2
+    assert reference == dumps(classes.A)
+    classes.A.x = 2
+    assert reference != dumps(classes.A)

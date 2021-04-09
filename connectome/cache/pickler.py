@@ -12,6 +12,7 @@ import pickletools
 import struct
 import sys
 import types
+from typing import NamedTuple, Any
 from weakref import WeakSet
 from collections import OrderedDict
 from contextlib import suppress
@@ -32,6 +33,12 @@ def sort_dict(d: dict):
 
 # we use a set of weak refs, because we don't want to cause memory leaks
 NO_PICKLE_SET = WeakSet()
+VERSION_METHOD = '__getversion__'
+
+
+class VersionedClass(NamedTuple):
+    type: type
+    version: Any
 
 
 def no_pickle(obj):
@@ -71,7 +78,7 @@ class PickleError(TypeError):
 
 # new invalidation bugs will inevitable arise
 # versioning will help diminish the pain from transitioning between updates
-AVAILABLE_VERSIONS = 0, 1, 2, 3, 4
+AVAILABLE_VERSIONS = 0,
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
 
 
@@ -96,16 +103,14 @@ class PortablePickler(CloudPickler):
         Same reducer as in cloudpickle, except `co_filename`, `co_firstlineno` are not saved.
         """
         consts = obj.co_consts
-        lnotab = obj.co_lnotab,
-        if self.version >= 1:
-            # remove the line number table
-            lnotab = ()
-            # remove the docstring
-            if consts and isinstance(consts[0], str):
-                consts = list(consts)[1:]
-                if None in consts:
-                    consts.remove(None)
-                consts = (None, *consts)
+        # remove the line number table
+        lnotab = ()
+        # remove the docstring
+        if consts and isinstance(consts[0], str):
+            consts = list(consts)[1:]
+            if None in consts:
+                consts.remove(None)
+            consts = (None, *consts)
 
         if hasattr(obj, "co_posonlyargcount"):
             posonlyargcount = obj.co_posonlyargcount,
@@ -166,18 +171,11 @@ class PortablePickler(CloudPickler):
         )
 
         save(_make_skel_func)
-        if self.version >= 3:
-            # base globals are only needed for unpickling
-            save((
-                code,
-                len(closure_values) if closure_values is not None else -1,
-            ))
-        else:
-            save((
-                code,
-                len(closure_values) if closure_values is not None else -1,
-                base_globals,
-            ))
+        # base globals are only needed for unpickling
+        save((
+            code,
+            len(closure_values) if closure_values is not None else -1,
+        ))
         write(pickle.REDUCE)
         self.memoize(func)
 
@@ -186,20 +184,14 @@ class PortablePickler(CloudPickler):
             'defaults': defaults,
             'dict': dct,
             'closure_values': closure_values,
-            'module': func.__module__,
             'name': func.__name__,
             '_cloudpickle_submodules': submodules
         }
-        if self.version < 4:
-            if hasattr(func, '__qualname__'):
-                # qualname is only used fo debug
-                state['qualname'] = func.__qualname__
+        # __qualname__ is only used fo debug
         if getattr(func, '__kwdefaults__', False):
             state['kwdefaults'] = func.__kwdefaults__
 
-        if self.version >= 3:
-            del state['module']
-            state = sort_dict(state)
+        state = sort_dict(state)
 
         save(tuple(state.items()))
         write(pickle.TUPLE)
@@ -237,19 +229,16 @@ class PortablePickler(CloudPickler):
         write(pickle.MARK)
 
         # reproducibility
-        # TODO: drop __module__ ?
         clsdict.pop('__doc__', None)
+        clsdict.pop('__module__', None)
         clsdict = sort_dict(clsdict)
         type_kwargs = sort_dict(type_kwargs)
 
         save(types.ClassType)
         if issubclass(obj, Enum):
             members = sort_dict(dict((e.name, e.value) for e in obj))
-            if self.version >= 4:
-                save((obj.__bases__, obj.__name__, members, obj.__module__))
-            else:
-                qualname = getattr(obj, "__qualname__", None)
-                save((obj.__bases__, obj.__name__, qualname, members, obj.__module__))
+            # __qualname__ is only used for debug
+            save((obj.__bases__, obj.__name__, members, obj.__module__))
 
             for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
                              "_value2member_map_"] + list(members):
@@ -274,6 +263,14 @@ class PortablePickler(CloudPickler):
             return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
         elif name is not None:
             Pickler.save_global(self, obj, name=name)
+        elif hasattr(obj, VERSION_METHOD):
+            version = getattr(obj, VERSION_METHOD)()
+            Pickler.save_global(self, obj)
+            self.save(version)
+            self.write(pickle.TUPLE2)
+            self.save(VersionedClass)
+            self.write(pickle.REDUCE)
+
         elif not _is_truly_global(obj, name=name):
             self.save_dynamic_class(obj)
         else:
@@ -297,6 +294,5 @@ def dumps(obj, protocol: int = None, version: int = LATEST_VERSION) -> bytes:
     with BytesIO() as file:
         PortablePickler(file, protocol=protocol, version=version).dump(obj)
         result = file.getvalue()
-        if version >= 2:
-            result = pickletools.optimize(result)
+        result = pickletools.optimize(result)
         return result

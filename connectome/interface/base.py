@@ -121,6 +121,10 @@ class Chain(CallableBlock):
         return Chain(*not_cache)
 
     def __str__(self):
+        if len(self._blocks) == 2:
+            a, b = self._blocks
+            return f'{a} >> {b}'
+
         return 'Chain' + format_arguments(self._blocks)
 
     def __repr__(self):

@@ -146,18 +146,10 @@ def key_to_relative(key, version=LATEST_VERSION):
 
 
 def check_consistency(hash_path, pickled):
-    def _check(cls):
-        with cls(hash_path, 'rb') as file:
-            dumped = file.read()
-            if dumped != pickled:
-                raise RuntimeError(f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}')
-
-    try:
-        _check(gzip.GzipFile)
-
-    except OSError:
-        # transition from old non-gzipped hashes
-        _check(open)
+    with gzip.GzipFile(hash_path, 'rb') as file:
+        dumped = file.read()
+        if dumped != pickled:
+            raise RuntimeError(f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}')
 
 
 def save_hash(hash_path, pickled):
