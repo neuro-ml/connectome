@@ -65,6 +65,32 @@ def test_cache(layer_maker):
     # assert count == 4
 
 
+def test_nodes_caching(layer_maker):
+    def counter(x):
+        nonlocal count
+        count += 1
+        return x
+
+    count = 0
+    chain = PipelineLayer(
+        layer_maker.make_layer(x=lambda x: x + 1),
+        layer_maker.make_layer(x=counter),
+        layer_maker.make_layer(a=lambda x: x, b=lambda x: x, x=lambda x: x),
+        layer_maker.make_layer(c=lambda a, b: (a, b), d=lambda x: x),
+    )
+    method = chain.compile()['c']
+    assert method(0) == (1, 1)
+    assert count == 1
+
+    method = chain.compile()['c',]
+    assert method(0) == ((1, 1),)
+    assert count == 2
+
+    method = chain.compile()['c', 'd']
+    assert method(0) == ((1, 1), 1)
+    assert count == 3
+
+
 def test_slicing(first_simple, second_simple, third_simple):
     chain = PipelineLayer(first_simple, second_simple, third_simple)
 

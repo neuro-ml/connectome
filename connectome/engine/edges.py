@@ -55,8 +55,8 @@ class ComputableHashBase(Edge, ABC):
 
 
 class ComputableHashEdge(ComputableHashBase):
-    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return self._call_function(inputs)
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        return ApplyHash(self.function, *inputs)
 
 
 class ImpureFunctionEdge(ComputableHashBase):

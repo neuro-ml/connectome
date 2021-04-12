@@ -174,5 +174,6 @@ def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):
     return visitor(output)
 
 
+# TODO: how safe is this?
 # a placeholder used to calculate the graph hash without inputs
 _PLACEHOLDER = LeafHash(object())

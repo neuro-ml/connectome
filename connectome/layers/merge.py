@@ -53,6 +53,7 @@ class SwitchEdge(FullMask, Edge):
         super().__init__(arity=1, uses_hash=True)
         self.graphs = graphs
         self.id_to_index = id_to_index
+        self._hashes = [graph.hash() for graph in self.graphs]
 
     def _select_graph(self, key):
         try:
@@ -74,4 +75,4 @@ class SwitchEdge(FullMask, Edge):
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         # TODO: wind a way to cache these graphs
-        return MergeHash(*(graph.hash() for graph in self.graphs), *inputs)
+        return MergeHash(*self._hashes, *inputs)

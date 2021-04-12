@@ -264,8 +264,12 @@ class GraphFactory:
         def __str__(self):
             return namespace.get('__qualname__', [None])[0] or super(type(self), self).__str__()
 
+        # TODO: at this point we need a base class
         __init__.__signature__ = signature
-        scope = {'__init__': __init__, '__str__': __str__, '__repr__': __str__}
+        scope = {
+            '__init__': __init__, '__str__': __str__, '__repr__': __str__,
+            '__signature__': signature,
+        }
         if factory.docstring is not None:
             scope[DOC_MAGIC] = factory.docstring
         return scope

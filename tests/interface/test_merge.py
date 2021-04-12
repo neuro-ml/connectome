@@ -95,6 +95,34 @@ def test_nested():
             assert ds.image(i) == x.image(i)
 
 
+def test_caching():
+    class A(Source):
+        @meta
+        def ids():
+            return '0',
+
+        @impure
+        def x(i):
+            nonlocal count
+            count += 1
+            return i
+
+    class B(Transform):
+        def f(x):
+            return x
+
+        def g(x):
+            return x
+
+        def h(x):
+            return x
+
+    count = 0
+    f = Merge(A() >> B())._compile(['f', 'g', 'h'])
+    f('0')
+    assert count == 1
+
+
 def test_impure():
     def count():
         nonlocal i

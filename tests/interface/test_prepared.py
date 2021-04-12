@@ -1,5 +1,5 @@
 from connectome import Source, meta, impure, Transform
-from connectome.interface.blocks import HashDigest, CacheToRam
+from connectome.interface.blocks import HashDigest, CacheToRam, Merge
 from connectome.interface.prepared import ComputableHash
 import numpy as np
 
@@ -95,3 +95,21 @@ def test_missing_impure():
     cached = source >> CacheToRam()
     assert source.text('0') != source.text('0')
     assert cached.text('0') == cached.text('0')
+
+
+def test_hash_graph():
+    def reject_object(x):
+        if not isinstance(x, str):
+            raise ValueError(x)
+        return x
+
+    class A(Source):
+        def ids():
+            return '1',
+
+        f = ComputableHash(reject_object, lambda x: x)
+
+    a = A()
+    assert a.f('1') == '1'
+    ds = Merge(a)
+    assert ds.f('1') == '1'
