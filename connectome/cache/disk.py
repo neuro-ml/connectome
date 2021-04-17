@@ -12,7 +12,7 @@ from typing import Sequence, Tuple, Any
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
-from .transactions import ThreadedTransaction
+from .transactions import DummyTransaction
 from ..storage.base import DiskOptions, Storage, digest_to_relative
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
@@ -33,7 +33,7 @@ class DiskCache(Cache):
         self.serializer = serializer
         self.storage = Storage(options)
         self.root = Path(root)
-        self._transactions = ThreadedTransaction()
+        self._transactions = DummyTransaction()
 
     def reserve_write_or_read(self, param: NodeHash) -> Tuple[bool, Any]:
         value = param.value
@@ -46,18 +46,15 @@ class DiskCache(Cache):
         # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
             local_pickled, local_digest, _ = key_to_relative(value, version)
-            contains, local_transaction = self._transactions.reserve_read(local_digest, self._digest_exists)
-            if contains:
+            local_transaction = self._transactions.reserve_read(local_digest, self._digest_exists)
+            if local_transaction is not None:
                 # we can simply copy the previous version, because nothing really changed
-                value = self._transactions.get(
+                value = self._transactions.release_read(
                     local_digest, local_transaction, partial(self._load, pickled=local_pickled))
-                self._transactions.set(digest, value, transaction, partial(self._save, pickled=pickled))
+                self._transactions.release_write(digest, value, transaction, partial(self._save, pickled=pickled))
                 empty, transaction = self._transactions.reserve_write_or_read(digest, self._digest_exists)
                 assert not empty
                 return empty, transaction
-
-            else:
-                assert local_transaction is None
 
         return empty, transaction
 
@@ -67,11 +64,11 @@ class DiskCache(Cache):
 
     def set(self, param: NodeHash, value, transaction: Any):
         pickled, digest, _ = key_to_relative(param.value)
-        return self._transactions.set(digest, value, transaction, partial(self._save, pickled=pickled))
+        return self._transactions.release_write(digest, value, transaction, partial(self._save, pickled=pickled))
 
     def get(self, param: NodeHash, transaction: Any):
         pickled, digest, _ = key_to_relative(param.value)
-        return self._transactions.get(digest, transaction, partial(self._load, pickled=pickled))
+        return self._transactions.release_read(digest, transaction, partial(self._load, pickled=pickled))
 
     def _digest_exists(self, digest: str):
         return (self.root / digest_to_relative(digest)).exists()

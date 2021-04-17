@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, Optional
 
 from ..engine import NodeHash
 
@@ -33,11 +33,11 @@ class TransactionState(Enum):
 
 class TransactionManager(ABC):
     @abstractmethod
-    def reserve_read(self, key: Any, contains: Callable) -> Tuple[bool, Any]:
+    def reserve_read(self, key: Any, contains: Callable) -> Optional[Any]:
         """
         Notifies the cache that a read operation will be performed during evaluation.
 
-        Returns whether the cache can be read from.
+        Returns None, if the cache can't be read from, otherwise - returns the transaction id.
         """
 
     @abstractmethod
@@ -55,7 +55,7 @@ class TransactionManager(ABC):
         """
 
     @abstractmethod
-    def set(self, key: Any, value: Any, transaction: Any, setter: Callable[[Any, Any], Any]):
+    def release_write(self, key: Any, value: Any, transaction: Any, setter: Callable[[Any, Any], Any]):
         """
         Notes
         -----
@@ -63,5 +63,5 @@ class TransactionManager(ABC):
         """
 
     @abstractmethod
-    def get(self, key: Any, transaction: Any, getter: Callable[[Any], Any]) -> Any:
+    def release_read(self, key: Any, transaction: Any, getter: Callable[[Any], Any]) -> Any:
         pass

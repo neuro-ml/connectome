@@ -22,7 +22,7 @@ class MemoryCache(Cache):
         return self._transactions.fail(param.value, transaction)
 
     def set(self, param: NodeHash, value: Any, transaction: Any):
-        return self._transactions.set(param.value, value, transaction, self._cache.__setitem__)
+        return self._transactions.release_write(param.value, value, transaction, self._cache.__setitem__)
 
     def get(self, param: NodeHash, transaction: Any) -> Any:
-        return self._transactions.get(param.value, transaction, self._cache.__getitem__)
+        return self._transactions.release_read(param.value, transaction, self._cache.__getitem__)
