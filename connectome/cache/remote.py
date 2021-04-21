@@ -5,7 +5,7 @@ from typing import Sequence, Any
 from .base import Cache
 from .disk import key_to_relative, check_consistency, DATA_FOLDER, HASH_FILENAME
 
-from ..storage import RemoteOptions, RelativeRemote
+from ..storage.remote import RemoteOptions, RelativeRemote
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..utils import ChainDict

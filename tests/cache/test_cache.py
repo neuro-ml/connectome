@@ -9,7 +9,7 @@ from connectome.cache import MemoryCache
 from connectome.cache.transactions import ThreadedTransaction
 from connectome.engine.edges import CacheEdge
 from connectome.serializers import JsonSerializer
-from connectome.storage import DiskOptions
+from connectome.storage import Storage, Disk
 
 
 def sleeper(s):
@@ -84,7 +84,7 @@ def test_disk_locking_processes(block_maker):
     def visit():
         ds = block_maker.first_ds(first_constant=2, ids_arg=3)
         cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(
-            root, DiskOptions(storage), names=['image'], serializer=JsonSerializer())
+            root, Storage([Disk(storage)]), names=['image'], serializer=JsonSerializer())
 
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
@@ -106,7 +106,7 @@ def test_disk_locking_threads(block_maker):
         with TemporaryDirectory() as root, TemporaryDirectory() as storage:
             ds = block_maker.first_ds(first_constant=2, ids_arg=3)
             cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(
-                root, DiskOptions(storage), names=['image'], serializer=JsonSerializer())
+                root, Storage([Disk(storage)]), names=['image'], serializer=JsonSerializer())
 
             th = Thread(target=visit)
             th.start()
@@ -118,7 +118,7 @@ def test_disk_idempotency(block_maker):
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
 
     with TemporaryDirectory() as root, TemporaryDirectory() as storage:
-        storage = DiskOptions(storage)
+        storage = Storage([Disk(storage)])
         cache = CacheToDisk(root, storage, names=['image'], serializer=JsonSerializer())
         cached = ds >> cache >> cache
 

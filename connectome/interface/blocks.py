@@ -11,7 +11,8 @@ from ..layers.goup import GroupLayer, MultiGroupLayer
 from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, ChainSerializer
-from ..storage import DiskOptions, RemoteOptions
+from ..storage import Storage
+from ..storage.remote import RemoteOptions
 from ..utils import PathLike
 from .utils import MaybeStr, format_arguments
 
@@ -128,19 +129,17 @@ class CacheToRam(CacheBlock):
 
 
 class CacheToDisk(CacheBlock):
-    def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
+    def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
-        storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
         super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
 class CacheColumns(CacheBlock):
-    def __init__(self, root: PathLike, *storage: Union[PathLike, DiskOptions],
+    def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None):
-        storage = [s if isinstance(s, DiskOptions) else DiskOptions(Path(s)) for s in storage]
         names = to_seq(names)
         super().__init__(CacheColumnsLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 

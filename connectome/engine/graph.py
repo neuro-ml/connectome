@@ -17,7 +17,7 @@ class Graph:
     def __init__(self, inputs: TreeNodes, output: TreeNode):
         validate_graph(inputs, output)
         counts = count_entries(inputs, output)
-        inputs = [x for x in inputs if counts.get(x, 0)]
+        inputs = sorted([x for x in inputs if counts.get(x, 0)], key=lambda x: x.name)
         signature = inspect.Signature([
             inspect.Parameter(x.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             for x in inputs
@@ -41,7 +41,6 @@ class Graph:
 
         caller.__signature__ = signature
         self.call = caller
-        self.eval = 1
 
     # TODO: remove duplicates
     def propagate_hash(self, *inputs: NodeHash):
@@ -104,32 +103,6 @@ def count_entries(inputs: TreeNodes, output: TreeNode, masks=None):
     entry_counts = defaultdict(int)
     visitor(output)
     return dict(entry_counts)
-
-
-# def precompute_hashes(inputs, outputs):
-#     def visitor(node: TreeNode):
-#         if node in hashes:
-#             return True
-#
-#         if not node.edge:
-#             assert node in inputs
-#             return False
-#
-#         # we visit the root nodes and build a cache of immutable hashes
-#         edge, group = node.edge
-#         visited = all(visitor(x) for x in group)
-#
-#         if edge.uses_hash or not visited:
-#             # the edge doesn't have a constant hash
-#             return False
-#
-#         hashes[node], masks[node] = edge.process_hashes([hashes[x] for x in group])
-#         return True
-#
-#     hashes, masks = {}, {}
-#     for n in outputs:
-#         visitor(n)
-#     return hashes, masks
 
 
 def compute_hashes(inputs: Dict[TreeNode, NodeHash], output: TreeNode):

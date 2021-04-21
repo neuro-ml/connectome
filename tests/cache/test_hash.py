@@ -2,7 +2,7 @@ from tempfile import TemporaryDirectory
 
 from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns
 from connectome.serializers import JsonSerializer
-from connectome.storage import DiskOptions
+from connectome.storage import Storage, Disk
 
 
 def test_hash(block_maker, hash_layer):
@@ -14,7 +14,7 @@ def test_hash(block_maker, hash_layer):
     hashed = Chain(pipeline, hash_layer)
     ram = Chain(pipeline, CacheToRam(['image']), hash_layer)
     with TemporaryDirectory() as root, TemporaryDirectory() as storage:
-        storage = DiskOptions(storage)
+        storage = Storage([Disk(storage)])
         disk = Chain(pipeline, CacheToDisk(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)
         rows = Chain(pipeline, CacheColumns(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)
 

@@ -8,12 +8,13 @@ import time
 from functools import partial
 from hashlib import blake2b
 from pathlib import Path
-from typing import Sequence, Tuple, Any
+from typing import Tuple, Any
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 from .transactions import DummyTransaction
-from ..storage.base import DiskOptions, Storage, digest_to_relative
+from ..storage import Storage
+from ..storage.digest import digest_to_relative
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
 from ..serializers import Serializer
@@ -27,11 +28,11 @@ GZIP_COMPRESSION = 1
 
 
 class DiskCache(Cache):
-    def __init__(self, root: Path, options: Sequence[DiskOptions], serializer: Serializer, metadata: dict):
+    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict):
         super().__init__()
         self.metadata = metadata
         self.serializer = serializer
-        self.storage = Storage(options)
+        self.storage = storage
         self.root = Path(root)
         self._transactions = DummyTransaction()
 
@@ -125,7 +126,8 @@ class DiskCache(Cache):
             if file.is_dir():
                 continue
 
-            path = self.storage.get(self.storage.store(file))
+            # FIXME
+            path = self.storage.get_path(self.storage.store(file))
             assert path.exists(), path
             os.remove(file)
             file.symlink_to(path)

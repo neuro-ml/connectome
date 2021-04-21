@@ -1,0 +1,209 @@
+import filecmp
+import os
+import errno
+import shutil
+import time
+from pathlib import Path
+from typing import Optional
+
+from tqdm import tqdm
+
+from .digest import digest_to_relative
+from .locker import Locker, DummyLocker
+from ..utils import PathLike
+
+FILENAME = 'data'
+
+
+class Disk:
+    def __init__(self, root: PathLike, min_free_size: int = 0, max_size: int = None, locker: Locker = None):
+        # TODO: move to args
+        group = None
+        permissions = None
+        root = Path(root)
+        if locker is None:
+            locker = DummyLocker()
+
+        if not root.exists():
+            assert group is not None and permissions is not None
+            mkdir(root, permissions, group)
+
+        # TODO: need consistency check
+        if permissions is None:
+            permissions = root.stat().st_mode & 0o777
+        if group is None:
+            group = root.group()
+
+        if not locker.track_size:
+            assert max_size is None or max_size == float('inf'), max_size
+
+        self.root = root
+        self.permissions = permissions
+        self.group = group
+        self.min_free_space = min_free_size
+        self.max_size = max_size
+
+        self._locker = locker
+        self._sleep_time = 0.01
+        self._prefix_size = 2
+
+    def _key_to_path(self, key: str):
+        return self.root / digest_to_relative(key) / FILENAME
+
+    def _to_lock_key(self, key: str):
+        return key[:self._prefix_size]
+
+    def _writeable(self):
+        result = True
+
+        if self.min_free_space > 0:
+            result = result and shutil.disk_usage(self.root).free >= self.min_free_space
+
+        if self.max_size is not None and self.max_size < float('inf'):
+            result = result and self._locker.get_size() <= self.max_size
+
+        return result
+
+    def reserve_write(self, key: str):
+        key = self._to_lock_key(key)
+        while True:
+            with self._locker.lock:
+                if not self._locker.is_reading(key) and not self._locker.is_writing(key):
+                    self._locker.start_writing(key)
+                    break
+
+            time.sleep(self._sleep_time)
+
+    def release_write(self, key: str):
+        key = self._to_lock_key(key)
+        with self._locker.lock:
+            self._locker.stop_writing(key)
+
+    def write(self, key: str, file: Path) -> bool:
+        file = Path(file)
+        assert file.is_file(), file
+
+        stored = self._key_to_path(key)
+        folder = stored.parent
+
+        # check consistency
+        if folder.exists():
+            match_files(file, stored)
+            return True
+
+        # make sure we can write
+        if not self._writeable():
+            return False
+
+        # write
+        create_folders(folder, self.permissions, self.group)
+
+        try:
+            copy_file(file, stored)
+            if self._locker.track_size:
+                size = stored.stat().st_size
+                with self._locker.lock:
+                    self._locker.inc_size(size)
+
+        except BaseException as e:
+            shutil.rmtree(folder)
+            raise RuntimeError('An error occurred while copying the file') from e
+
+        # make file read-only
+        os.chmod(file, 0o444 & self.permissions)
+        return True
+
+    def reserve_read(self, key: str) -> Optional[Path]:
+        path = self._key_to_path(key)
+        lock_key = self._to_lock_key(key)
+
+        while True:
+            with self._locker.lock:
+                if not self._locker.is_writing(lock_key):
+                    if not path.exists():
+                        return None
+
+                    self._locker.start_reading(lock_key)
+                    break
+
+            time.sleep(self._sleep_time)
+
+        return path
+
+    def release_read(self, key: str):
+        lock_key = self._to_lock_key(key)
+
+        with self._locker.lock:
+            assert not self._locker.is_writing(lock_key)
+            self._locker.stop_reading(lock_key)
+
+    def remove(self, key: str):
+        file = self._key_to_path(key)
+        folder = file.parent
+        self.reserve_write(key)
+
+        try:
+            if not folder.exists():
+                raise FileNotFoundError
+
+            os.chmod(file, self.permissions)
+            shutil.rmtree(folder)
+
+        finally:
+            self.release_write(key)
+
+    def contains(self, key: str):
+        """ This is not safe, but it's fast. """
+        path = self._key_to_path(key)
+        lock_key = self._to_lock_key(key)
+
+        while True:
+            with self._locker.lock:
+                if not self._locker.is_writing(lock_key):
+                    return path.exists()
+
+            time.sleep(self._sleep_time)
+
+    def actualize(self, verbose: bool):
+        """ Useful for migration between locking mechanisms. """
+        size = 0
+        bar = tqdm(self.root.glob(f'**/{FILENAME}'), disable=not verbose)
+        for file in bar:
+            bar.set_description(str(file.parent.relative_to(self.root)))
+            # TODO: add digest check
+            assert not file.is_symlink()
+            size += file.stat().st_size
+
+        with self._locker.lock:
+            self._locker.set_size(size)
+
+
+def mkdir(path: Path, permissions, group):
+    path.mkdir()
+    if permissions is not None:
+        path.chmod(permissions)
+    if group is not None:
+        shutil.chown(path, group=group)
+
+
+def create_folders(path: Path, permissions, group):
+    if not path.exists():
+        create_folders(path.parent, permissions, group)
+        mkdir(path, permissions, group)
+
+
+def copy_file(source, destination):
+    # in Python>=3.8 the sendfile call is used, which apparently may fail
+    try:
+        shutil.copyfile(source, destination)
+    except OSError as e:
+        # BlockingIOError -> fallback to slow copy
+        if e.errno != errno.EWOULDBLOCK:
+            raise
+
+        with open(source, 'rb') as src, open(destination, 'wb') as dst:
+            shutil.copyfileobj(src, dst)
+
+
+def match_files(first: Path, second: Path):
+    return filecmp.cmp(first, second, shallow=False)
