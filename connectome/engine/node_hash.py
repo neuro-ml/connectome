@@ -26,11 +26,14 @@ NodeHashes = Sequence[NodeHash]
 class PrecomputeHash(NodeHash):
     type = None
 
-    def __init__(self, value, hash_):
+    def __init__(self, value, hash_target):
         super().__init__(value)
-        self._hash = hash_
+        self._hash_target = hash_target
+        self._hash = None
 
     def __hash__(self):
+        if self._hash is None:
+            self._hash = hash(self._hash_target)
         return self._hash
 
 
@@ -40,7 +43,7 @@ class CompoundBase(PrecomputeHash):
     def __init__(self, *children: NodeHash):
         super().__init__(
             (self.type, *(h.value for h in children)),
-            hash((self.type, *children)),
+            (self.type, *children),
         )
 
 
@@ -49,7 +52,7 @@ class LeafHash(PrecomputeHash):
 
     def __init__(self, data):
         value = self.type, data
-        super().__init__(value, hash(value))
+        super().__init__(value, value)
         self.data = data
 
 
@@ -59,7 +62,7 @@ class ApplyHash(PrecomputeHash):
     def __init__(self, func: Callable, *args: NodeHash):
         super().__init__(
             (self.type, func, tuple(h.value for h in args)),
-            hash((self.type, func, args)),
+            (self.type, func, args),
         )
 
 
