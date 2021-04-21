@@ -1,4 +1,5 @@
 import filecmp
+import logging
 import os
 import errno
 import shutil
@@ -12,7 +13,9 @@ from .digest import digest_to_relative
 from .locker import Locker, DummyLocker
 from ..utils import PathLike
 
+Key = str
 FILENAME = 'data'
+logger = logging.getLogger(__name__)
 
 
 class Disk:
@@ -47,10 +50,10 @@ class Disk:
         self._sleep_time = 0.01
         self._prefix_size = 2
 
-    def _key_to_path(self, key: str):
+    def _key_to_path(self, key: Key):
         return self.root / digest_to_relative(key) / FILENAME
 
-    def _to_lock_key(self, key: str):
+    def _to_lock_key(self, key: Key):
         return key[:self._prefix_size]
 
     def _writeable(self):
@@ -64,7 +67,7 @@ class Disk:
 
         return result
 
-    def reserve_write(self, key: str):
+    def reserve_write(self, key: Key):
         key = self._to_lock_key(key)
         while True:
             with self._locker.lock:
@@ -74,12 +77,12 @@ class Disk:
 
             time.sleep(self._sleep_time)
 
-    def release_write(self, key: str):
+    def release_write(self, key: Key):
         key = self._to_lock_key(key)
         with self._locker.lock:
             self._locker.stop_writing(key)
 
-    def write(self, key: str, file: Path) -> bool:
+    def write(self, key: Key, file: Path) -> bool:
         file = Path(file)
         assert file.is_file(), file
 
@@ -110,34 +113,40 @@ class Disk:
             raise RuntimeError('An error occurred while copying the file') from e
 
         # make file read-only
-        os.chmod(file, 0o444 & self.permissions)
+        os.chmod(stored, 0o444 & self.permissions)
         return True
 
-    def reserve_read(self, key: str) -> Optional[Path]:
+    def reserve_read(self, key: Key) -> Optional[Path]:
         path = self._key_to_path(key)
-        lock_key = self._to_lock_key(key)
+        key = self._to_lock_key(key)
 
         while True:
+            logger.info('reserve_read lock')
             with self._locker.lock:
-                if not self._locker.is_writing(lock_key):
+                logger.info('Trying to acquire read lock')
+                if not self._locker.is_writing(key):
                     if not path.exists():
+                        logger.info('File not found')
                         return None
 
-                    self._locker.start_reading(lock_key)
+                    logger.info('Starting read')
+                    self._locker.start_reading(key)
                     break
+                else:
+                    logger.info('Still writing')
 
             time.sleep(self._sleep_time)
 
         return path
 
-    def release_read(self, key: str):
-        lock_key = self._to_lock_key(key)
+    def release_read(self, key: Key):
+        key = self._to_lock_key(key)
 
+        logger.info('release_read lock')
         with self._locker.lock:
-            assert not self._locker.is_writing(lock_key)
-            self._locker.stop_reading(lock_key)
+            self._locker.stop_reading(key)
 
-    def remove(self, key: str):
+    def remove(self, key: Key):
         file = self._key_to_path(key)
         folder = file.parent
         self.reserve_write(key)
@@ -152,7 +161,7 @@ class Disk:
         finally:
             self.release_write(key)
 
-    def contains(self, key: str):
+    def contains(self, key: Key):
         """ This is not safe, but it's fast. """
         path = self._key_to_path(key)
         lock_key = self._to_lock_key(key)

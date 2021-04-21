@@ -1,11 +1,16 @@
+import logging
 from abc import ABC, abstractmethod
 from threading import Lock
 from typing import ContextManager, MutableMapping
 
 from pottery import RedisDict, Redlock
 from redis import Redis
+from sqlitedict import SqliteDict
+
+from ..utils import PathLike
 
 Key = str
+logger = logging.getLogger(__name__)
 
 
 class Locker(ABC):
@@ -84,23 +89,39 @@ class DictRegistry:
     _reading: MutableMapping[Key, int]
     _writing: MutableMapping[Key, int]
 
+    def _get_reading(self, key):
+        value = self._reading.get(key, 0)
+        logger.info(f'Read count {value}')
+        assert value >= 0, value
+        return value
+
+    def _get_writing(self, key):
+        value = self._writing.get(key, 0)
+        logger.info(f'Write count {value}')
+        assert 0 <= value <= 1, value
+        return value
+
     def is_reading(self, key: Key):
-        return bool(self._reading.get(key, 0))
+        return bool(self._get_reading(key))
 
     def start_reading(self, key: Key):
-        self._reading[key] = self._reading.get(key, 0) + 1
+        self._reading[key] = self._get_reading(key) + 1
 
     def stop_reading(self, key: Key):
-        self._reading[key] -= 1
+        self._reading[key] = self._get_reading(key) - 1
 
     def is_writing(self, key: Key):
-        return bool(self._writing.get(key, 0))
+        return bool(self._get_writing(key))
 
     def start_writing(self, key: Key):
-        self._writing[key] = self._reading.get(key, 0) + 1
+        value = self._get_writing(key)
+        assert value == 0, value
+        self._writing[key] = value + 1
 
     def stop_writing(self, key: Key):
-        self._writing[key] -= 1
+        value = self._get_writing(key)
+        assert value == 1, value
+        self._writing[key] = value - 1
 
 
 class ThreadLocker(DictRegistry, Locker):
@@ -118,6 +139,37 @@ class RedisLocker(DictRegistry, Locker):
         self._reading = RedisDict(redis=redis, key=f'{prefix}.R')
         self._writing = RedisDict(redis=redis, key=f'{prefix}.W')
         self._meta = RedisDict(redis=redis, key=f'{prefix}.M')
+
+    def get_size(self):
+        return self._meta.get('volume', 0)
+
+    def set_size(self, size: int):
+        self._meta['volume'] = size
+
+    def inc_size(self, size: int):
+        self.set_size(self.get_size() + size)
+
+    @classmethod
+    def from_url(cls, url: str, prefix: str):
+        return cls(Redis.from_url(url), prefix)
+
+
+class SqliteLocker(DictRegistry, Locker):
+    def __init__(self, path: PathLike):
+        def identity(x):
+            return x
+
+        super().__init__(True)
+        self.lock = SqliteDict(path, 'lock')
+        self._reading = SqliteDict(
+            path, autocommit=True, tablename='reading', encode=identity, decode=identity
+        )
+        self._writing = SqliteDict(
+            path, autocommit=True, tablename='writing', encode=identity, decode=identity
+        )
+        self._meta = SqliteDict(
+            path, autocommit=True, tablename='meta', encode=identity, decode=identity
+        )
 
     def get_size(self):
         return self._meta.get('volume', 0)
