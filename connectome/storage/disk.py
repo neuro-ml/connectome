@@ -201,4 +201,5 @@ def copy_file(source, destination):
 
 
 def match_files(first: Path, second: Path):
-    return filecmp.cmp(first, second, shallow=False)
+    if not filecmp.cmp(first, second, shallow=False):
+        raise ValueError(f'Files do not match: {first} vs {second}')

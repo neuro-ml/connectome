@@ -1,11 +1,11 @@
+import filecmp
 import time
 from pathlib import Path
 from threading import Thread
+from multiprocessing.context import Process
 
 from connectome.storage import Storage, Disk
-from connectome.storage.disk import match_files
-from connectome.storage.locker import ThreadLocker, RedisLocker, SqliteLocker
-from multiprocessing.context import Process
+from connectome.storage.locker import ThreadLocker, RedisLocker
 
 
 def test_single_local(tmpdir):
@@ -19,7 +19,7 @@ def test_single_local(tmpdir):
     key = storage.store(file)
     stored = storage.get_path(key)
 
-    assert match_files(stored, file)
+    assert filecmp.cmp(file, stored, shallow=False)
     assert file.stat().st_mode & 0o777 == permissions
     assert stored.stat().st_mode & 0o777 == disk.permissions & 0o444
     assert stored.group() == disk.group
