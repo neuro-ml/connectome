@@ -48,6 +48,7 @@ class Disk:
 
         self._locker = locker
         self._sleep_time = 0.01
+        self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
         self._prefix_size = 2
 
     def _key_to_path(self, key: Key):
@@ -69,8 +70,13 @@ class Disk:
 
     def reserve_write(self, key: Key):
         key = self._to_lock_key(key)
+        i = 0
         while not self._locker.start_writing(key):
+            if i >= self._sleep_iters:
+                raise RuntimeError(f"Can't start writing for key {key}. It seems like you've hit a deadlock.")
+
             time.sleep(self._sleep_time)
+            i += 1
 
     def release_write(self, key: Key):
         key = self._to_lock_key(key)
@@ -112,8 +118,13 @@ class Disk:
         path = self._key_to_path(key)
         key = self._to_lock_key(key)
 
+        i = 0
         while not self._locker.start_reading(key):
+            if i >= self._sleep_iters:
+                raise RuntimeError(f"Can't start reading for key {key}. It seems like you've hit a deadlock.")
+
             time.sleep(self._sleep_time)
+            i += 1
 
         if not path.exists():
             self._locker.stop_reading(key)

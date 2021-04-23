@@ -144,8 +144,8 @@ class RedisLocker(Locker):
                     writing = int(pipe.get(write_key) or 0)
                     reading = int(pipe.get(read_key) or 0)
 
-                    assert 0 <= writing < 1
-                    assert reading >= 0
+                    assert 0 <= writing <= 1, writing
+                    assert reading >= 0, reading
                     if writing or reading:
                         return False
 
@@ -174,7 +174,7 @@ class RedisLocker(Locker):
                     pipe.watch(write_key, read_key)
                     writing = int(pipe.get(write_key) or 0)
 
-                    assert 0 <= writing < 1
+                    assert 0 <= writing <= 1, writing
                     if writing:
                         return False
 
