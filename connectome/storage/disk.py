@@ -69,18 +69,12 @@ class Disk:
 
     def reserve_write(self, key: Key):
         key = self._to_lock_key(key)
-        while True:
-            with self._locker.lock:
-                if not self._locker.is_reading(key) and not self._locker.is_writing(key):
-                    self._locker.start_writing(key)
-                    break
-
+        while not self._locker.start_writing(key):
             time.sleep(self._sleep_time)
 
     def release_write(self, key: Key):
         key = self._to_lock_key(key)
-        with self._locker.lock:
-            self._locker.stop_writing(key)
+        self._locker.stop_writing(key)
 
     def write(self, key: Key, file: Path) -> bool:
         file = Path(file)
@@ -104,9 +98,7 @@ class Disk:
         try:
             copy_file(file, stored)
             if self._locker.track_size:
-                size = stored.stat().st_size
-                with self._locker.lock:
-                    self._locker.inc_size(size)
+                self._locker.inc_size(stored.stat().st_size)
 
         except BaseException as e:
             shutil.rmtree(folder)
@@ -120,31 +112,18 @@ class Disk:
         path = self._key_to_path(key)
         key = self._to_lock_key(key)
 
-        while True:
-            logger.info('reserve_read lock')
-            with self._locker.lock:
-                logger.info('Trying to acquire read lock')
-                if not self._locker.is_writing(key):
-                    if not path.exists():
-                        logger.info('File not found')
-                        return None
-
-                    logger.info('Starting read')
-                    self._locker.start_reading(key)
-                    break
-                else:
-                    logger.info('Still writing')
-
+        while not self._locker.start_reading(key):
             time.sleep(self._sleep_time)
+
+        if not path.exists():
+            self._locker.stop_reading(key)
+            return None
 
         return path
 
     def release_read(self, key: Key):
         key = self._to_lock_key(key)
-
-        logger.info('release_read lock')
-        with self._locker.lock:
-            self._locker.stop_reading(key)
+        self._locker.stop_reading(key)
 
     def remove(self, key: Key):
         file = self._key_to_path(key)
@@ -163,15 +142,11 @@ class Disk:
 
     def contains(self, key: Key):
         """ This is not safe, but it's fast. """
-        path = self._key_to_path(key)
-        lock_key = self._to_lock_key(key)
-
-        while True:
-            with self._locker.lock:
-                if not self._locker.is_writing(lock_key):
-                    return path.exists()
-
-            time.sleep(self._sleep_time)
+        path = self.reserve_read(key)
+        if path is None:
+            return False
+        self.release_read(key)
+        return True
 
     def actualize(self, verbose: bool):
         """ Useful for migration between locking mechanisms. """
@@ -183,8 +158,7 @@ class Disk:
             assert not file.is_symlink()
             size += file.stat().st_size
 
-        with self._locker.lock:
-            self._locker.set_size(size)
+        self._locker.set_size(size)
 
 
 def mkdir(path: Path, permissions, group):

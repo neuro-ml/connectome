@@ -5,5 +5,4 @@ paramiko==2.*
 scp
 tqdm
 redis
-pottery
 sqlitedict
