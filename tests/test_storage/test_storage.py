@@ -10,7 +10,8 @@ from multiprocessing.context import Process
 
 def test_single_local(tmpdir):
     locker = ThreadLocker()
-    storage = Storage([Disk(tmpdir, locker=locker)])
+    disk = Disk(tmpdir, locker=locker)
+    storage = Storage([disk])
 
     # just store this file, because why not
     file = Path(__file__)
@@ -20,7 +21,8 @@ def test_single_local(tmpdir):
 
     assert match_files(stored, file)
     assert file.stat().st_mode & 0o777 == permissions
-    assert stored.stat().st_mode & 0o777 == permissions & 0o444
+    assert stored.stat().st_mode & 0o777 == disk.permissions & 0o444
+    assert stored.group() == disk.group
 
 
 def test_parallel_read_threads(tmpdir, subtests):

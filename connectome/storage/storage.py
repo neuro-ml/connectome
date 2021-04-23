@@ -29,7 +29,7 @@ class Storage:
         self._store(key, file)
         return key
 
-    def get_path(self, key: Key, name: str = None) -> Any:
+    def get_path(self, key: Key, name: str = None) -> Path:
         """ This is not safe, but it's fast. """
         path, storage = self._find_storage(key)
 

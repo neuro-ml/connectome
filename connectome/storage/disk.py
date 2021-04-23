@@ -112,6 +112,7 @@ class Disk:
 
         # make file read-only
         os.chmod(stored, 0o444 & self.permissions)
+        shutil.chown(stored, group=self.group)
         return True
 
     def reserve_read(self, key: Key) -> Optional[Path]:
