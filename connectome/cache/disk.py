@@ -25,7 +25,6 @@ DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
 META_FILENAME = 'meta.json'
 GZIP_COMPRESSION = 1
-
 Key = str
 
 
@@ -133,6 +132,7 @@ class DiskCache(Cache):
             raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
+        # TODO: also increment size in locker
         # hash
         hash_path = local / HASH_FILENAME
         if hash_path.exists():

@@ -1,4 +1,5 @@
 import logging
+import time
 from abc import ABC, abstractmethod
 from threading import Lock
 from typing import ContextManager, MutableMapping
@@ -204,3 +205,16 @@ class SqliteLocker(DictRegistry, Locker):
 
     def inc_size(self, size: int):
         self.set_size(self.get_size() + size)
+
+
+def wait_for_true(func, key, sleep_time, max_iterations):
+    i = 0
+    while not func(key):
+        if i >= max_iterations:
+            logger.error('Potential deadlock detected for %s', key)
+            raise RuntimeError(f"It seems like you've hit a deadlock for key {key}.")
+
+        time.sleep(sleep_time)
+        i += 1
+
+    logger.debug('Waited for %d iterations for %s', i, key)

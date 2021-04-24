@@ -3,14 +3,13 @@ import logging
 import os
 import errno
 import shutil
-import time
 from pathlib import Path
 from typing import Optional
 
 from tqdm import tqdm
 
 from .digest import digest_to_relative
-from .locker import Locker, DummyLocker
+from .locker import Locker, DummyLocker, wait_for_true
 from ..utils import PathLike
 
 Key = str
@@ -80,6 +79,7 @@ class Disk:
         file = Path(file)
         assert file.is_file(), file
 
+        # TODO: copy to a different file. rename after consistency check
         stored = self._key_to_path(key)
         folder = stored.parent
 
@@ -191,13 +191,3 @@ def copy_file(source, destination):
 def match_files(first: Path, second: Path):
     if not filecmp.cmp(first, second, shallow=False):
         raise ValueError(f'Files do not match: {first} vs {second}')
-
-
-def wait_for_true(func, key, sleep_time, max_iterations):
-    i = 0
-    while not func(key):
-        if i >= max_iterations:
-            raise RuntimeError(f"It seems like you've hit a deadlock for key {key}.")
-
-        time.sleep(sleep_time)
-        i += 1
