@@ -1,9 +1,9 @@
-from typing import Union, Any, Tuple
-# import pylru
+from typing import Union, Any
 
 from .base import Cache
-from .transactions import ThreadedTransaction
 from ..engine import NodeHash
+from ..storage.disk import wait_for_true
+from ..storage.locker import ThreadLocker
 
 
 class MemoryCache(Cache):
@@ -13,16 +13,38 @@ class MemoryCache(Cache):
             raise NotImplementedError('LRU cache is currently not supported')
 
         self._cache = {}
-        self._transactions = ThreadedTransaction()
+        self._locker = ThreadLocker()
+        self._sleep_time = 0.1
+        self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
 
-    def reserve_write_or_read(self, param: NodeHash) -> Tuple[bool, Any]:
-        return self._transactions.reserve_write_or_read(param.value, self._cache.__contains__)
+    def reserve_read(self, param: NodeHash) -> bool:
+        key = param.value
+        wait_for_true(self._locker.start_reading, key, self._sleep_time, self._sleep_iters)
+        try:
+            if key in self._cache:
+                return True
+        except BaseException:
+            self._locker.stop_reading(key)
+            raise
 
-    def fail(self, param: NodeHash, transaction: Any):
-        return self._transactions.fail(param.value, transaction)
+        self._locker.stop_reading(key)
+        return False
 
-    def set(self, param: NodeHash, value: Any, transaction: Any):
-        return self._transactions.release_write(param.value, value, transaction, self._cache.__setitem__)
+    def fail(self, param: NodeHash, read: bool):
+        if read:
+            self._locker.stop_reading(param.value)
 
-    def get(self, param: NodeHash, transaction: Any) -> Any:
-        return self._transactions.release_read(param.value, transaction, self._cache.__getitem__)
+    def set(self, param: NodeHash, value: Any):
+        key = param.value
+        wait_for_true(self._locker.start_writing, key, self._sleep_time, self._sleep_iters)
+        try:
+            self._cache[key] = value
+        finally:
+            self._locker.stop_writing(key)
+
+    def get(self, param: NodeHash) -> Any:
+        key = param.value
+        try:
+            return self._cache[key]
+        finally:
+            self._locker.stop_reading(key)

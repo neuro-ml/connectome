@@ -7,6 +7,7 @@ from connectome.engine.edges import FullMask
 from connectome.interface.base import BaseBlock
 from connectome.layers.base import Wrapper, EdgesBag
 from connectome.layers.transform import TransformLayer
+from connectome.storage import Storage, Disk
 
 
 class HashEdge(FullMask, Edge):
@@ -39,3 +40,10 @@ class HashLayer(Wrapper):
 @pytest.fixture
 def hash_layer():
     return BaseBlock(HashLayer())
+
+
+@pytest.fixture
+def temp_storage(tmpdir):
+    tmpdir = tmpdir / 'storage'
+    tmpdir.mkdir()
+    return Storage([Disk(tmpdir)])

@@ -107,22 +107,21 @@ class CacheEdge(Edge):
         return inputs[0]
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        empty, transaction = self.cache.reserve_write_or_read(output)
-        if empty:
-            return FULL_MASK, transaction
-        return [], transaction
+        if self.cache.reserve_read(output):
+            return [], True
+        return FULL_MASK, False
 
     def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         # no arguments means that the value is cached
         if not arguments:
-            return self.cache.get(output, mask_payload)
+            return self.cache.get(output)
 
         value, = arguments
         # TODO: what to do in case of a collision:
         #   overwrite?
         #   add consistency check?
         #   get the value from cache?
-        self.cache.set(output, value, mask_payload)
+        self.cache.set(output, value)
         return value
 
     def handle_exception(self, output: NodeHash, payload: Any):

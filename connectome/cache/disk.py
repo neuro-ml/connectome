@@ -5,19 +5,19 @@ import logging
 import os
 import shutil
 import time
-from functools import partial
 from hashlib import blake2b
 from pathlib import Path
-from typing import Tuple, Any
+from typing import Any
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
-from .transactions import DummyTransaction
 from ..storage import Storage
 from ..storage.digest import digest_to_relative
+from ..storage.disk import wait_for_true
 from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
 from ..engine import NodeHash
 from ..serializers import Serializer
+from ..storage.locker import Locker
 
 logger = logging.getLogger(__name__)
 
@@ -26,61 +26,90 @@ HASH_FILENAME = 'hash.bin'
 META_FILENAME = 'meta.json'
 GZIP_COMPRESSION = 1
 
+Key = str
+
 
 class DiskCache(Cache):
-    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict):
+    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict, locker: Locker):
         super().__init__()
         self.metadata = metadata
         self.serializer = serializer
         self.storage = storage
+
+        # TODO: pass permissions and group
         self.root = Path(root)
-        self._transactions = DummyTransaction()
 
-    def reserve_write_or_read(self, param: NodeHash) -> Tuple[bool, Any]:
-        value = param.value
-        pickled, digest, _ = key_to_relative(value)
-        empty, transaction = self._transactions.reserve_write_or_read(digest, self._digest_exists)
-        # we can already read from cache
-        if not empty:
-            return empty, transaction
+        self._locker = locker
+        self._sleep_time = 0.1
+        self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
 
+    def reserve_read(self, param: NodeHash) -> bool:
+        key = param.value
+        pickled, digest, _ = key_to_relative(key)
+
+        wait_for_true(self._locker.start_reading, digest, self._sleep_time, self._sleep_iters)
+        try:
+            if self._digest_exists(digest):
+                return True
+
+        except BaseException:
+            self._locker.stop_reading(digest)
+            raise
+
+        self._locker.stop_reading(digest)
         # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
-            local_pickled, local_digest, _ = key_to_relative(value, version)
-            local_transaction = self._transactions.reserve_read(local_digest, self._digest_exists)
-            if local_transaction is not None:
-                # we can simply copy the previous version, because nothing really changed
-                value = self._transactions.release_read(
-                    local_digest, local_transaction, partial(self._load, pickled=local_pickled))
-                self._transactions.release_write(digest, value, transaction, partial(self._save, pickled=pickled))
-                empty, transaction = self._transactions.reserve_write_or_read(digest, self._digest_exists)
-                assert not empty
-                return empty, transaction
+            local_pickled, local_digest, _ = key_to_relative(key, version)
 
-        return empty, transaction
+            # we can simply copy the previous version, because nothing really changed
+            exists, value = self._load(local_digest, local_pickled)
+            if exists:
+                # and update the new version
+                self._save(digest, value, pickled)
+                return True
 
-    def fail(self, param: NodeHash, transaction: Any):
-        _, digest, _ = key_to_relative(param.value)
-        self._transactions.fail(digest, transaction)
+        return False
 
-    def set(self, param: NodeHash, value, transaction: Any):
+    def fail(self, param: NodeHash, read: bool):
+        if read:
+            _, digest, _ = key_to_relative(param.value)
+            self._locker.stop_reading(digest)
+
+    def set(self, param: NodeHash, value: Any):
         pickled, digest, _ = key_to_relative(param.value)
-        return self._transactions.release_write(digest, value, transaction, partial(self._save, pickled=pickled))
+        self._save(digest, value, pickled)
 
-    def get(self, param: NodeHash, transaction: Any):
+    def get(self, param: NodeHash) -> Any:
         pickled, digest, _ = key_to_relative(param.value)
-        return self._transactions.release_read(digest, transaction, partial(self._load, pickled=pickled))
+        exists, value = self._load(digest, pickled)
+        if not exists:
+            raise KeyError(digest)
+        return value
 
     def _digest_exists(self, digest: str):
         return (self.root / digest_to_relative(digest)).exists()
 
     def _load(self, digest, pickled):
-        root = self.root / digest_to_relative(digest)
-        # TODO: how slow is this?
-        check_consistency(root / HASH_FILENAME, pickled)
-        return self.serializer.load(root / DATA_FOLDER)
+        try:
+            if not self._digest_exists(digest):
+                return False, None
+
+            root = self.root / digest_to_relative(digest)
+            # TODO: how slow is this?
+            check_consistency(root / HASH_FILENAME, pickled)
+            return True, self.serializer.load(root / DATA_FOLDER)
+
+        finally:
+            self._locker.stop_reading(digest)
 
     def _save(self, digest: str, value, pickled):
+        wait_for_true(self._locker.start_writing, digest, self._sleep_time, self._sleep_iters)
+        try:
+            self._save_value(digest, value, pickled)
+        finally:
+            self._locker.stop_writing(digest)
+
+    def _save_value(self, digest: str, value, pickled):
         root = self.root / digest_to_relative(digest)
         if root.exists():
             check_consistency(root / HASH_FILENAME, pickled)

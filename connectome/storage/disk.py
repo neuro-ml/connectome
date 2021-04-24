@@ -70,13 +70,7 @@ class Disk:
 
     def reserve_write(self, key: Key):
         key = self._to_lock_key(key)
-        i = 0
-        while not self._locker.start_writing(key):
-            if i >= self._sleep_iters:
-                raise RuntimeError(f"Can't start writing for key {key}. It seems like you've hit a deadlock.")
-
-            time.sleep(self._sleep_time)
-            i += 1
+        wait_for_true(self._locker.start_writing, key, self._sleep_time, self._sleep_iters)
 
     def release_write(self, key: Key):
         key = self._to_lock_key(key)
@@ -119,13 +113,7 @@ class Disk:
         path = self._key_to_path(key)
         key = self._to_lock_key(key)
 
-        i = 0
-        while not self._locker.start_reading(key):
-            if i >= self._sleep_iters:
-                raise RuntimeError(f"Can't start reading for key {key}. It seems like you've hit a deadlock.")
-
-            time.sleep(self._sleep_time)
-            i += 1
+        wait_for_true(self._locker.start_reading, key, self._sleep_time, self._sleep_iters)
 
         if not path.exists():
             self._locker.stop_reading(key)
@@ -203,3 +191,13 @@ def copy_file(source, destination):
 def match_files(first: Path, second: Path):
     if not filecmp.cmp(first, second, shallow=False):
         raise ValueError(f'Files do not match: {first} vs {second}')
+
+
+def wait_for_true(func, key, sleep_time, max_iterations):
+    i = 0
+    while not func(key):
+        if i >= max_iterations:
+            raise RuntimeError(f"It seems like you've hit a deadlock for key {key}.")
+
+        time.sleep(sleep_time)
+        i += 1

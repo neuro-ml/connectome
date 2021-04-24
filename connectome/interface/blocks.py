@@ -12,6 +12,7 @@ from ..layers.merge import SwitchLayer
 from ..layers.shortcuts import ApplyLayer
 from ..serializers import Serializer, ChainSerializer
 from ..storage import Storage
+from ..storage.locker import Locker, DummyLocker
 from ..storage.remote import RemoteOptions
 from ..utils import PathLike
 from .utils import MaybeStr, format_arguments
@@ -131,17 +132,22 @@ class CacheToRam(CacheBlock):
 class CacheToDisk(CacheBlock):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None):
+                 names: MaybeStr, metadata: dict = None, locker: Locker = None):
         names = to_seq(names)
-        super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
+        if locker is None:
+            locker = DummyLocker()
+        super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}, locker))
 
 
 class CacheColumns(CacheBlock):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None):
+                 names: MaybeStr, metadata: dict = None, locker: Locker = None):
         names = to_seq(names)
-        super().__init__(CacheColumnsLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
+        if locker is None:
+            locker = DummyLocker()
+        super().__init__(CacheColumnsLayer(
+            names, root, storage, _resolve_serializer(serializer), metadata or {}, locker=locker))
 
 
 class RemoteStorageBase(CacheBlock):

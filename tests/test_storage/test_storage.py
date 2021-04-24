@@ -1,5 +1,6 @@
 import filecmp
 import time
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from threading import Thread
 from multiprocessing.context import Process
@@ -27,8 +28,9 @@ def test_single_local(tmpdir):
 
 def test_parallel_read_threads(tmpdir, subtests):
     def job():
-        storage.load(lambda x: time.sleep(1), key)
+        storage.load(lambda x: time.sleep(sleep_time), key)
 
+    sleep_time = 1
     tmpdir = Path(tmpdir)
     storage = Storage([Disk(tmpdir)])
     key = storage.store(__file__)
@@ -38,11 +40,11 @@ def test_parallel_read_threads(tmpdir, subtests):
         # SqliteLocker(tmpdir / 'db.sqlite3'),
     ]
 
-    # threads
     for locker in lockers:
         with subtests.test(str(type(locker).__name__)):
             storage = Storage([Disk(tmpdir, locker=locker)])
 
+            # single thread
             start = time.time()
             th = Thread(target=job)
             th.start()
@@ -50,7 +52,16 @@ def test_parallel_read_threads(tmpdir, subtests):
             th.join()
             stop = time.time()
 
-            assert stop - start < 1.5
+            assert stop - start < sleep_time * 1.1
+
+            # thread pool
+            pool = ThreadPool(10, job)
+            start = time.time()
+            pool.close()
+            pool.join()
+            stop = time.time()
+
+            assert stop - start < sleep_time * 1.1
 
 
 def test_parallel_read_processes(tmpdir):

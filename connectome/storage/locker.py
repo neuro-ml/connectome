@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from threading import Lock
 from typing import ContextManager, MutableMapping
 
-import redis
+from redis import Redis
 from sqlitedict import SqliteDict
 
 from ..utils import PathLike
@@ -18,19 +18,20 @@ class Locker(ABC):
 
     @abstractmethod
     def start_reading(self, key: Key) -> bool:
-        pass
+        """ Try to reserve a read operation. Return True if it was successful. """
 
     @abstractmethod
     def stop_reading(self, key: Key):
+        """ Release a read operation. """
         pass
 
     @abstractmethod
     def start_writing(self, key: Key) -> bool:
-        pass
+        """ Try to reserve a write operation. Return True if it was successful. """
 
     @abstractmethod
     def stop_writing(self, key: Key):
-        pass
+        """ Release a write operation. """
 
     def get_size(self):
         raise NotImplementedError
@@ -92,7 +93,11 @@ class DictRegistry:
 
     def stop_reading(self, key: Key):
         with self._lock:
-            self._reading[key] = self._get_reading(key) - 1
+            value = self._get_reading(key)
+            if value == 1:
+                self._reading.pop(key)
+            else:
+                self._reading[key] = value - 1
 
     def start_writing(self, key: Key) -> bool:
         with self._lock:
@@ -108,7 +113,7 @@ class DictRegistry:
         with self._lock:
             value = self._get_writing(key)
             assert value == 1, value
-            self._writing[key] = value - 1
+            self._writing.pop(key)
 
 
 class ThreadLocker(DictRegistry, Locker):
@@ -120,77 +125,45 @@ class ThreadLocker(DictRegistry, Locker):
 
 
 class RedisLocker(Locker):
-    def __init__(self, master: redis.Redis, prefix: str):
+    def __init__(self, redis: Redis, prefix: str):
         super().__init__(True)
-        self._redis = master
+        self._redis = redis
         self._prefix = prefix
         self._volume_key = f'{self._prefix}.V'
-
-    def _write_key(self, key):
-        return f'{self._prefix}.W.{key}'
-
-    def _read_key(self, key):
-        return f'{self._prefix}.R.{key}'
+        self._lock_key = f'{self._prefix}.L'
+        # TODO: how slow are these checks?
+        # language=Lua
+        self._stop_writing = self._redis.script_load('''
+        if redis.call('hget', KEYS[1], ARGV[1]) == '-1' then 
+            redis.call('hdel', KEYS[1], ARGV[1]) else error('') 
+        end''')
+        # language=Lua
+        self._start_reading = self._redis.script_load('''
+        if redis.call('hget', KEYS[1], ARGV[1]) == '-1' then 
+            return 0 else redis.call('hincrby', KEYS[1], ARGV[1], 1); return 1 
+        end''')
+        # language=Lua
+        self._stop_reading = self._redis.script_load('''
+        local lock = redis.call('hget', KEYS[1], ARGV[1])
+        if lock == '1' then
+            redis.call('hdel', KEYS[1], ARGV[1]) 
+        elseif tonumber(lock) < 1 then
+            error('')
+        else
+            redis.call('hincrby', KEYS[1], ARGV[1], -1)
+        end''')
 
     def start_writing(self, key: Key) -> bool:
-        write_key = self._write_key(key)
-        read_key = self._read_key(key)
-
-        with self._redis.pipeline() as pipe:
-            while True:
-                try:
-                    # guarantee atomicity
-                    pipe.watch(write_key, read_key)
-                    writing = int(pipe.get(write_key) or 0)
-                    reading = int(pipe.get(read_key) or 0)
-
-                    assert 0 <= writing <= 1, writing
-                    assert reading >= 0, reading
-                    if writing or reading:
-                        return False
-
-                    # commit changes
-                    pipe.multi()
-                    pipe.set(write_key, 1)
-                    pipe.execute()
-
-                    return True
-
-                except redis.WatchError:
-                    pass
+        return bool(self._redis.hsetnx(self._lock_key, key, -1))
 
     def stop_writing(self, key: Key):
-        count = int(self._redis.decrby(self._write_key(key)))
-        assert count == 0, count
+        self._redis.evalsha(self._stop_writing, 1, self._lock_key, key)
 
     def start_reading(self, key: Key) -> bool:
-        write_key = self._write_key(key)
-        read_key = self._read_key(key)
-
-        with self._redis.pipeline() as pipe:
-            while True:
-                try:
-                    # guarantee atomicity
-                    pipe.watch(write_key, read_key)
-                    writing = int(pipe.get(write_key) or 0)
-
-                    assert 0 <= writing <= 1, writing
-                    if writing:
-                        return False
-
-                    # commit changes
-                    pipe.multi()
-                    pipe.incrby(read_key)
-                    pipe.execute()
-
-                    return True
-
-                except redis.WatchError:
-                    pass
+        return bool(self._redis.evalsha(self._start_reading, 1, self._lock_key, key))
 
     def stop_reading(self, key: Key):
-        count = int(self._redis.decrby(self._read_key(key)))
-        assert count >= 0, count
+        self._redis.evalsha(self._stop_reading, 1, self._lock_key, key)
 
     def get_size(self):
         return int(self._redis.get(self._volume_key))
@@ -203,7 +176,7 @@ class RedisLocker(Locker):
 
     @classmethod
     def from_url(cls, url: str, prefix: str):
-        return cls(redis.Redis.from_url(url), prefix)
+        return cls(Redis.from_url(url), prefix)
 
 
 class SqliteLocker(DictRegistry, Locker):

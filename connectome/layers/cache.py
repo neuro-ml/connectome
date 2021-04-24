@@ -56,9 +56,9 @@ class MemoryCacheLayer(CacheLayer):
 
 
 class DiskCacheLayer(CacheLayer):
-    def __init__(self, names, root, storage, serializer, metadata):
+    def __init__(self, names, root, storage, serializer, metadata, locker):
         super().__init__(names)
-        self.storage = DiskCache(root, storage, serializer, metadata)
+        self.storage = DiskCache(root, storage, serializer, metadata, locker)
 
     def get_storage(self):
         return self.storage
@@ -78,9 +78,9 @@ class CacheColumnsLayer(CacheBase):
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
 
-    def __init__(self, names, root, storage, serializer, metadata):
+    def __init__(self, names, root, storage, serializer, metadata, locker):
         self.cache_names = names
-        self.disk = DiskCache(root, storage, serializer, metadata)
+        self.disk = DiskCache(root, storage, serializer, metadata, locker)
         self.ram = MemoryCache(None)
 
     def wrap(self, layer: EdgesBag) -> EdgesBag:
@@ -128,17 +128,16 @@ class CachedColumn(Edge):
         return inputs[0]
 
     def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        empty, transaction = self.ram.reserve_write_or_read(output)
-        if empty:
-            return [1, 2], transaction
-        return [], transaction
+        if self.ram.reserve_read(output):
+            return [], True
+        return [1, 2], False
 
     def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
         return inputs[0]
 
     def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
         if not arguments:
-            return self.ram.get(output, mask_payload)
+            return self.ram.get(output)
 
         key, keys = arguments
         keys = sorted(keys)
@@ -153,24 +152,18 @@ class CachedColumn(Edge):
                 assert output == h
         compound = TupleHash(*hashes)
 
-        empty, transaction = self.disk.reserve_write_or_read(compound)
-        if empty:
-            values = [self.graph.evaluate([k], *p) for k, p in zip(keys, payloads)]
-            self.disk.set(compound, values, transaction)
+        if self.disk.reserve_read(compound):
+            values = self.disk.get(compound)
         else:
-            values = self.disk.get(compound, transaction)
+            values = [self.graph.evaluate([k], *p) for k, p in zip(keys, payloads)]
+            self.disk.set(compound, values)
 
         for k, h, value in zip(keys, hashes, values):
+            self.ram.set(h, value)
             if k == key:
                 result = value
-                self.ram.set(h, value, mask_payload)
-
-            else:
-                # TODO: need an immediate set operation
-                empty, transaction = self.ram.reserve_write_or_read(h)
-                if empty:
-                    self.ram.set(h, value, transaction)
-                else:
-                    self.ram.get(h, transaction)
 
         return result
+
+    def handle_exception(self, output: NodeHash, payload: Any):
+        self.ram.fail(output, payload)
