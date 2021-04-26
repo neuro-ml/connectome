@@ -30,7 +30,7 @@ def test_different_inputs():
 
 
 def test_missing_input():
-    class EraseBeyondLungs(Transform):
+    class A(Transform):
         __inherit__ = True
 
         def _param(param):
@@ -40,7 +40,7 @@ def test_missing_input():
         def output(output, _param):
             return output, _param
 
-    dec = EraseBeyondLungs()._decorate('input', 'output')
+    dec = A()._decorate('input', 'output')
 
     @dec
     def predict(x):

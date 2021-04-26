@@ -5,7 +5,7 @@ FOLDER_LEVELS = 1, 31, 32
 DIGEST_SIZE = sum(FOLDER_LEVELS)
 
 
-def digest_file(path: Path, block_size=2 ** 20):
+def digest_file(path: Path, block_size=2 ** 20) -> str:
     hasher = blake2b(digest_size=DIGEST_SIZE)
 
     with open(path, 'rb') as f:
@@ -32,3 +32,7 @@ def digest_to_relative(key: str, suffix: str = None):
     if suffix is not None:
         path /= suffix
     return path
+
+
+def digest_bytes(pickled: bytes) -> str:
+    return blake2b(pickled, digest_size=DIGEST_SIZE).hexdigest()

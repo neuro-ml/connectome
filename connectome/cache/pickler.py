@@ -15,7 +15,6 @@ import types
 from operator import itemgetter
 from typing import NamedTuple, Any
 from weakref import WeakSet
-from collections import OrderedDict
 from contextlib import suppress
 from enum import Enum
 from io import BytesIO
@@ -100,11 +99,9 @@ class PortablePickler(CloudPickler):
 
     def save_codeobject(self, obj):
         """
-        Same reducer as in cloudpickle, except `co_filename`, `co_firstlineno` are not saved.
+        Same reducer as in cloudpickle, except `co_filename`, `co_firstlineno`, `lnotab` are not saved.
         """
         consts = obj.co_consts
-        # remove the line number table
-        lnotab = ()
         # remove the docstring
         if consts and isinstance(consts[0], str):
             consts = list(consts)[1:]
@@ -122,8 +119,8 @@ class PortablePickler(CloudPickler):
             obj.co_kwonlyargcount, obj.co_nlocals, obj.co_stacksize,
             obj.co_flags, obj.co_code, consts, obj.co_names,
             obj.co_varnames,  # obj.co_filename,
-            obj.co_name,  # obj.co_firstlineno,
-            *lnotab, obj.co_freevars, obj.co_cellvars
+            obj.co_name,  # obj.co_firstlineno, obj.co_lnotab,
+            obj.co_freevars, obj.co_cellvars
         )
         self.save_reduce(types.CodeType, args, obj=obj)
 
@@ -257,11 +254,11 @@ class PortablePickler(CloudPickler):
         elif name is not None:
             Pickler.save_global(self, obj, name=name)
         elif hasattr(obj, VERSION_METHOD):
+            self.save(VersionedClass)
             version = getattr(obj, VERSION_METHOD)()
             Pickler.save_global(self, obj)
             self.save(version)
             self.write(pickle.TUPLE2)
-            self.save(VersionedClass)
             self.write(pickle.REDUCE)
 
         elif not _is_truly_global(obj, name=name):

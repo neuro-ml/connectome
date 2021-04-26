@@ -5,16 +5,14 @@ import logging
 import os
 import shutil
 import time
-from hashlib import blake2b
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 from ..storage import Storage
-from ..storage.digest import digest_to_relative
-from ..storage.disk import wait_for_true
-from ..storage.local import copy_group_permissions, create_folders, DIGEST_SIZE
+from ..storage.digest import digest_to_relative, digest_bytes
+from ..storage.disk import wait_for_true, init_root, create_folders, to_read_only
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..storage.locker import Locker
@@ -29,14 +27,13 @@ Key = str
 
 
 class DiskCache(Cache):
-    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict, locker: Locker):
+    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict, locker: Locker,
+                 permissions: Union[int, None] = None, group: Union[str, int, None] = None):
         super().__init__()
+        self.root, self.permissions, self.group = init_root(root, permissions, group)
         self.metadata = metadata
         self.serializer = serializer
         self.storage = storage
-
-        # TODO: pass permissions and group
-        self.root = Path(root)
 
         self._locker = locker
         self._sleep_time = 0.1
@@ -93,10 +90,10 @@ class DiskCache(Cache):
             if not self._digest_exists(digest):
                 return False, None
 
-            root = self.root / digest_to_relative(digest)
+            base = self.root / digest_to_relative(digest)
             # TODO: how slow is this?
-            check_consistency(root / HASH_FILENAME, pickled)
-            return True, self.serializer.load(root / DATA_FOLDER)
+            check_consistency(base / HASH_FILENAME, pickled)
+            return True, self.serializer.load(base / DATA_FOLDER)
 
         finally:
             self._locker.stop_reading(digest)
@@ -109,36 +106,36 @@ class DiskCache(Cache):
             self._locker.stop_writing(digest)
 
     def _save_value(self, digest: str, value, pickled):
-        root = self.root / digest_to_relative(digest)
-        if root.exists():
-            check_consistency(root / HASH_FILENAME, pickled)
+        base = self.root / digest_to_relative(digest)
+        if base.exists():
+            check_consistency(base / HASH_FILENAME, pickled)
             # TODO: also compare the raw bytes of `value` and dumped value
             return
 
-        data_folder = root / DATA_FOLDER
-        create_folders(data_folder, self.root)
+        data_folder = base / DATA_FOLDER
+        create_folders(data_folder, self.permissions, self.group)
 
         try:
             # data
             self.serializer.save(value, data_folder)
             # meta
-            self._save_meta(root, pickled)
-
-            copy_group_permissions(root, self.root, recursive=True)
+            self._save_meta(base, pickled)
             self._mirror_to_storage(data_folder)
 
         except BaseException as e:
-            shutil.rmtree(root)
+            shutil.rmtree(base)
             raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
         # TODO: also increment size in locker
         # hash
         hash_path = local / HASH_FILENAME
+        meta_path = local / META_FILENAME
         if hash_path.exists():
             check_consistency(hash_path, pickled)
         else:
             save_hash(hash_path, pickled)
+            to_read_only(hash_path, self.permissions, self.group)
 
         # user meta
         meta = self.metadata.copy()
@@ -147,8 +144,9 @@ class DiskCache(Cache):
             # TODO: this can possibly fail
             'user': getpass.getuser(),
         })
-        with open(local / META_FILENAME, 'w') as file:
+        with open(meta_path, 'w') as file:
             json.dump(meta, file)
+        to_read_only(meta_path, self.permissions, self.group)
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):
@@ -160,10 +158,6 @@ class DiskCache(Cache):
             assert path.exists(), path
             os.remove(file)
             file.symlink_to(path)
-
-
-def digest_bytes(pickled: bytes) -> str:
-    return blake2b(pickled, digest_size=DIGEST_SIZE).hexdigest()
 
 
 def key_to_relative(key, version=LATEST_VERSION):
