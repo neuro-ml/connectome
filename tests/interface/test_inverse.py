@@ -27,21 +27,3 @@ def test_different_inputs():
         return x
 
     assert func(x=1, y=2) == 3
-
-
-def test_missing_input():
-    class A(Transform):
-        __inherit__ = True
-
-        def _param(param):
-            return param
-
-        @inverse
-        def output(output, _param):
-            return output, _param
-
-    dec = A()._decorate('input', 'output')
-
-    @dec
-    def predict(x):
-        return 1, 2

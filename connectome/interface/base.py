@@ -53,9 +53,6 @@ class CallableBlock(BaseBlock[EdgesBag]):
             inputs = [inputs]
 
         layer = self._layer
-        if set(inputs) - {node.name for node in layer.outputs}:
-            # FIXME: temporary dirty hack
-            layer = PipelineLayer(IdentityLayer(set(inputs) | {node.name for node in layer.inputs}), layer)
 
         def decorator(func: Callable) -> Callable:
             loopback = layer.loopback(func, inputs, outputs)

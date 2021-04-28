@@ -1,4 +1,4 @@
-from typing import Tuple, Sequence, Union, Iterable
+from typing import Tuple, Sequence, Union, Iterable, NamedTuple, List, Set
 
 from .base import Context, EdgesBag, update_map
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
@@ -11,96 +11,163 @@ INHERIT_ALL = True
 InheritType = Union[str, Iterable[str], bool]
 
 
+class LayerConnectionState(NamedTuple):
+    # elements of composed layer
+    inputs: List
+    outputs: List
+    edges: List[BoundEdge]
+    # names of already used prev layer inputs
+    used_names: Set
+    # elements of current/previous layer
+    cur_virtual: List
+    cur_inputs: Nodes
+    cur_outputs: Nodes
+    cur_optional: Sequence
+    cur_used_virtual: Set
+    prev_virtual: List
+    prev_inputs: Nodes
+    prev_outputs: Nodes
+    prev_used_virtual: Set
+
+
 class TransformLayer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
                  backward_outputs: Nodes = (), optional_nodes: Sequence[str] = (),
-                 inherit_nodes: InheritType = (), persistent_nodes: Sequence[str] = ()):
+                 virtual_nodes: InheritType = (), persistent_nodes: Sequence[str] = ()):
+
+        if isinstance(virtual_nodes, bool):
+            assert virtual_nodes
+        else:
+            virtual_nodes = tuple(virtual_nodes)
 
         super().__init__(
             inputs, outputs, edges,
-            BagContext(backward_inputs, backward_outputs, inherit_nodes),
-            propagate_nodes=inherit_nodes
+            BagContext(backward_inputs, backward_outputs, virtual_nodes),
+            virtual_nodes=virtual_nodes
         )
+
         check_for_duplicates(node_to_dict(inputs).keys())
-
-        if isinstance(inherit_nodes, bool):
-            assert inherit_nodes
-        else:
-            inherit_nodes = tuple(inherit_nodes)
-
-        self.inherit_nodes = inherit_nodes
         self.optional_nodes = tuple(optional_nodes)
         self.persistent_nodes = tuple(persistent_nodes)
 
     def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
-        previous = layer.freeze()
         current = self.freeze()
+        previous = layer.freeze()
+        inherit_nodes = self.virtual_nodes
+        all_edges = list(previous.edges) + list(current.edges)
 
-        prev_outputs = node_to_dict(previous.outputs)
-        cur_inputs = node_to_dict(current.inputs)
+        if self.virtual_nodes != INHERIT_ALL:
+            inherit_nodes = list(self.virtual_nodes) + list(self.persistent_nodes)
 
-        if self.inherit_nodes == INHERIT_ALL:
-            inherit_nodes = tuple(prev_outputs.keys())
-        else:
-            inherit_nodes = self.inherit_nodes + self.persistent_nodes
+        state = LayerConnectionState(
+            cur_inputs=current.inputs,
+            cur_outputs=current.outputs,
+            cur_virtual=inherit_nodes,
+            cur_optional=self.optional_nodes,
+            prev_inputs=previous.inputs,
+            prev_outputs=previous.outputs,
+            prev_virtual=previous.virtual_nodes,
+            inputs=list(previous.inputs),
+            outputs=list(),
+            used_names=set(),
+            cur_used_virtual=set(),
+            prev_used_virtual=set(),
+            edges=all_edges,
+        )
 
-        outputs = []
-        edges = list(previous.edges) + list(current.edges)
-        active_input_names = []
-
-        # connect common nodes
-        for i in current.inputs:
-            if i.name in prev_outputs:
-                active_input_names.append(i.name)
-                edges.append(IdentityEdge().bind(prev_outputs[i.name], i))
-
-        # check for inherited nodes
-        defined_outputs = [o.name for o in current.outputs]
-        for name, prev_output in prev_outputs.items():
-            if name in inherit_nodes and (
-                    name not in active_input_names or
-                    name not in defined_outputs):
-                output = Node(name)
-                outputs.append(output)
-                active_input_names.append(name)
-                edges.append(BoundEdge(IdentityEdge(), [prev_output], output))
-
-        unused_names = set(cur_inputs.keys()).difference(set(active_input_names))
-        propagated_nodes = []
-        for name in unused_names:
-            if name not in self.optional_nodes:
-                if previous.propagate_nodes == INHERIT_ALL or name in previous.propagate_nodes:
-                    # propagate identity transformation
-                    output = Node(name)
-                    input_node = cur_inputs[name]
-                    outputs.append(output)
-                    active_input_names.append(name)
-                    propagated_nodes.append(input_node)
-                    edges.append(BoundEdge(IdentityEdge(), [input_node], output))
-                else:
-                    raise RuntimeError(f"Previous layer must contain '{name}' node.")
+        self._connect_common_nodes(state)
+        self._connect_cur_virtual(state)
+        self._connect_prev_virtual(state)
 
         essential_input_names = self.get_essential_input_names(current.inputs, current.outputs,
                                                                current.edges)
         for o in current.outputs:
             # drop nodes that depend on inactive inputs
-            if all(name in active_input_names for name in essential_input_names[o]):
-                outputs.append(o)
-        # remove created outputs from new propagated nodes
-        if isinstance(previous.propagate_nodes, bool):
-            new_propagate_nodes = previous.propagate_nodes
-        else:
-            new_propagate_nodes = []
-            for node_name in previous.propagate_nodes:
-                if node_name not in node_to_dict(propagated_nodes):
-                    new_propagate_nodes.append(node_name)
+            if all(name in state.used_names for name in essential_input_names[o]):
+                state.outputs.append(o)
 
-        all_inputs = list(previous.inputs) + propagated_nodes
+        new_virtual_nodes = self._merge_virtual_nodes(state)
         return EdgesBag(
-            all_inputs, outputs, edges,
+            state.inputs, state.outputs, state.edges,
             PipelineContext(previous.context, current.context),
-            propagate_nodes=new_propagate_nodes
+            virtual_nodes=new_virtual_nodes
         )
+
+    @staticmethod
+    def _connect_common_nodes(state: LayerConnectionState):
+        prev_outputs = node_to_dict(state.prev_outputs)
+        for i in state.cur_inputs:
+            if i.name in prev_outputs:
+                state.used_names.add(i.name)
+                state.edges.append(IdentityEdge().bind(prev_outputs[i.name], i))
+
+    @staticmethod
+    def _connect_cur_virtual(state: LayerConnectionState):
+        prev_outputs = node_to_dict(state.prev_outputs)
+        for name, prev_output in prev_outputs.items():
+            # propagate identity transformation
+            if state.cur_virtual == INHERIT_ALL or name in state.cur_virtual:
+                output = Node(name)
+                state.outputs.append(output)
+                state.used_names.add(name)
+                state.cur_used_virtual.add(name)
+                state.edges.append(BoundEdge(IdentityEdge(), [prev_output], output))
+
+    @staticmethod
+    def _connect_prev_virtual(state: LayerConnectionState):
+        cur_inputs = node_to_dict(state.cur_inputs)
+        prev_inputs = node_to_dict(state.prev_inputs)
+        unused_names = set(cur_inputs.keys()).difference(set(state.used_names))
+
+        for name in unused_names:
+            if name not in state.cur_optional:
+                # propagate identity transformation
+                if state.prev_virtual == INHERIT_ALL or name in state.prev_virtual:
+                    if name in prev_inputs:
+                        input_node = prev_inputs[name]
+                    else:
+                        input_node = Node(name)
+                        state.inputs.append(input_node)
+
+                    if name not in cur_inputs:
+                        output = Node(name)
+                    else:
+                        output = cur_inputs[name]
+
+                    state.outputs.append(output)
+                    state.used_names.add(name)
+                    state.prev_used_virtual.add(name)
+                    state.edges.append(BoundEdge(IdentityEdge(), [input_node], output))
+                else:
+                    raise RuntimeError(f"Previous layer must contain '{name}' node.")
+
+    @staticmethod
+    def _merge_virtual_nodes(state: LayerConnectionState):
+        # remove created outputs from new propagated nodes
+        if isinstance(state.prev_virtual, bool):
+            unused_prev_virtual = state.prev_virtual
+        else:
+            unused_prev_virtual = []
+            for node_name in state.prev_virtual:
+                if node_name not in state.prev_used_virtual:
+                    unused_prev_virtual.append(node_name)
+
+        if isinstance(state.cur_virtual, bool):
+            unused_cur_virtual = state.cur_virtual
+        else:
+            unused_cur_virtual = []
+            for node_name in state.cur_virtual:
+                if node_name not in state.cur_used_virtual:
+                    unused_cur_virtual.append(node_name)
+
+        if isinstance(unused_cur_virtual, bool):
+            return unused_prev_virtual
+
+        if isinstance(unused_prev_virtual, bool):
+            return unused_cur_virtual
+
+        else:
+            return list(set.intersection(set(unused_prev_virtual), set(unused_cur_virtual)))
 
     @staticmethod
     def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: BoundEdges):

@@ -287,7 +287,7 @@ class GraphFactory:
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            optional_nodes=tuple(self.optional_names), inherit_nodes=self.inherited_names,
+            optional_nodes=tuple(self.optional_names), virtual_nodes=self.inherited_names,
             persistent_nodes=tuple(self.persistent_names),
         )
 

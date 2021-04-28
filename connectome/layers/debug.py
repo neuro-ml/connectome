@@ -25,4 +25,4 @@ class HashDigestLayer(TransformLayer):
             outputs.append(out)
             edges.append(HashDigestEdge().bind(inp, out))
 
-        super().__init__(inputs, outputs, edges, inherit_nodes=True)
+        super().__init__(inputs, outputs, edges, virtual_nodes=True)
