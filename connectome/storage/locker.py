@@ -34,6 +34,10 @@ class Locker(ABC):
     def stop_writing(self, key: Key):
         """ Release a write operation. """
 
+    @abstractmethod
+    def describe(self) -> str:
+        """ Returns a report regarding the locker's state """
+
     def get_size(self):
         raise NotImplementedError
 
@@ -59,6 +63,9 @@ class DummyLocker(Locker):
 
     def stop_writing(self, key: Key):
         pass
+
+    def describe(self) -> str:
+        return ''
 
 
 class DictRegistry:
@@ -116,6 +123,10 @@ class DictRegistry:
             assert value == 1, value
             self._writing.pop(key)
 
+    def describe(self) -> str:
+        # TODO
+        return ''
+
 
 class ThreadLocker(DictRegistry, Locker):
     def __init__(self):
@@ -167,13 +178,24 @@ class RedisLocker(Locker):
         self._redis.evalsha(self._stop_reading, 1, self._lock_key, key)
 
     def get_size(self):
-        return int(self._redis.get(self._volume_key))
+        return int(self._redis.get(self._volume_key) or 0)
 
     def set_size(self, size: int):
         self._redis.set(self._volume_key, size)
 
     def inc_size(self, size: int):
         self._redis.incrby(self._volume_key, size)
+
+    def describe(self) -> str:
+        lines = [f'{self._prefix}: {self.get_size()}']
+        for name, value in self._redis.hgetall(self._lock_key).items():
+            name = name.decode()
+            value = int(value)
+            assert value == -1 or value > 0, value
+            value = 'Write' if value == -1 else 'Read'
+            lines.append(f'{name}: {value}')
+
+        return '\n'.join(lines)
 
     @classmethod
     def from_url(cls, url: str, prefix: str):

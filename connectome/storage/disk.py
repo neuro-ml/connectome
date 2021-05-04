@@ -89,7 +89,7 @@ class Disk:
         try:
             copy_file(file, temporary)
             if self._locker.track_size:
-                self._locker.inc_size(temporary.stat().st_size)
+                self._locker.inc_size(get_size(temporary))
 
         except BaseException as e:
             shutil.rmtree(folder)
@@ -153,7 +153,7 @@ class Disk:
             bar.set_description(str(file.parent.relative_to(self.root)))
             # TODO: add digest check
             assert not file.is_symlink()
-            size += file.stat().st_size
+            size += get_size(file)
 
         self._locker.set_size(size)
 
@@ -212,3 +212,7 @@ def init_root(root: PathLike, permissions: Union[int, None], group: Union[str, i
 def to_read_only(path: Path, permissions, group):
     os.chmod(path, 0o444 & permissions)
     shutil.chown(path, group=group)
+
+
+def get_size(file: Path) -> int:
+    return file.stat().st_size

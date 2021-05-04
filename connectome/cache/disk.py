@@ -12,7 +12,7 @@ from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 from ..storage import Storage
 from ..storage.digest import digest_to_relative, digest_bytes
-from ..storage.disk import wait_for_true, init_root, create_folders, to_read_only
+from ..storage.disk import wait_for_true, init_root, create_folders, to_read_only, get_size
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..storage.locker import Locker
@@ -133,9 +133,9 @@ class DiskCache(Cache):
         meta_path = local / META_FILENAME
         if hash_path.exists():
             check_consistency(hash_path, pickled)
-        else:
-            save_hash(hash_path, pickled)
-            to_read_only(hash_path, self.permissions, self.group)
+            return
+
+        save_hash(hash_path, pickled)
 
         # user meta
         meta = self.metadata.copy()
@@ -146,7 +146,10 @@ class DiskCache(Cache):
         })
         with open(meta_path, 'w') as file:
             json.dump(meta, file)
+
+        to_read_only(hash_path, self.permissions, self.group)
         to_read_only(meta_path, self.permissions, self.group)
+        self._locker.inc_size(get_size(hash_path) + get_size(meta_path))
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):
