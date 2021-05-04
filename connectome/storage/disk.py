@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class Disk:
     def __init__(self, root: PathLike, min_free_size: int = 0, max_size: int = None, locker: Locker = None,
-                 permissions: Union[int, None] = None, group: Union[str, int, None] = None):
+                 permissions: Union[int, None] = None, group: Union[str, int, None] = None, lock_prefix_size: int = 2):
         if locker is None:
             locker = DummyLocker()
         if not locker.track_size:
@@ -34,7 +34,7 @@ class Disk:
         self._locker = locker
         self._sleep_time = 0.01
         self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
-        self._prefix_size = 2
+        self._prefix_size = lock_prefix_size
 
     def _key_to_path(self, key: Key, temp: bool = False):
         name = TEMPFILE if temp else FILENAME
