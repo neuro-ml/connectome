@@ -7,6 +7,7 @@ from typing import ContextManager, MutableMapping
 from redis import Redis
 from sqlitedict import SqliteDict
 
+from .utils import size_to_human
 from ..utils import PathLike
 
 Key = str
@@ -187,7 +188,7 @@ class RedisLocker(Locker):
         self._redis.incrby(self._volume_key, size)
 
     def describe(self) -> str:
-        lines = [f'{self._prefix}: {self.get_size()}']
+        lines = [f'{self._prefix}: {size_to_human(self.get_size())}']
         for name, value in self._redis.hgetall(self._lock_key).items():
             name = name.decode()
             value = int(value)
