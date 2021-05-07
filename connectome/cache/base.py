@@ -1,23 +1,20 @@
-from typing import Any
+from abc import ABC, abstractmethod
+from typing import Any, Tuple
 
 from ..engine import NodeHash
 
 
-class Cache:
-    def reserve_read(self, param: NodeHash) -> bool:
+class Cache(ABC):
+    @abstractmethod
+    def get(self, param: NodeHash) -> Tuple[Any, bool]:
         """
-        Tries to reserve a read operation. Returns True if it was successful.
+        Tries to read from cache.
+        Returns (value, True) if it was successful and (None, False) otherwise.
         """
-        raise NotImplementedError
 
-    def fail(self, param: NodeHash, read: bool):
-        """
-        Handles a failure during cache writing.
-        """
-        raise NotImplementedError
-
+    @abstractmethod
     def set(self, param: NodeHash, value: Any):
-        raise NotImplementedError
-
-    def get(self, param: NodeHash) -> Any:
-        raise NotImplementedError
+        """
+        Writes to cache.
+        The cache is responsible for handling collisions.
+        """

@@ -127,9 +127,9 @@ class CacheEdge(StaticGraph, StaticHash):
         return inputs[0]
 
     def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
-        # TODO: need a single method for this
-        if self.cache.reserve_read(output):
-            return self.cache.get(output)
+        value, exists = self.cache.get(output)
+        if exists:
+            return value
 
         value = yield 0, RequestType.Value
         # TODO: what to do in case of a collision:

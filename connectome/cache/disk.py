@@ -6,7 +6,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Union, Tuple
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
@@ -39,71 +39,50 @@ class DiskCache(Cache):
         self._sleep_time = 0.1
         self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
 
-    def reserve_read(self, param: NodeHash) -> bool:
+    def get(self, param: NodeHash) -> Tuple[Any, bool]:
         key = param.value
-        pickled, digest, _ = key_to_relative(key)
+        pickled, digest = key_to_digest(key)
 
-        wait_for_true(self._locker.start_reading, digest, self._sleep_time, self._sleep_iters)
-        try:
-            if self._digest_exists(digest):
-                return True
+        # try to load
+        value, exists = self._load(digest, pickled)
+        if exists:
+            return value, exists
 
-        except BaseException:
-            self._locker.stop_reading(digest)
-            raise
-
-        self._locker.stop_reading(digest)
         # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
-            local_pickled, local_digest, _ = key_to_relative(key, version)
+            local_pickled, local_digest = key_to_digest(key, version)
 
             # we can simply copy the previous version, because nothing really changed
-            exists, value = self._load(local_digest, local_pickled)
+            value, exists = self._load(local_digest, local_pickled)
             if exists:
-                # and update the new version
-                self._save(digest, value, pickled)
-                return True
+                return value, exists
 
-        return False
-
-    def fail(self, param: NodeHash, read: bool):
-        if read:
-            _, digest, _ = key_to_relative(param.value)
-            self._locker.stop_reading(digest)
+        return None, False
 
     def set(self, param: NodeHash, value: Any):
-        pickled, digest, _ = key_to_relative(param.value)
-        self._save(digest, value, pickled)
-
-    def get(self, param: NodeHash) -> Any:
-        pickled, digest, _ = key_to_relative(param.value)
-        exists, value = self._load(digest, pickled)
-        if not exists:
-            raise KeyError(digest)
-        return value
-
-    def _digest_exists(self, digest: str):
-        return (self.root / digest_to_relative(digest)).exists()
-
-    def _load(self, digest, pickled):
-        try:
-            if not self._digest_exists(digest):
-                return False, None
-
-            base = self.root / digest_to_relative(digest)
-            # TODO: how slow is this?
-            check_consistency(base / HASH_FILENAME, pickled)
-            return True, self.serializer.load(base / DATA_FOLDER)
-
-        finally:
-            self._locker.stop_reading(digest)
-
-    def _save(self, digest: str, value, pickled):
+        pickled, digest = key_to_digest(param.value)
         wait_for_true(self._locker.start_writing, digest, self._sleep_time, self._sleep_iters)
         try:
             self._save_value(digest, value, pickled)
         finally:
             self._locker.stop_writing(digest)
+
+    def _digest_exists(self, digest: str):
+        return (self.root / digest_to_relative(digest)).exists()
+
+    def _load(self, digest, pickled):
+        wait_for_true(self._locker.start_reading, digest, self._sleep_time, self._sleep_iters)
+        try:
+            if not self._digest_exists(digest):
+                return None, False
+
+            base = self.root / digest_to_relative(digest)
+            # TODO: how slow is this?
+            check_consistency(base / HASH_FILENAME, pickled)
+            return self.serializer.load(base / DATA_FOLDER), True
+
+        finally:
+            self._locker.stop_reading(digest)
 
     def _save_value(self, digest: str, value, pickled):
         base = self.root / digest_to_relative(digest)
@@ -163,11 +142,10 @@ class DiskCache(Cache):
             file.symlink_to(path)
 
 
-def key_to_relative(key, version=LATEST_VERSION):
+def key_to_digest(key, version=LATEST_VERSION):
     pickled = dumps(key, version=version)
     digest = digest_bytes(pickled)
-    relative = digest_to_relative(digest)
-    return pickled, digest, relative
+    return pickled, digest
 
 
 def check_consistency(hash_path, pickled):

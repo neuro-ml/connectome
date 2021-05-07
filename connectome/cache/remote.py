@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Sequence, Any
 
 from .base import Cache
-from .disk import key_to_relative, check_consistency, DATA_FOLDER, HASH_FILENAME
+from .disk import key_to_digest, check_consistency, DATA_FOLDER, HASH_FILENAME
 
 from ..storage.remote import RemoteOptions, RelativeRemote
 from ..engine import NodeHash
@@ -11,6 +11,7 @@ from ..serializers import Serializer
 from ..utils import ChainDict
 
 
+# TODO: update this interface
 class RemoteCache(Cache):
     def __init__(self, options: Sequence[RemoteOptions], serializer: Serializer):
         super().__init__()
@@ -38,7 +39,7 @@ class RemoteDict:
             return func(temp_file, *args, **kwargs)
 
     def __contains__(self, key):
-        pickled, _, relative = key_to_relative(key)
+        pickled, _, relative = key_to_digest(key)
         try:
             self._load(check_consistency, relative / HASH_FILENAME, pickled)
         except FileNotFoundError:
@@ -46,7 +47,7 @@ class RemoteDict:
         return True
 
     def __getitem__(self, key):
-        _, _, relative = key_to_relative(key)
+        _, _, relative = key_to_digest(key)
         try:
             return self._load(self.serializer.load, relative / DATA_FOLDER)
         except FileNotFoundError:

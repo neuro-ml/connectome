@@ -132,8 +132,9 @@ class CachedColumn(Edge):
         return value, None
 
     def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
-        if self.ram.reserve_read(output):
-            return self.ram.get(output)
+        value, exists = self.ram.get(output)
+        if exists:
+            return value
 
         key = yield 1, RequestType.Value
         keys = yield 2, RequestType.Value
@@ -149,9 +150,8 @@ class CachedColumn(Edge):
                 assert output == h, (output, h)
         compound = TupleHash(*hashes)
 
-        if self.disk.reserve_read(compound):
-            values = self.disk.get(compound)
-        else:
+        values, exists = self.disk.get(compound)
+        if not exists:
             values = tuple(starmap(self.graph.get_value, states))
             self.disk.set(compound, values)
 

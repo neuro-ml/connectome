@@ -1,7 +1,7 @@
 from typing import Iterable, Sequence, Any
 
 from .transform import TransformLayer
-from ..cache.disk import key_to_relative
+from ..cache.disk import key_to_digest
 from ..engine.base import Node, NodeHash
 from ..engine.edges import IdentityEdge
 
@@ -12,7 +12,7 @@ class HashDigestEdge(IdentityEdge):
         self._uses_hash = True
 
     def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
-        pickled, digest, _ = key_to_relative(output.value)
+        pickled, digest = key_to_digest(output.value)
         return inputs[0], output.value, digest, pickled
 
 
