@@ -1,7 +1,6 @@
 from connectome import Source, meta, impure, Transform
 from connectome.interface.blocks import HashDigest, CacheToRam, Merge
 from connectome.interface.prepared import ComputableHash
-import numpy as np
 
 
 def prepare(i, _length):
@@ -43,7 +42,7 @@ def test_impure():
             return tuple('0123')
 
         @impure
-        def _prefix():
+        def _prefix(i):
             return count()
 
         def text(i, _prefix):
@@ -51,7 +50,7 @@ def test_impure():
 
     class B(Transform):
         @impure
-        def _suffix():
+        def _suffix(text):
             return count()
 
         def text(text, _suffix):

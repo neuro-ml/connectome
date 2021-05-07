@@ -127,7 +127,6 @@ class DiskCache(Cache):
             raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
-        # TODO: also increment size in locker
         # hash
         hash_path = local / HASH_FILENAME
         meta_path = local / META_FILENAME
@@ -149,7 +148,8 @@ class DiskCache(Cache):
 
         to_read_only(hash_path, self.permissions, self.group)
         to_read_only(meta_path, self.permissions, self.group)
-        self._locker.inc_size(get_size(hash_path) + get_size(meta_path))
+        if self._locker.track_size:
+            self._locker.inc_size(get_size(hash_path) + get_size(meta_path))
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):

@@ -1,11 +1,13 @@
 from tempfile import TemporaryDirectory
 
 from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns
+from connectome.interface.blocks import HashDigest
 from connectome.serializers import JsonSerializer
 from connectome.storage import Storage, Disk
 
 
-def test_hash(block_maker, hash_layer):
+def test_hash(block_maker):
+    hash_layer = HashDigest(['image'])
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=15),
         block_maker.crop(),

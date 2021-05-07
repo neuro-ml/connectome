@@ -1,78 +1,72 @@
-from collections import defaultdict
-from typing import Sequence, Any
+from typing import Sequence, Any, Generator
 
-from ..engine.edges import ConstantEdge, FullMask
-from ..engine.base import Node, NodeHash, Edge, NodeHashes, TreeNode, HashOutput
-from ..engine.graph import Graph
-from ..engine.node_hash import LeafHash, MergeHash
+from ..engine.edges import ConstantEdge, IdentityEdge
+from ..engine.base import Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, RequestType
+from ..engine.node_hash import MergeHash
 from ..utils import node_to_dict
 from .base import EdgesBag
 
 
 class SwitchLayer(EdgesBag):
-    def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag]):
-        self.layers = layers
-        self.id_to_index = id_to_index
-        super().__init__(*self.create_graph(), context=None)
+    def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag], keys_name: str):
+        inputs = []
+        groups = []
+        edges = []
+        # gather parts
+        for layer in layers:
+            params = layer.freeze()
+            if len(params.inputs) != 1:
+                raise ValueError('Each layer must have exactly one input')
+            inputs.append(params.inputs[0])
+            groups.append(node_to_dict(params.outputs))
+            edges.extend(params.edges)
 
-    def create_graph(self):
-        # find outputs
-        common_outputs = {x.name for x in self.layers[0].outputs} - {'ids'}
-        for layer in self.layers[1:]:
-            common_outputs &= {x.name for x in layer.outputs}
+        # validate inputs
+        inp = [x.name for x in inputs]
+        if len(set(inp)) != 1:
+            raise ValueError(f'Layer inputs must have the same name: {inp}')
 
-        # compile graphs
-        graphs = defaultdict(list)
-        for layer in self.layers:
-            layer_params = layer.freeze()
-            inp, = layer_params.inputs
-            out = node_to_dict(layer_params.outputs)
-            mapping = TreeNode.from_edges(layer_params.edges)
+        # create the new input
+        inp = Node(inp[0])
+        for node in inputs:
+            edges.append(IdentityEdge().bind(inp, node))
 
-            for name in common_outputs:
-                graphs[name].append(Graph([mapping[inp]], mapping[out[name]]))
+        # create new outputs
+        outputs = []
+        common_outputs = set.intersection(*map(set, groups)) - {keys_name}
+        for name in common_outputs:
+            node = Node(name)
+            branches = [group[name] for group in groups]
+            outputs.append(node)
+            edges.append(SwitchEdge(id_to_index, len(layers)).bind([inp] + branches, node))
 
-        # make outputs
-        inp = Node('id')
-        outputs, edges = [], []
-        for name, graph in graphs.items():
-            out = Node(name)
-            outputs.append(out)
-            edges.append(SwitchEdge(self.id_to_index, graph).bind(inp, out))
-
-        # and ids
-        ids = Node('ids')
+        # and the keys
+        ids = Node(keys_name)
         outputs.append(ids)
-        edges.append(ConstantEdge(tuple(sorted(self.id_to_index))).bind([], ids))
+        edges.append(ConstantEdge(tuple(sorted(id_to_index))).bind([], ids))
 
-        return [inp], outputs, edges
+        super().__init__([inp], outputs, edges, context=None)
+        self.layers = layers
 
 
-class SwitchEdge(FullMask, Edge):
-    def __init__(self, id_to_index: dict, graphs: Sequence[Graph]):
-        super().__init__(arity=1, uses_hash=True)
-        self.graphs = graphs
+class SwitchEdge(Edge):
+    def __init__(self, id_to_index: dict, n_branches: int):
+        super().__init__(arity=1 + n_branches, uses_hash=True)
         self.id_to_index = id_to_index
-        self._hashes = [graph.hash() for graph in self.graphs]
 
-    def _select_graph(self, key):
+    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
+        key = yield 0, RequestType.Value
         try:
-            return self.graphs[self.id_to_index[key]]
+            idx = self.id_to_index[key]
         except KeyError:
             raise ValueError(f'Identifier {key} not found.') from None
 
-    def _propagate_hash(self, inputs: NodeHashes) -> HashOutput:
-        node_hash, = inputs
-        assert isinstance(node_hash, LeafHash)
-        graph = self._select_graph(node_hash.data)
-        return graph.propagate_hash(*inputs)
+        value = yield idx + 1, RequestType.Hash
+        return value, idx
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
-        key, = arguments
-        graph = self._select_graph(key)
-        hashes, payload = hash_payload
-        return graph.evaluate([key], hashes, payload)
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+        value = yield payload + 1, RequestType.Value
+        return value
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        # TODO: wind a way to cache these graphs
-        return MergeHash(*self._hashes, *inputs)
+        return MergeHash(*inputs)

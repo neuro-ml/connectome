@@ -37,11 +37,11 @@ class NoContext(Context):
 
 class EdgesBag(Wrapper):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: Union[bool, Sequence[str]] = None):
+                 virtual_nodes: Union[bool, Sequence[str]] = ()):
         self.inputs = tuple(inputs)
         self.outputs = tuple(outputs)
         self.edges = tuple(edges)
-        self.virtual_nodes = virtual_nodes or ()
+        self.virtual_nodes = virtual_nodes
         self.context = context if context is not None else NoContext()
 
     def freeze(self) -> 'EdgesBag':

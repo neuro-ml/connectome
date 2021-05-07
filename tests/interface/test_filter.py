@@ -1,9 +1,10 @@
 import pytest
 from connectome import Chain, Filter, Source, meta, impure
 from connectome.engine.base import HashError
+from connectome.interface.blocks import HashDigest
 
 
-def test_filter(block_maker, hash_layer):
+def test_filter(block_maker):
     block = block_maker.first_ds(first_constant=2, ids_arg=15)
     pipeline = Chain(
         block, Filter(lambda id: id in ['2', '5']),
@@ -16,6 +17,7 @@ def test_filter(block_maker, hash_layer):
     ids = pipeline.ids
     assert ids == ('4', '14')
 
+    hash_layer = HashDigest(['image', 'lungs', 'spacing'])
     hashed = Chain(block, hash_layer)
     pipeline = Chain(
         block, Filter(lambda image: image.endswith('4')), hash_layer,

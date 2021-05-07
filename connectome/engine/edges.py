@@ -1,33 +1,61 @@
-from abc import ABC
-from typing import Sequence, Callable, Any
+from abc import ABC, abstractmethod
+from typing import Sequence, Callable, Any, Generator
 
-from .base import NodeHash, Edge, NodesMask, FULL_MASK, NodeHashes, MaskOutput, HashOutput, HashError
+from .base import NodeHash, Edge, NodeHashes, HashOutput, HashError, Request, Response
+from .graph import RequestType
 from .node_hash import LeafHash, ApplyHash, TupleHash
 from ..cache import Cache
 
 
-class FullMask:
-    @staticmethod
-    def _compute_mask(inputs: NodeHashes, output: NodeHash) -> MaskOutput:
-        return FULL_MASK, None
+class StaticHash(Edge):
+    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
+        inputs = []
+        for idx in range(self.arity):
+            value = yield idx, RequestType.Hash
+            inputs.append(value)
+
+        return self._compute_hash(inputs)
+
+    @abstractmethod
+    def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
+        pass
 
 
-class FunctionEdge(FullMask, Edge):
+class StaticGraph:
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
+        raise NotImplementedError
+
+    def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
+        return self._make_hash(inputs), None
+
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        return self._make_hash(inputs)
+
+
+class StaticEdge(StaticHash):
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+        inputs = []
+        for idx in range(self.arity):
+            value = yield idx, RequestType.Value
+            inputs.append(value)
+
+        return self._evaluate(inputs, output, payload)
+
+    @abstractmethod
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+        pass
+
+
+class FunctionEdge(StaticGraph, StaticEdge):
     def __init__(self, function: Callable, arity: int):
         super().__init__(arity, uses_hash=False)
         self.function = function
 
-    def _calc_hash(self, hashes):
-        return ApplyHash(self.function, *hashes)
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
+        return ApplyHash(self.function, *inputs)
 
-    def _evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
         return self.function(*inputs)
-
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return self._calc_hash(inputs)
-
-    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return self._calc_hash(inputs)
 
 
 class ComputableHashBase(Edge, ABC):
@@ -35,23 +63,18 @@ class ComputableHashBase(Edge, ABC):
         super().__init__(arity, uses_hash=True)
         self.function = function
 
-    def _call_function(self, inputs: NodeHashes):
-        args = []
-        for h in inputs:
-            assert isinstance(h, LeafHash), h
-            args.append(h.data)
+    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
+        inputs = []
+        for idx in range(self.arity):
+            value = yield idx, RequestType.Value
+            inputs.append(value)
 
-        return self.function(*args)
+        result = self.function(*inputs)
+        return LeafHash(result), result
 
-    def _propagate_hash(self, inputs: NodeHashes) -> HashOutput:
-        value = self._call_function(inputs)
-        return LeafHash(value), value
-
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
-        return hash_payload
-
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        return [], None
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+        return payload
+        yield  # noqa
 
 
 class ComputableHashEdge(ComputableHashBase):
@@ -64,21 +87,18 @@ class ImpureFunctionEdge(ComputableHashBase):
         raise HashError("Impure edges can't be a part of a subgraph")
 
 
-class IdentityEdge(FullMask, Edge):
+class IdentityEdge(StaticGraph, StaticEdge):
     def __init__(self):
         super().__init__(arity=1, uses_hash=False)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
-        return arguments[0]
-
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
 
-    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
         return inputs[0]
 
 
-class ConstantEdge(FullMask, Edge):
+class ConstantEdge(StaticEdge):
     """
     Used in interface to provide constant parameters.
     """
@@ -88,35 +108,30 @@ class ConstantEdge(FullMask, Edge):
         self.value = value
         self._hash = LeafHash(self.value)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
+    def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
+        return self._hash, None
+
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
         return self.value
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         return self._hash
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return self._hash
 
-
-class CacheEdge(Edge):
+class CacheEdge(StaticGraph, StaticHash):
     def __init__(self, storage: Cache):
         super().__init__(arity=1, uses_hash=True)
         self.cache = storage
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+        # TODO: need a single method for this
         if self.cache.reserve_read(output):
-            return [], True
-        return FULL_MASK, False
-
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
-        # no arguments means that the value is cached
-        if not arguments:
             return self.cache.get(output)
 
-        value, = arguments
+        value = yield 0, RequestType.Value
         # TODO: what to do in case of a collision:
         #   overwrite?
         #   add consistency check?
@@ -124,22 +139,13 @@ class CacheEdge(Edge):
         self.cache.set(output, value)
         return value
 
-    def handle_exception(self, output: NodeHash, payload: Any):
-        self.cache.fail(output, payload)
 
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return inputs[0]
-
-
-class ProductEdge(FullMask, Edge):
+class ProductEdge(StaticGraph, StaticEdge):
     def __init__(self, arity: int):
         super().__init__(arity, uses_hash=False)
 
-    def _evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
+        return TupleHash(*inputs)
+
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
         return tuple(inputs)
-
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return TupleHash(*inputs)
-
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return TupleHash(*inputs)

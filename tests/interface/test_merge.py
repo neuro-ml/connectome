@@ -1,5 +1,5 @@
 from connectome import Source, Merge, Transform, Chain, positional, meta, impure
-from connectome.engine.base import NodeHash
+from connectome.interface.blocks import HashDigest
 
 
 class One(Source):
@@ -29,8 +29,9 @@ class Three(Source):
         return f'Three: {i}'
 
 
-def test_simple(hash_layer):
+def test_simple():
     one, two = One(), Two()
+    hash_layer = HashDigest('image')
     merged = Merge(one, two)
     assert set(merged.ids) == set('123456')
 
@@ -45,16 +46,14 @@ def test_simple(hash_layer):
     one_hashed, two_hashed = Chain(one, hash_layer), Chain(two, hash_layer)
 
     for i in one.ids:
-        value, node_hash = hashed.image(i)
+        value, node_hash, _, _ = hashed.image(i)
         assert value == merged.image(i)
-        assert isinstance(node_hash, NodeHash)
 
         assert hashed.image(i) == one_hashed.image(i)
 
     for i in two.ids:
-        value, node_hash = hashed.image(i)
+        value, node_hash, _, _ = hashed.image(i)
         assert value == merged.image(i)
-        assert isinstance(node_hash, NodeHash)
 
         assert hashed.image(i) == two_hashed.image(i)
 

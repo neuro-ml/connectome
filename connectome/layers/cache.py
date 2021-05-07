@@ -1,11 +1,12 @@
-from typing import Sequence, Any
+from itertools import starmap
+from typing import Any, Generator
 
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
 from ..engine import NodeHash
-from ..engine.base import BoundEdge, Node, TreeNode, NodesMask, Edge
+from ..engine.base import BoundEdge, Node, TreeNode, Edge, HashOutput, Request, Response, RequestType
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import NodeHashes, LeafHash, TupleHash
+from ..engine.node_hash import NodeHashes, TupleHash
 from ..utils import node_to_dict
 from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
@@ -111,51 +112,47 @@ class CacheColumnsLayer(CacheBase):
 
 
 class CachedColumn(Edge):
+    """
+    Edge Inputs
+    -----------
+    entry: the entry at ``key``
+    key: a unique key for each entry in the tuple
+    keys: all available keys
+    """
+
     def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph):
         super().__init__(arity=3, uses_hash=True)
         self.graph = graph
         self.disk = disk
         self.ram = ram
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        """
-        Hashes
-        ------
-        entry: the hash for the entry at ``key``
-        key: a unique key for each entry in the tuple
-        keys: all available keys
-        """
-        return inputs[0]
+    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
+        # propagate the first value
+        value = yield 0, RequestType.Hash
+        return value, None
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
         if self.ram.reserve_read(output):
-            return [], True
-        return [1, 2], False
-
-    def _hash_graph(self, inputs: Sequence[NodeHash]) -> NodeHash:
-        return inputs[0]
-
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
-        if not arguments:
             return self.ram.get(output)
 
-        key, keys = arguments
+        key = yield 1, RequestType.Value
+        keys = yield 2, RequestType.Value
         keys = sorted(keys)
         assert key in keys
 
-        hashes, payloads = [], []
+        hashes, states = [], []
         for k in keys:
-            h, payload = self.graph.propagate_hash(LeafHash(k))
+            h, state = self.graph.get_hash(k)
             hashes.append(h)
-            payloads.append(payload)
+            states.append(state)
             if k == key:
-                assert output == h
+                assert output == h, (output, h)
         compound = TupleHash(*hashes)
 
         if self.disk.reserve_read(compound):
             values = self.disk.get(compound)
         else:
-            values = [self.graph.evaluate([k], *p) for k, p in zip(keys, payloads)]
+            values = tuple(starmap(self.graph.get_value, states))
             self.disk.set(compound, values)
 
         for k, h, value in zip(keys, hashes, values):
@@ -165,5 +162,5 @@ class CachedColumn(Edge):
 
         return result
 
-    def handle_exception(self, output: NodeHash, payload: Any):
-        self.ram.fail(output, payload)
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        return inputs[0]

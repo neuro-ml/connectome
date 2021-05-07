@@ -1,11 +1,11 @@
 from collections import defaultdict
 from hashlib import sha256
-from typing import Sequence, Any
+from typing import Sequence, Any, Generator
 
 from .base import EdgesBag, Wrapper, NoContext
 from ..engine import NodeHash
-from ..engine.base import Node, TreeNode, NodeHashes, NodesMask, FULL_MASK, Edge
-from ..engine.edges import FunctionEdge, ProductEdge, FullMask
+from ..engine.base import Node, TreeNode, NodeHashes, RequestType, Request, Response
+from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
 
@@ -59,60 +59,51 @@ class GroupLayer(Wrapper):
         return EdgesBag([changed_input], outputs, edges, NoContext())
 
 
-class MappingEdge(Edge):
+class MappingEdge(StaticGraph, StaticHash):
     """ Groups the incoming values using `graph` as a key function."""
 
     def __init__(self, graph):
         super().__init__(arity=1, uses_hash=True)
         self.graph = graph
+        # TODO: this is potentially dangerous. should use a composition of Mapping and MemoryCache
         self._mapping = None
         self._hash = self.graph.hash()
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return GroupByHash(self._hash, *inputs)
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        if self._mapping is not None:
-            return [], None
-        return FULL_MASK, None
-
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
         if self._mapping is not None:
             return self._mapping
 
+        values = yield 0, RequestType.Value
         mapping = defaultdict(list)
-        for i in arguments[0]:
+        for i in values:
             mapping[self.graph.call(i)].append(i)
 
         self._mapping = mapping = {k: tuple(sorted(v)) for k, v in mapping.items()}
         return mapping
 
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return self._propagate_hash(inputs)
 
-
-class GroupEdge(FullMask, Edge):
+class GroupEdge(StaticGraph, StaticEdge):
     def __init__(self, graph):
         super().__init__(arity=2, uses_hash=True)
         self.graph = graph
         self._hash = self.graph.hash()
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return DictFromKeys(self._hash, *inputs)
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
         """ arguments: id, mapping """
         # get the required ids
-        ids = arguments[1][arguments[0]]
+        key, mapping = inputs
 
         result = {}
-        for i in ids:
+        for i in mapping[key]:
             result[i] = self.graph.call(i)
 
         return result
-
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return self._propagate_hash(inputs)
 
 
 def extract_keys(d):
@@ -177,31 +168,28 @@ class MultiGroupLayer(Wrapper):
         return EdgesBag([changed_input], outputs, edges, NoContext())
 
 
-class HashMappingEdge(Edge):
+class HashMappingEdge(StaticGraph, StaticHash):
     def __init__(self, graph, comparators):
         super().__init__(arity=1, uses_hash=True)
         self.graph = graph
         self._mapping = None
         self.comparators = comparators
         self.hasher = sha256
+        self._graph_hash = self.graph.hash()
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
+    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return MultiMappingHash(
             *inputs, *(LeafHash(x) for x in self.comparators), LeafHash(self.hasher),
-            self.graph.hash(),
+            self._graph_hash,
         )
 
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> NodesMask:
-        if self._mapping is not None:
-            return [], None
-        return FULL_MASK, None
-
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
         if self._mapping is not None:
             return self._mapping
 
+        ids = yield 0, RequestType.Value
         groups = []
-        for i in arguments[0]:
+        for i in ids:
             keys = self.graph.call(i)
             assert len(keys) == len(self.comparators)
             # either find a group
@@ -223,6 +211,3 @@ class HashMappingEdge(Edge):
         assert len(mapping) == len(groups)
         self._mapping = mapping
         return mapping
-
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return self._propagate_hash(inputs)

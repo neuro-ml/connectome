@@ -1,5 +1,6 @@
 import pytest
 from connectome import Source, Transform, Chain, CacheToRam, insert
+from connectome.interface.blocks import HashDigest
 
 
 class DS(Source):
@@ -28,9 +29,10 @@ def test_chain():
     assert ds.image('id') == 'id'
 
 
-def test_nested(block_maker, hash_layer):
+def test_nested(block_maker):
     one = block_maker.first_ds(first_constant=2, ids_arg=15)
     two = block_maker.crop()
+    hash_layer = HashDigest('image')
 
     base, *variants = [
         Chain(one, two, hash_layer),

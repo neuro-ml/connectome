@@ -11,9 +11,9 @@ class HashDigestEdge(IdentityEdge):
         super().__init__()
         self._uses_hash = True
 
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any):
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
         pickled, digest, _ = key_to_relative(output.value)
-        return arguments[0], output.value, digest, pickled
+        return inputs[0], output.value, digest, pickled
 
 
 class HashDigestLayer(TransformLayer):

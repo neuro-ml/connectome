@@ -5,6 +5,8 @@ from pathlib import Path
 from threading import Thread
 from multiprocessing.context import Process
 
+import pytest
+
 from connectome.storage import Storage, Disk
 from connectome.storage.locker import ThreadLocker, RedisLocker
 
@@ -26,6 +28,7 @@ def test_single_local(tmpdir):
     assert stored.group() == disk.group
 
 
+@pytest.mark.redis
 def test_parallel_read_threads(tmpdir, subtests):
     def job():
         storage.load(lambda x: time.sleep(sleep_time), key)
@@ -64,6 +67,7 @@ def test_parallel_read_threads(tmpdir, subtests):
             assert stop - start < sleep_time * 1.1
 
 
+@pytest.mark.redis
 def test_parallel_read_processes(tmpdir):
     def job():
         storage.load(lambda x: time.sleep(1), key)

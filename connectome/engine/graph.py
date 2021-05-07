@@ -6,10 +6,10 @@ The computation is made in 3 passes:
 """
 import inspect
 from collections import defaultdict
-from typing import Sequence, Dict
+from typing import Sequence, Dict, Any
 
-from .base import TreeNode, NodeHash, TreeNodes
-from .compilers import execute_sequential, execute_sequential_async
+from .base import TreeNode, NodeHash, TreeNodes, RequestType
+# from .compilers import execute_sequential, execute_sequential_async
 from .node_hash import LeafHash, GraphHash
 
 
@@ -22,42 +22,81 @@ class Graph:
             inspect.Parameter(x.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             for x in inputs
         ])
-        use_hash = uses_hash(output)
+        # TODO: do we need this optimization?
+        self.use_hash = True  # uses_hash(output)
         self.inputs = inputs
         self.output = output
 
         def caller(*args, **kwargs):
             scope = signature.bind(*args, **kwargs)
-            # put objects into inputs if hashes are not required
-            input_hashes = {
-                node: LeafHash(scope.arguments[node.name] if use_hash else object())
-                for node in inputs
-            }
-            hashes, hash_payload = compute_hashes(input_hashes, output)
-            masks, mask_payload = compute_masks(output, hashes)
-
-            # return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
-            return execute_sequential(scope.arguments, inputs, output, hashes, masks, hash_payload, mask_payload)
+            hashes, cache = self._prepare_cache(scope.arguments)
+            return evaluate(output, hashes, cache)
 
         caller.__signature__ = signature
         self.call = caller
 
-    # TODO: remove duplicates
-    def propagate_hash(self, *inputs: NodeHash):
-        assert len(inputs) == len(self.inputs)
-        hashes, payload = compute_hashes(dict(zip(self.inputs, inputs)), self.output)
-        return hashes[self.output], (hashes, payload)
+    def _prepare_cache(self, arguments):
+        # put objects into inputs if hashes are not required
+        hashes = {
+            node: (LeafHash(arguments[node.name] if self.use_hash else object()), None)
+            for node in self.inputs
+        }
+        cache = {node: arguments[node.name] for node in self.inputs}
+        return hashes, cache
 
-    def evaluate(self, inputs: Sequence, hashes, payload):
+    def get_hash(self, *inputs: Any):
         assert len(inputs) == len(self.inputs)
-        masks, mask_payload = compute_masks(self.output, hashes)
-        inputs = {node.name: x for node, x in zip(self.inputs, inputs)}
+        assert all(not isinstance(v, NodeHash) for v in inputs)
 
-        # return execute_sequential_async(scope.arguments, inputs, output, hashes, masks)
-        return execute_sequential(inputs, self.inputs, self.output, hashes, masks, payload, mask_payload)
+        hashes, cache = self._prepare_cache({n.name: v for n, v in zip(self.inputs, inputs)})
+        compute_hash(self.output, hashes, cache)
+        return hashes[self.output][0], (hashes, cache)
+
+    def get_value(self, hashes, cache):
+        evaluate(self.output, hashes, cache)
+        return cache[self.output]
 
     def hash(self):
         return GraphHash(hash_graph(self.inputs, self.output))
+
+
+def evaluate(node: TreeNode, hashes: dict, cache: dict):
+    if node not in cache:
+        inputs = node.parents
+        output, payload = compute_hash(node, hashes, cache)
+        it = node.edge.evaluate(output, payload)
+        try:
+            value = None
+            while True:
+                idx, cmd = it.send(value)
+                value = dispatch_command(cmd, inputs[idx], hashes, cache)
+
+        except StopIteration as e:
+            cache[node] = e.value
+
+    return cache[node]
+
+
+def compute_hash(node: TreeNode, hashes, cache):
+    if node not in hashes:
+        inputs = node.parents
+        it = node.edge.compute_hash()
+        try:
+            value = None
+            while True:
+                idx, cmd = it.send(value)
+                value = dispatch_command(cmd, inputs[idx], hashes, cache)
+
+        except StopIteration as e:
+            hashes[node] = e.value
+
+    return hashes[node]
+
+
+def dispatch_command(cmd, node, hashes, cache):
+    if cmd == RequestType.Hash:
+        return compute_hash(node, hashes, cache)[0]
+    return evaluate(node, hashes, cache)
 
 
 # TODO: deprecate?

@@ -1,12 +1,21 @@
 from abc import ABC, abstractmethod
-from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any
+from enum import Enum
+from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator
 
 from .node_hash import NodeHash, NodeHashes
+
+
+class RequestType(Enum):
+    Hash, Value = 0, 1
+
 
 FULL_MASK = None
 NodesMask = Union[Sequence[int], FULL_MASK]
 MaskOutput = Tuple[NodesMask, Any]
 HashOutput = Tuple[NodeHash, Any]
+
+Request = Tuple[int, RequestType]
+Response = Union[NodeHash, Any]
 
 
 class Edge(ABC):
@@ -14,44 +23,13 @@ class Edge(ABC):
         self.arity = arity
         self._uses_hash = uses_hash
 
-    def propagate_hash(self, inputs: NodeHashes) -> HashOutput:
+    @abstractmethod
+    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         """ Computes the hash of the output given the input hashes. """
-        assert len(inputs) == self.arity
-        # TODO: remove after transition
-        result = self._propagate_hash(inputs)
-        if isinstance(result, NodeHash):
-            result = result, None
-        return result
 
     @abstractmethod
-    def _propagate_hash(self, inputs: NodeHashes) -> HashOutput:
-        pass
-
-    def compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
-        """ Computes the mask of the essential inputs. """
-        assert len(inputs) == self.arity
-        mask, payload = self._compute_mask(inputs, output)
-        if mask == FULL_MASK:
-            mask = range(self.arity)
-        assert all(0 <= x < self.arity for x in mask)
-        assert len(set(mask)) == len(mask)
-        return mask, payload
-
-    @abstractmethod
-    def _compute_mask(self, inputs: NodeHashes, output: NodeHash) -> MaskOutput:
-        pass
-
-    def evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
+    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
         """ Computes the output value. """
-        assert len(inputs) <= self.arity
-        return self._evaluate(inputs, output, hash_payload, mask_payload)
-
-    @abstractmethod
-    def _evaluate(self, arguments: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
-        pass
-
-    def handle_exception(self, output: NodeHash, payload: Any):
-        pass
 
     def hash_graph(self, inputs: NodeHashes) -> NodeHash:
         """ Propagates the graph's hash without any control flow. """

@@ -3,8 +3,8 @@ from typing import Callable, Sequence, Any
 from .base import EdgesBag, Wrapper
 from .cache import IdentityContext
 from ..engine import NodeHash
-from ..engine.base import BoundEdge, Node, TreeNode, Edge
-from ..engine.edges import FullMask, FunctionEdge
+from ..engine.base import Node, TreeNode, HashOutput
+from ..engine.edges import FunctionEdge, StaticEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, FilterHash
 from ..utils import extract_signature, node_to_dict
@@ -12,13 +12,15 @@ from ..utils import extract_signature, node_to_dict
 
 class FilterLayer(Wrapper):
     """
-    Changes only the `ids` attribute.
+    Changes only the `keys` attribute.
     """
 
-    def __init__(self, predicate: Callable):
+    # TODO: remove default
+    def __init__(self, predicate: Callable, keys: str = 'ids'):
         self.names, _ = extract_signature(predicate)
-        assert 'ids' not in self.names
+        assert keys not in self.names
         self.predicate = predicate
+        self.keys = keys
 
     @staticmethod
     def _find(nodes, name):
@@ -44,18 +46,18 @@ class FilterLayer(Wrapper):
         edges = list(main.edges)
 
         # change ids
-        ids = self._find(outputs, 'ids')
-        out = Node('ids')
-        outputs.remove(ids)
+        keys = self._find(outputs, self.keys)
+        out = Node(self.keys)
+        outputs.remove(keys)
         outputs.append(out)
 
         # filter
         graph = self._make_graph(layer)
-        edges.append(BoundEdge(FilterEdge(graph), [ids], out))
+        edges.append(FilterEdge(graph).bind(keys, out))
         return EdgesBag(main.inputs, outputs, edges, IdentityContext())
 
 
-class FilterEdge(FullMask, Edge):
+class FilterEdge(StaticEdge):
     def __init__(self, graph: Graph):
         super().__init__(arity=1, uses_hash=False)
         self.graph = graph
@@ -65,12 +67,12 @@ class FilterEdge(FullMask, Edge):
         keys, = hashes
         return FilterHash(self._hash, keys)
 
-    def _propagate_hash(self, inputs: NodeHashes) -> NodeHash:
-        return self._make_hash(inputs)
+    def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
+        return self._make_hash(inputs), None
+
+    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+        keys, = inputs
+        return tuple(filter(self.graph.call, keys))
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         return self._make_hash(inputs)
-
-    def _evaluate(self, inputs: Sequence, output: NodeHash, hash_payload: Any, mask_payload: Any) -> Any:
-        keys, = inputs
-        return tuple(filter(self.graph.call, keys))

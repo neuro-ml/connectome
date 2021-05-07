@@ -41,7 +41,7 @@ class Merge(CallableBlock):
 
             id2dataset_index.update({i: index for i in ids})
 
-        super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks]), properties)
+        super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks], ids_name), properties)
         self._blocks = blocks
 
     def __str__(self):
@@ -169,5 +169,5 @@ class RemoteStorage(RemoteStorageBase):
 
 
 class HashDigest(BaseBlock):
-    def __init__(self, names: Sequence[str]):
-        super().__init__(HashDigestLayer(names))
+    def __init__(self, names: MaybeStr):
+        super().__init__(HashDigestLayer(to_seq(names)))

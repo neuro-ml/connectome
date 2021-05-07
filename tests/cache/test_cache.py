@@ -95,6 +95,7 @@ def test_errors_handling(block_maker, temp_disk_cache):
         assert_empty_state(cached)
 
 
+@pytest.mark.redis
 def test_disk_locking_processes(block_maker, temp_storage):
     def visit():
         ds = block_maker.first_ds(first_constant=2, ids_arg=3)
