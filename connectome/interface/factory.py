@@ -133,12 +133,6 @@ class GraphFactory:
         self._collect_nodes()
         self._validate()
 
-    @staticmethod
-    def _remove_staticmethod(value):
-        if isinstance(value, staticmethod):
-            value = value.__func__
-        return value
-
     def _init(self):
         pass
 
@@ -175,15 +169,12 @@ class GraphFactory:
     def _collect_nodes(self):
         # gather parameters
         for name, value in self.scope.items():
-            value = self._remove_staticmethod(value)
             if is_parameter(name, value):
                 self.parameters.add(name)
 
         self.parameters.freeze()
         # gather, inputs, outputs and their edges
         for name, value in self.scope.items():
-            value = self._remove_staticmethod(value)
-
             if name.startswith('__'):
                 if name in SILENT_MAGIC:
                     continue
