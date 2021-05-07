@@ -11,12 +11,14 @@ from typing import Sequence, Dict, Any
 from .base import TreeNode, NodeHash, TreeNodes, RequestType
 # from .compilers import execute_sequential, execute_sequential_async
 from .node_hash import LeafHash, GraphHash
+from .utils import EvictionCache
 
 
 class Graph:
     def __init__(self, inputs: TreeNodes, output: TreeNode):
         validate_graph(inputs, output)
-        counts = count_entries(inputs, output)
+        # TODO: need a cumulative eviction policy
+        counts = count_entries(inputs, output, multiplier=2)
         inputs = sorted([x for x in inputs if counts.get(x, 0)], key=lambda x: x.name)
         signature = inspect.Signature([
             inspect.Parameter(x.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
@@ -26,6 +28,7 @@ class Graph:
         self.use_hash = True  # uses_hash(output)
         self.inputs = inputs
         self.output = output
+        self.counts = counts
 
         def caller(*args, **kwargs):
             scope = signature.bind(*args, **kwargs)
@@ -37,11 +40,11 @@ class Graph:
 
     def _prepare_cache(self, arguments):
         # put objects into inputs if hashes are not required
-        hashes = {
+        hashes = EvictionCache(self.counts.copy(), {
             node: (LeafHash(arguments[node.name] if self.use_hash else object()), None)
             for node in self.inputs
-        }
-        cache = {node: arguments[node.name] for node in self.inputs}
+        })
+        cache = EvictionCache(self.counts.copy(), {node: arguments[node.name] for node in self.inputs})
         return hashes, cache
 
     def get_hash(self, *inputs: Any):
@@ -60,47 +63,50 @@ class Graph:
         return GraphHash(hash_graph(self.inputs, self.output))
 
 
-def evaluate(node: TreeNode, hashes: dict, cache: dict):
+def evaluate(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
     if node not in cache:
         inputs = node.parents
         output, payload = compute_hash(node, hashes, cache)
         it = node.edge.evaluate(output, payload)
-        try:
-            value = None
-            while True:
-                idx, cmd = it.send(value)
-                value = dispatch_command(cmd, inputs[idx], hashes, cache)
-
-        except StopIteration as e:
-            cache[node] = e.value
+        cache[node] = get_dependencies(it, inputs, hashes, cache)
 
     return cache[node]
 
 
-def compute_hash(node: TreeNode, hashes, cache):
+def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
     if node not in hashes:
         inputs = node.parents
         it = node.edge.compute_hash()
-        try:
-            value = None
-            while True:
-                idx, cmd = it.send(value)
-                value = dispatch_command(cmd, inputs[idx], hashes, cache)
-
-        except StopIteration as e:
-            hashes[node] = e.value
+        hashes[node] = get_dependencies(it, inputs, hashes, cache)
 
     return hashes[node]
 
 
-def dispatch_command(cmd, node, hashes, cache):
-    if cmd == RequestType.Hash:
-        return compute_hash(node, hashes, cache)[0]
-    return evaluate(node, hashes, cache)
+def get_dependencies(iterator, inputs, hashes, cache):
+    try:
+        value = None
+        while True:
+            node, cmd = iterator.send(value)
+            node = inputs[node]
+
+            if cmd == RequestType.Hash:
+                value, _ = compute_hash(node, hashes, cache)
+            else:
+                value = evaluate(node, hashes, cache)
+
+    except StopIteration as e:
+        result = e.value
+
+    # clear the dependencies
+    for n in inputs:
+        hashes.evict(n)
+        cache.evict(n)
+
+    return result
 
 
 # TODO: deprecate?
-def compile_graph(inputs: Sequence[TreeNode], outputs: TreeNode):
+def compile_graph(inputs: TreeNodes, outputs: TreeNode):
     return Graph(inputs, outputs).call
 
 
@@ -125,9 +131,9 @@ def validate_graph(inputs: TreeNodes, output: TreeNode):
     visitor(output)
 
 
-def count_entries(inputs: TreeNodes, output: TreeNode, masks=None):
+def count_entries(inputs: TreeNodes, output: TreeNode, masks=None, multiplier: int = 1):
     def visitor(node: TreeNode):
-        entry_counts[node] += 1
+        entry_counts[node] += multiplier
         # input doesn't need parents
         if node in inputs:
             return

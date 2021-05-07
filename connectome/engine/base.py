@@ -9,11 +9,7 @@ class RequestType(Enum):
     Hash, Value = 0, 1
 
 
-FULL_MASK = None
-NodesMask = Union[Sequence[int], FULL_MASK]
-MaskOutput = Tuple[NodesMask, Any]
 HashOutput = Tuple[NodeHash, Any]
-
 Request = Tuple[int, RequestType]
 Response = Union[NodeHash, Any]
 
