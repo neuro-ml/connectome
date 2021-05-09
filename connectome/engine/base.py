@@ -5,13 +5,14 @@ from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator
 from .node_hash import NodeHash, NodeHashes
 
 
-class RequestType(Enum):
-    Hash, Value = 0, 1
+class Command(Enum):
+    ParentHash, CurrentHash, ParentValue, Payload = range(4)
+    Send, Store, Item, ComputeHash, Evaluate = range(-5, 0)
 
 
 HashOutput = Tuple[NodeHash, Any]
-Request = Tuple[int, RequestType]
-Response = Union[NodeHash, Any]
+Request = Tuple  # [RequestType, Any, ...]
+Response = Union[NodeHash, Any, Tuple[NodeHash, Any]]
 
 
 class Edge(ABC):
@@ -24,7 +25,7 @@ class Edge(ABC):
         """ Computes the hash of the output given the input hashes. """
 
     @abstractmethod
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
         """ Computes the output value. """
 
     def hash_graph(self, inputs: NodeHashes) -> NodeHash:

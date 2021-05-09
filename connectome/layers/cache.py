@@ -3,7 +3,7 @@ from typing import Any, Generator
 
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
 from ..engine import NodeHash
-from ..engine.base import BoundEdge, Node, TreeNode, Edge, HashOutput, Request, Response, RequestType
+from ..engine.base import BoundEdge, Node, TreeNode, Edge, HashOutput, Request, Response, Command
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, TupleHash
@@ -135,16 +135,17 @@ class CachedColumn(Edge):
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         # propagate the first value
-        value = yield 0, RequestType.Hash
+        value = yield Command.ParentHash, 0
         return value, None
 
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
+        output = yield Command.CurrentHash,
         value, exists = self.ram.get(output)
         if exists:
             return value
 
-        key = yield 1, RequestType.Value
-        keys = yield 2, RequestType.Value
+        key = yield Command.ParentValue, 1
+        keys = yield Command.ParentValue, 2
         keys = sorted(keys)
         assert key in keys
 
@@ -155,6 +156,7 @@ class CachedColumn(Edge):
             states.append(state)
             if k == key:
                 assert output == h, (output, h)
+        # TODO: hash the graph?
         compound = TupleHash(*hashes)
 
         values, exists = self.disk.get(compound)
@@ -167,7 +169,7 @@ class CachedColumn(Edge):
             if k == key:
                 result = value
 
-        return result
+        return result  # noqa
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]

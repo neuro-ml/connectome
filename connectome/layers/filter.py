@@ -70,7 +70,7 @@ class FilterEdge(StaticEdge):
     def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
         return self._make_hash(inputs), None
 
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         keys, = inputs
         return tuple(filter(self.graph.call, keys))
 

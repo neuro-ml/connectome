@@ -1,7 +1,7 @@
 from typing import Sequence, Any, Generator
 
 from ..engine.edges import ConstantEdge, IdentityEdge
-from ..engine.base import Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, RequestType
+from ..engine.base import Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command
 from ..engine.node_hash import MergeHash
 from ..utils import node_to_dict
 from .base import EdgesBag
@@ -55,17 +55,19 @@ class SwitchEdge(Edge):
         self.id_to_index = id_to_index
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
-        key = yield 0, RequestType.Value
+        key = yield Command.ParentValue, 0
         try:
             idx = self.id_to_index[key]
         except KeyError:
             raise ValueError(f'Identifier {key} not found.') from None
 
-        value = yield idx + 1, RequestType.Hash
+        value = yield Command.ParentHash, idx + 1
         return value, idx
 
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
-        value = yield payload + 1, RequestType.Value
+    def evaluate(self) -> Generator[Request, Response, Any]:
+        # TODO: replace by dict lookup?
+        payload = yield Command.Payload,
+        value = yield Command.ParentValue, payload + 1
         return value
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:

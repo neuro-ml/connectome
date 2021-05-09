@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Sequence, Callable, Any, Generator
 
 from .base import NodeHash, Edge, NodeHashes, HashOutput, HashError, Request, Response
-from .graph import RequestType
+from .graph import Command
 from .node_hash import LeafHash, ApplyHash, TupleHash
 from ..cache import Cache
 
@@ -11,7 +11,7 @@ class StaticHash(Edge):
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         inputs = []
         for idx in range(self.arity):
-            value = yield idx, RequestType.Hash
+            value = yield Command.ParentHash, idx
             inputs.append(value)
 
         return self._compute_hash(inputs)
@@ -33,16 +33,16 @@ class StaticGraph:
 
 
 class StaticEdge(StaticHash):
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
         inputs = []
         for idx in range(self.arity):
-            value = yield idx, RequestType.Value
+            value = yield Command.ParentValue, idx
             inputs.append(value)
 
-        return self._evaluate(inputs, output, payload)
+        return self._evaluate(inputs)
 
     @abstractmethod
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         pass
 
 
@@ -54,7 +54,7 @@ class FunctionEdge(StaticGraph, StaticEdge):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return ApplyHash(self.function, *inputs)
 
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         return self.function(*inputs)
 
 
@@ -66,15 +66,15 @@ class ComputableHashBase(Edge, ABC):
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         inputs = []
         for idx in range(self.arity):
-            value = yield idx, RequestType.Value
+            value = yield Command.ParentValue, idx
             inputs.append(value)
 
         result = self.function(*inputs)
         return LeafHash(result), result
 
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
+        payload = yield Command.Payload,
         return payload
-        yield  # noqa
 
 
 class ComputableHashEdge(ComputableHashBase):
@@ -94,7 +94,7 @@ class IdentityEdge(StaticGraph, StaticEdge):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
 
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         return inputs[0]
 
 
@@ -111,7 +111,7 @@ class ConstantEdge(StaticEdge):
     def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
         return self._hash, None
 
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         return self.value
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
@@ -126,12 +126,13 @@ class CacheEdge(StaticGraph, StaticHash):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
 
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
+        output = yield Command.CurrentHash,
         value, exists = self.cache.get(output)
         if exists:
             return value
 
-        value = yield 0, RequestType.Value
+        value = yield Command.ParentValue, 0
         # TODO: what to do in case of a collision:
         #   overwrite?
         #   add consistency check?
@@ -147,5 +148,5 @@ class ProductEdge(StaticGraph, StaticEdge):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return TupleHash(*inputs)
 
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         return tuple(inputs)

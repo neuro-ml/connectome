@@ -4,7 +4,7 @@ from typing import Sequence, Any, Generator
 
 from .base import EdgesBag, Wrapper, NoContext
 from ..engine import NodeHash
-from ..engine.base import Node, TreeNode, NodeHashes, RequestType, Request, Response
+from ..engine.base import Node, TreeNode, NodeHashes, Command, Request, Response
 from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
@@ -72,11 +72,11 @@ class MappingEdge(StaticGraph, StaticHash):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return GroupByHash(self._hash, *inputs)
 
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
         if self._mapping is not None:
             return self._mapping
 
-        values = yield 0, RequestType.Value
+        values = yield Command.ParentValue, 0
         mapping = defaultdict(list)
         for i in values:
             mapping[self.graph.call(i)].append(i)
@@ -94,7 +94,7 @@ class GroupEdge(StaticGraph, StaticEdge):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return DictFromKeys(self._hash, *inputs)
 
-    def _evaluate(self, inputs: Sequence[Any], output: NodeHash, payload: Any) -> Any:
+    def _evaluate(self, inputs: Sequence[Any]) -> Any:
         """ arguments: id, mapping """
         # get the required ids
         key, mapping = inputs
@@ -183,11 +183,11 @@ class HashMappingEdge(StaticGraph, StaticHash):
             self._graph_hash,
         )
 
-    def evaluate(self, output: NodeHash, payload: Any) -> Generator[Request, Response, Any]:
+    def evaluate(self) -> Generator[Request, Response, Any]:
         if self._mapping is not None:
             return self._mapping
 
-        ids = yield 0, RequestType.Value
+        ids = yield Command.ParentValue, 0
         groups = []
         for i in ids:
             keys = self.graph.call(i)
