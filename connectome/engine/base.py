@@ -6,8 +6,8 @@ from .node_hash import NodeHash, NodeHashes
 
 
 class Command(Enum):
-    ParentHash, CurrentHash, ParentValue, Payload = range(4)
-    Send, Store, Item, ComputeHash, Evaluate = range(-5, 0)
+    ParentHash, CurrentHash, ParentValue, Payload, Await = range(5)
+    Send, Store, Item, ComputeHash, Evaluate, AwaitFrame, Tuple, Return = range(-8, 0)
 
 
 HashOutput = Tuple[NodeHash, Any]
@@ -145,3 +145,31 @@ Edges = Sequence[Edge]
 
 class HashError(RuntimeError):
     pass
+
+
+class Thunk:
+    def __init__(self, value: Any, ready: Union[bool, None]):
+        self.value = value
+        self.ready = ready
+
+    @classmethod
+    def from_value(cls, value):
+        return cls(value, True)
+
+    @classmethod
+    def empty(cls):
+        return cls(None, False)
+
+
+class ValueThunk(Thunk):
+    def __init__(self, value):
+        self.value = value
+        self.ready = True
+
+
+class CachedTreeNode(Thunk):
+    def __init__(self, edge: Edge, parents: Sequence['Thunk']):
+        self.hash = Thunk()
+        self.value = Thunk()
+        self.edge = edge
+        self.parents = parents

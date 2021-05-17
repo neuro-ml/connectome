@@ -32,7 +32,6 @@ class EvictionCache:
 
     def __setitem__(self, key, value):
         assert key in self.counts
-        assert key not in self.cache
         self.cache[key] = value
 
     def __getitem__(self, key):

@@ -12,6 +12,7 @@ from .base import TreeNode, NodeHash, TreeNodes, Command
 # from .compilers import execute_sequential, execute_sequential_async
 from .node_hash import LeafHash, GraphHash
 from .utils import EvictionCache
+from .vm import execute
 
 
 class Graph:
@@ -63,137 +64,11 @@ class Graph:
 
 
 def evaluate(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
-    return execute([(Command.Evaluate,)], [node], hashes, cache)
+    return execute(Command.Evaluate, node, hashes, cache)
 
 
 def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
-    return execute([(Command.ComputeHash,)], [node], hashes, cache)
-
-
-# def get_dependencies(node, iterator, hashes, cache, value):
-#     try:
-#         cmd, *args = iterator.send(value)
-#     except StopIteration as e:
-#         # clear the dependencies
-#         for n in node.parents:
-#             hashes.evict(n)
-#             cache.evict(n)
-#         return e.value
-#
-#     if cmd == RequestType.Hash:
-#         parent = node.parents[args[0]]
-#         if parent in hashes:
-#             value, _ = hashes[parent]
-#         else:
-#             value, _ = hashes[parent] = get_dependencies(
-#                 parent, parent.edge.compute_hash(), hashes, cache, None)
-#
-#     elif cmd == RequestType.Value:
-#         parent = node.parents[args[0]]
-#         if parent in cache:
-#             value = cache[parent]
-#         else:
-#             value = cache[parent] = get_dependencies(
-#                 parent, parent.edge.evaluate(), hashes, cache, None)
-#
-#     elif cmd == RequestType.Payload:
-#         if node in hashes:
-#             value = hashes[node]
-#         else:
-#             value = hashes[node] = get_dependencies(
-#                 node, node.edge.compute_hash(), hashes, cache, None)
-#
-#     else:
-#         raise RuntimeError('Unknown command', cmd)
-#
-#     return get_dependencies(node, iterator, hashes, cache, value)
-
-
-def execute(commands, stack, hashes, cache):
-    while commands:
-        cmd, *args = commands.pop()
-
-        # communicate with edges
-        if cmd == Command.Send:
-            node, iterator = args
-            value = stack.pop()
-            try:
-                request = iterator.send(value)
-
-            except StopIteration as e:
-                # clear the dependencies
-                for n in node.parents:
-                    hashes.evict(n)
-                    cache.evict(n)
-                # return value
-                stack.append(e.value)
-
-            else:
-                # must continue iteration
-                commands.append((cmd, node, iterator))
-                commands.append(request)
-                stack.append(node)
-
-        # runs and caches `compute_hash`
-        elif cmd == Command.ComputeHash:
-            node = stack.pop()
-            if node in hashes:
-                stack.append(hashes[node])
-            else:
-                commands.append((Command.Store, hashes, node))
-                commands.append((Command.Send, node, node.edge.compute_hash()))
-                stack.append(None)
-
-        # runs and caches `evaluate`
-        elif cmd == Command.Evaluate:
-            node = stack.pop()
-            if node in cache:
-                stack.append(cache[node])
-            else:
-                commands.append((Command.Store, cache, node))
-                commands.append((Command.Send, node, node.edge.evaluate()))
-                stack.append(None)
-
-        # requests
-        elif cmd == Command.ParentHash:
-            idx, = args
-            node = stack.pop()
-
-            commands.append((Command.Item, 0))
-            commands.append((Command.ComputeHash,))
-            stack.append(node.parents[idx])
-
-        elif cmd == Command.ParentValue:
-            idx, = args
-            node = stack.pop()
-
-            commands.append((Command.Evaluate,))
-            stack.append(node.parents[idx])
-
-        elif cmd == Command.CurrentHash:
-            assert not args
-            commands.append((Command.Item, 0))
-            commands.append((Command.ComputeHash,))
-
-        elif cmd == Command.Payload:
-            assert not args
-            commands.append((Command.Item, 1))
-            commands.append((Command.ComputeHash,))
-
-        # utils
-        elif cmd == Command.Store:
-            storage, key = args
-            storage[key] = stack[-1]
-
-        elif cmd == Command.Item:
-            key, = args
-            stack.append(stack.pop()[key])
-
-        else:
-            raise RuntimeError('Unknown command', cmd)
-
-    assert len(stack) == 1, len(stack)
-    return stack.pop()
+    return execute(Command.ComputeHash, node, hashes, cache)
 
 
 # TODO: deprecate?

@@ -34,11 +34,17 @@ class StaticGraph:
 
 class StaticEdge(StaticHash):
     def evaluate(self) -> Generator[Request, Response, Any]:
-        inputs = []
-        for idx in range(self.arity):
-            value = yield Command.ParentValue, idx
-            inputs.append(value)
+        if False:
+            inputs = []
+            for idx in range(self.arity):
+                value = yield Command.ParentValue, idx
+                inputs.append(value)
 
+        else:
+            inputs = yield (Command.Await, *(
+                (Command.ParentValue, idx)
+                for idx in range(self.arity)
+            ))
         return self._evaluate(inputs)
 
     @abstractmethod
