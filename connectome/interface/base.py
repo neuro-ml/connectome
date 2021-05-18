@@ -5,8 +5,7 @@ from .compat import Generic
 from .utils import MaybeStr, format_arguments
 from ..engine.base import TreeNode
 from ..layers.base import Layer, EdgesBag
-from ..layers.pipeline import PipelineLayer
-from ..layers.shortcuts import IdentityLayer
+from ..layers.pipeline import PipelineLayer, LazyPipelineLayer
 
 logger = logging.getLogger(__name__)
 
@@ -128,9 +127,20 @@ class Chain(CallableBlock):
         return str(self)
 
 
-def chained(*blocks: BaseBlock):
+class LazyChain(BaseBlock[LazyPipelineLayer]):
+    def __init__(self, *blocks: BaseBlock):
+        super().__init__(LazyPipelineLayer(*(layer._layer for layer in blocks)))
+        self._blocks = blocks
+
+    def __str__(self):
+        return 'LazyChain' + format_arguments(self._blocks)
+
+
+def chained(*blocks: BaseBlock, lazy: bool = False):
+    base = LazyChain if lazy else Chain
+
     def decorator(klass):
-        class Chained(Chain):
+        class Chained(base):
             def __init__(self, *args, **kwargs):
                 super().__init__(klass(*args, **kwargs), *blocks)
 

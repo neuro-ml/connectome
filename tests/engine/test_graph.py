@@ -91,14 +91,6 @@ def test_nodes_caching(layer_maker):
     assert count == 3
 
 
-def test_slicing(first_simple, second_simple, third_simple):
-    chain = PipelineLayer(first_simple, second_simple, third_simple)
-
-    assert chain.slice(1, 3).compile()['div'](squared=4, cube=3, x=3) == 4
-    assert chain.slice(0, 1).compile()['sum'](x=2, y=10) == 12
-    assert chain.slice(0, 2).compile()['min'](x=5) == 25
-
-
 @pytest.mark.skip
 def test_backward_methods(first_backward, second_backward):
     assert first_backward.get_backward_method('prod')(10) == 5

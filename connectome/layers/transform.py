@@ -4,6 +4,7 @@ from .base import Context, EdgesBag, update_map
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
 from ..engine.edges import IdentityEdge
 from ..engine.graph import count_entries
+from ..exceptions import DependencyError
 from ..utils import check_for_duplicates, node_to_dict
 
 INHERIT_ALL = True
@@ -139,7 +140,7 @@ class TransformLayer(EdgesBag):
                     state.prev_used_virtual.add(name)
                     state.edges.append(BoundEdge(IdentityEdge(), [input_node], output))
                 else:
-                    raise RuntimeError(f"Previous layer must contain '{name}' node.")
+                    raise DependencyError(f"Previous layer must contain '{name}' node.")
 
     @staticmethod
     def _merge_virtual_nodes(state: LayerConnectionState):

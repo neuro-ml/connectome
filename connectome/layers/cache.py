@@ -7,6 +7,7 @@ from ..engine.base import BoundEdge, Node, TreeNode, Edge, HashOutput, Request, 
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, TupleHash
+from ..exceptions import DependencyError
 from ..utils import node_to_dict
 from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
 
@@ -88,7 +89,13 @@ class CacheColumnsLayer(CacheBase):
         main = layer.freeze()
         edges = list(main.edges)
         key, = main.inputs
-        keys = node_to_dict(main.outputs)['ids']
+        main_outputs = node_to_dict(main.outputs)
+        # TODO: layers must know about property names
+        property_name = 'ids'
+        if property_name not in main_outputs:
+            raise DependencyError(f'The previous layer must contain the "{property_name}" property.')
+
+        keys = main_outputs[property_name]
 
         copy = layer.freeze()
         mapping = TreeNode.from_edges(copy.edges)
