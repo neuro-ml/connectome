@@ -9,11 +9,10 @@ from ..cache import Cache
 
 class StaticHash(Edge):
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
-        inputs = []
-        for idx in range(self.arity):
-            value = yield Command.ParentHash, idx
-            inputs.append(value)
-
+        inputs = yield (Command.Await, *(
+            (Command.ParentHash, idx)
+            for idx in range(self.arity)
+        ))
         return self._compute_hash(inputs)
 
     @abstractmethod
@@ -34,17 +33,10 @@ class StaticGraph:
 
 class StaticEdge(StaticHash):
     def evaluate(self) -> Generator[Request, Response, Any]:
-        if False:
-            inputs = []
-            for idx in range(self.arity):
-                value = yield Command.ParentValue, idx
-                inputs.append(value)
-
-        else:
-            inputs = yield (Command.Await, *(
-                (Command.ParentValue, idx)
-                for idx in range(self.arity)
-            ))
+        inputs = yield (Command.Await, *(
+            (Command.ParentValue, idx)
+            for idx in range(self.arity)
+        ))
         return self._evaluate(inputs)
 
     @abstractmethod
@@ -70,11 +62,10 @@ class ComputableHashBase(Edge, ABC):
         self.function = function
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
-        inputs = []
-        for idx in range(self.arity):
-            value = yield Command.ParentValue, idx
-            inputs.append(value)
-
+        inputs = yield (Command.Await, *(
+            (Command.ParentValue, idx)
+            for idx in range(self.arity)
+        ))
         result = self.function(*inputs)
         return LeafHash(result), result
 
