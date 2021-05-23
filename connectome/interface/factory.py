@@ -393,14 +393,12 @@ class TransformFactory(GraphFactory):
             value = [value]
 
         if isinstance(value, bool):
-            # TODO exception
-            assert value
+            invalid = not value
         else:
-            for node_name in value:
-                # TODO exception
-                assert isinstance(node_name, str)
-
             value = tuple(value)
+            invalid = not all(isinstance(node_name, str) for node_name in value)
+        if invalid:
+            raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
 
         self.inherited_names = value
 

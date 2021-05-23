@@ -1,10 +1,8 @@
-import getpass
 import gzip
 import json
 import logging
 import os
 import shutil
-import time
 from pathlib import Path
 from typing import Any, Union, Tuple
 
@@ -12,10 +10,11 @@ from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 from ..storage import Storage
 from ..storage.digest import digest_to_relative, digest_bytes
-from ..storage.disk import wait_for_true, init_root, create_folders, to_read_only, get_size
+from ..storage.disk import wait_for_true, init_root
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..storage.locker import Locker
+from ..storage.utils import touch, create_folders, to_read_only, get_size
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +41,7 @@ class DiskCache(Cache):
     def get(self, param: NodeHash) -> Tuple[Any, bool]:
         key = param.value
         pickled, digest = key_to_digest(key)
+        logger.info('Writing %s', digest)
 
         # try to load
         value, exists = self._load(digest, pickled)
@@ -52,7 +52,7 @@ class DiskCache(Cache):
         for version in reversed(PREVIOUS_VERSIONS):
             local_pickled, local_digest = key_to_digest(key, version)
 
-            # we can simply copy the previous version, because nothing really changed
+            # we can simply load the previous version, because nothing really changed
             value, exists = self._load(local_digest, local_pickled)
             if exists:
                 return value, exists
@@ -61,24 +61,24 @@ class DiskCache(Cache):
 
     def set(self, param: NodeHash, value: Any):
         pickled, digest = key_to_digest(param.value)
+        logger.info('Reading %s', digest)
         wait_for_true(self._locker.start_writing, digest, self._sleep_time, self._sleep_iters)
         try:
             self._save_value(digest, value, pickled)
         finally:
             self._locker.stop_writing(digest)
 
-    def _digest_exists(self, digest: str):
-        return (self.root / digest_to_relative(digest)).exists()
-
     def _load(self, digest, pickled):
         wait_for_true(self._locker.start_reading, digest, self._sleep_time, self._sleep_iters)
         try:
-            if not self._digest_exists(digest):
+            base = self.root / digest_to_relative(digest)
+            if not base.exists():
                 return None, False
 
-            base = self.root / digest_to_relative(digest)
             # TODO: how slow is this?
             check_consistency(base / HASH_FILENAME, pickled)
+            # update the timestamp
+            touch(base / HASH_FILENAME)
             return self.serializer.load(base / DATA_FOLDER), True
 
         finally:
@@ -88,9 +88,10 @@ class DiskCache(Cache):
         base = self.root / digest_to_relative(digest)
         if base.exists():
             check_consistency(base / HASH_FILENAME, pickled)
-            # TODO: also compare the raw bytes of `value` and dumped value
+            # TODO: also compare the raw bytes of `value` and dumped value?
             return
 
+        # TODO: need a temp data folder
         data_folder = base / DATA_FOLDER
         create_folders(data_folder, self.permissions, self.group)
 
@@ -98,12 +99,14 @@ class DiskCache(Cache):
             # data
             self.serializer.save(value, data_folder)
             # meta
-            self._save_meta(base, pickled)
+            size = self._save_meta(base, pickled)
             self._mirror_to_storage(data_folder)
+            if self._locker.track_size:
+                self._locker.inc_size(size)
 
         except BaseException as e:
             shutil.rmtree(base)
-            raise RuntimeError('An error occurred while creating the cache. Cleaned up.') from e
+            raise RuntimeError(f'An error occurred while caching at {base}. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
         # hash
@@ -114,21 +117,17 @@ class DiskCache(Cache):
             return
 
         save_hash(hash_path, pickled)
+        size = get_size(hash_path)
 
         # user meta
-        meta = self.metadata.copy()
-        meta.update({
-            'time': time.time(),
-            # TODO: this can possibly fail
-            'user': getpass.getuser(),
-        })
-        with open(meta_path, 'w') as file:
-            json.dump(meta, file)
+        if self.metadata:
+            with open(meta_path, 'w') as file:
+                json.dump(self.metadata, file)
+            size += get_size(meta_path)
+            to_read_only(meta_path, self.permissions, self.group)
 
         to_read_only(hash_path, self.permissions, self.group)
-        to_read_only(meta_path, self.permissions, self.group)
-        if self._locker.track_size:
-            self._locker.inc_size(get_size(hash_path) + get_size(meta_path))
+        return size
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):

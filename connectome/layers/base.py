@@ -66,9 +66,6 @@ class EdgesBag(Wrapper):
         return bake_methods(self.inputs, self.outputs, self.edges)
 
     def loopback(self, func, inputs, output):
-        if self.context is None:
-            raise ValueError
-
         state = self.freeze()
         edges = list(state.edges)
         current = node_to_dict(state.outputs)
@@ -76,10 +73,13 @@ class EdgesBag(Wrapper):
         # connect forward outputs with bridge
         outputs = []
         if isinstance(inputs, str):
-            inputs = [inputs]
+            inputs = inputs,
+        inputs = tuple(inputs)
 
-        # TODO: exception
-        assert len(set(inputs)) == len(inputs), inputs
+        # TODO: is this a problem though?
+        if len(set(inputs)) != len(inputs):
+            raise ValueError(f'The inputs contain duplicates: {inputs}')
+
         inputs = [current[name] for name in inputs]
         edge = FunctionEdge(func, len(inputs))
 

@@ -8,7 +8,6 @@ from ..exceptions import DependencyError
 from ..utils import check_for_duplicates, node_to_dict
 
 INHERIT_ALL = True
-# TODO: Literal
 InheritType = Union[str, Iterable[str], bool]
 
 

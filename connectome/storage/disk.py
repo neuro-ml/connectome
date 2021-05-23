@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from .digest import digest_to_relative
 from .locker import Locker, DummyLocker, wait_for_true
+from .utils import get_size, mkdir, create_folders, to_read_only
 from ..utils import PathLike
 
 Key = str
@@ -158,20 +159,6 @@ class Disk:
         self._locker.set_size(size)
 
 
-def mkdir(path: Path, permissions: Union[int, None], group: Union[str, int, None]):
-    path.mkdir()
-    if permissions is not None:
-        path.chmod(permissions)
-    if group is not None:
-        shutil.chown(path, group=group)
-
-
-def create_folders(path: Path, permissions, group):
-    if not path.exists():
-        create_folders(path.parent, permissions, group)
-        mkdir(path, permissions, group)
-
-
 def copy_file(source, destination):
     # in Python>=3.8 the sendfile call is used, which apparently may fail
     try:
@@ -207,12 +194,3 @@ def init_root(root: PathLike, permissions: Union[int, None], group: Union[str, i
         assert root.group() == group
 
     return root, permissions, group
-
-
-def to_read_only(path: Path, permissions, group):
-    os.chmod(path, 0o444 & permissions)
-    shutil.chown(path, group=group)
-
-
-def get_size(file: Path) -> int:
-    return file.stat().st_size
