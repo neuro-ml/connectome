@@ -1,7 +1,7 @@
 # Installation
 
 ```bash
-git clone https://github.com/neuro-ml/project-connectome
-cd project-connectome
+git clone https://github.com/neuro-ml/connectome
+cd connectome
 pip install -e .
 ```

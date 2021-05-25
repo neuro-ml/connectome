@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
 META_FILENAME = 'meta.json'
+TIME_FILENAME = 'time'
 GZIP_COMPRESSION = 1
 Key = str
 
@@ -78,7 +79,11 @@ class DiskCache(Cache):
             # TODO: how slow is this?
             check_consistency(base / HASH_FILENAME, pickled)
             # update the timestamp
-            touch(base / HASH_FILENAME)
+            # TODO: remove the creation, legacy support for now
+            timestamp_file = base / TIME_FILENAME
+            if not timestamp_file.exists():
+                self._create_timestamp(timestamp_file)
+            touch(timestamp_file)
             return self.serializer.load(base / DATA_FOLDER), True
 
         finally:
@@ -126,8 +131,15 @@ class DiskCache(Cache):
             size += get_size(meta_path)
             to_read_only(meta_path, self.permissions, self.group)
 
+        self._create_timestamp(local / TIME_FILENAME)
         to_read_only(hash_path, self.permissions, self.group)
         return size
+
+    def _create_timestamp(self, path):
+        with open(path, 'w'):
+            pass
+        os.chmod(path, 777)
+        shutil.chown(path, group=self.group)
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):
