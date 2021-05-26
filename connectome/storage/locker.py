@@ -5,10 +5,8 @@ from threading import Lock
 from typing import ContextManager, MutableMapping
 
 from redis import Redis
-from sqlitedict import SqliteDict
 
 from .utils import size_to_human
-from ..utils import PathLike
 
 Key = str
 logger = logging.getLogger(__name__)
@@ -201,33 +199,6 @@ class RedisLocker(Locker):
     @classmethod
     def from_url(cls, url: str, prefix: str):
         return cls(Redis.from_url(url), prefix)
-
-
-class SqliteLocker(DictRegistry, Locker):
-    def __init__(self, path: PathLike):
-        def identity(x):
-            return x
-
-        super().__init__(True)
-        self._lock = SqliteDict(path, 'lock')
-        self._reading = SqliteDict(
-            path, autocommit=True, tablename='reading', encode=identity, decode=identity
-        )
-        self._writing = SqliteDict(
-            path, autocommit=True, tablename='writing', encode=identity, decode=identity
-        )
-        self._meta = SqliteDict(
-            path, autocommit=True, tablename='meta', encode=identity, decode=identity
-        )
-
-    def get_size(self):
-        return self._meta.get('volume', 0)
-
-    def set_size(self, size: int):
-        self._meta['volume'] = size
-
-    def inc_size(self, size: int):
-        self.set_size(self.get_size() + size)
 
 
 def wait_for_true(func, key, sleep_time, max_iterations):
