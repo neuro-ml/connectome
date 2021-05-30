@@ -1,62 +1,41 @@
-from queue import Queue
-
 from .base import Command
-
-
-class Frame:
-    def __init__(self, stack, commands, parent):
-        self.stack = stack
-        self.commands = commands
-        self.ready = False
-        self.value = None
-        self.parent = parent
-
-
-class _CacheWaiter(set):
-    pass
+from .executor import SequentialExecutor, Frame
 
 
 # TODO: replace cache by a thunk tree
 def execute(cmd, node, hashes, cache):
-    def next_frame():
-        nonlocal frame, commands, stack
-        new = frames_queue.get_nowait()
-        commands, stack, frame = new.commands, new.stack, new
-
-    def enqueue_frame(x):
-        frames_queue.put_nowait(x)
-
-    frames_queue = Queue()
-    stack = [node]
-    commands = [(Command.Return,), (cmd,)]
-    frame = Frame(stack, commands, None)
+    executor = SequentialExecutor(Frame([node], [(Command.Return,), (cmd,)], None))
+    push, pop, peek = executor.push, executor.pop, executor.peek
+    push_command, pop_command = executor.push_command, executor.pop_command
+    next_frame, enqueue_frame = executor.next_frame, executor.enqueue_frame
 
     while True:
-        if frame.ready:
+        if executor.frame.ready:
             next_frame()
             continue
 
-        cmd, *args = commands.pop()
+        cmd, *args = pop_command()
 
         # return
         if cmd == Command.Return:
             assert not args
-            assert len(stack) == 1, len(stack)
-            frame.value = stack.pop()
-            frame.ready = True
+            assert len(executor.frame.stack) == 1, len(executor.frame.stack)
+            executor.frame.value = pop()
+            executor.frame.ready = True
 
-            if frame.parent is None:
-                while not frames_queue.empty():
-                    assert frames_queue.get_nowait().ready
-                return frame.value
+            if executor.frame.parent is None:
+                # TODO: not safe
+                # while not frames_queue.empty():
+                #     assert frames_queue.get_nowait().ready
+                return executor.frame.value
 
-            enqueue_frame(frame.parent)
+            enqueue_frame(executor.frame.parent)
             next_frame()
 
         # communicate with edges
         elif cmd == Command.Send:
             node, iterator = args
-            value = stack.pop()
+            value = pop()
             try:
                 request = iterator.send(value)
 
@@ -66,94 +45,99 @@ def execute(cmd, node, hashes, cache):
                     hashes.evict(n)
                     cache.evict(n)
                 # return value
-                stack.append(e.value)
+                push(e.value)
 
             else:
                 # must continue iteration
-                commands.append((cmd, node, iterator))
-                commands.append(request)
-                stack.append(node)
+                push_command((cmd, node, iterator))
+                push_command(request)
+                push(node)
 
         # runs and caches `compute_hash`
         elif cmd == Command.ComputeHash:
             assert not args
-            node = stack.pop()
+            node = pop()
             if node in hashes:
                 value = hashes[node]
                 if isinstance(value, _CacheWaiter):
                     # restore state
-                    commands.append((cmd, *args))
-                    stack.append(node)
+                    push_command((cmd, *args))
+                    push(node)
                     # remember to come back
-                    value.add(frame)
+                    value.add(executor.frame)
                     # switch context
                     next_frame()
 
                 else:
-                    stack.append(value)
+                    push(value)
             else:
                 hashes[node] = _CacheWaiter()
-                commands.append((Command.Store, hashes, node))
-                commands.append((Command.Send, node, node.edge.compute_hash()))
-                stack.append(None)
+                push_command((Command.Store, hashes, node))
+                push_command((Command.Send, node, node.edge.compute_hash()))
+                push(None)
 
         # runs and caches `evaluate`
         elif cmd == Command.Evaluate:
             assert not args
-            node = stack.pop()
+            node = pop()
 
             if node in cache:
                 value = cache[node]
                 if isinstance(value, _CacheWaiter):
                     # restore state
-                    commands.append((cmd, *args))
-                    stack.append(node)
+                    push_command((cmd, *args))
+                    push(node)
                     # remember to come back
-                    value.add(frame)
+                    value.add(executor.frame)
                     # switch context
                     next_frame()
 
                 else:
-                    stack.append(value)
+                    push(value)
             else:
                 cache[node] = _CacheWaiter()
-                commands.append((Command.Store, cache, node))
-                commands.append((Command.Send, node, node.edge.evaluate()))
-                stack.append(None)
+                push_command((Command.Store, cache, node))
+                push_command((Command.Send, node, node.edge.evaluate()))
+                push(None)
 
         # requests
         elif cmd == Command.ParentHash:
             idx, = args
-            node = stack.pop()
+            node = pop()
 
-            commands.append((Command.Item, 0))
-            commands.append((Command.ComputeHash,))
-            stack.append(node.parents[idx])
+            push_command((Command.Item, 0))
+            push_command((Command.ComputeHash,))
+            push(node.parents[idx])
 
         elif cmd == Command.ParentValue:
             idx, = args
-            node = stack.pop()
+            node = pop()
 
-            commands.append((Command.Evaluate,))
-            stack.append(node.parents[idx])
+            push_command((Command.Evaluate,))
+            push(node.parents[idx])
 
         elif cmd == Command.CurrentHash:
             assert not args
-            commands.append((Command.Item, 0))
-            commands.append((Command.ComputeHash,))
+            push_command((Command.Item, 0))
+            push_command((Command.ComputeHash,))
 
         elif cmd == Command.Payload:
             assert not args
-            commands.append((Command.Item, 1))
-            commands.append((Command.ComputeHash,))
+            push_command((Command.Item, 1))
+            push_command((Command.ComputeHash,))
 
         elif cmd == Command.Await:
-            node = stack.pop()
-            commands.append((Command.Tuple, len(args)))
+            node = pop()
+            push_command((Command.Tuple, len(args)))
             for arg in args:
-                local = Frame([node], [(Command.Return,), arg], frame)
-                commands.append((Command.AwaitFrame, local))
+                local = Frame([node], [(Command.Return,), arg], executor.frame)
+                push_command((Command.AwaitFrame, local))
                 enqueue_frame(local)
+
+        elif cmd == Command.Call:
+            pop()  # pop the node
+            func, pos = args
+            executor.call(func, pos)
 
         # utils
         elif cmd == Command.Store:
@@ -163,24 +147,27 @@ def execute(cmd, node, hashes, cache):
             for parent in parents:
                 enqueue_frame(parent)
 
-            storage[key] = stack[-1]
+            storage[key] = peek()
 
         elif cmd == Command.Item:
             key, = args
-            stack.append(stack.pop()[key])
+            push(pop()[key])
 
         elif cmd == Command.Tuple:
             n, = args
-            value = tuple(stack.pop() for _ in range(n))
-            stack.append(value)
+            push(tuple(pop() for _ in range(n)))
 
         elif cmd == Command.AwaitFrame:
             child, = args
             if child.ready:
-                stack.append(child.value)
+                push(child.value)
             else:
-                commands.append((cmd, *args))
+                push_command((cmd, *args))
                 next_frame()
 
         else:
             raise RuntimeError('Unknown command', cmd)
+
+
+class _CacheWaiter(set):
+    pass

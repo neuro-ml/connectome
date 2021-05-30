@@ -44,7 +44,7 @@ class StaticEdge(StaticHash):
         pass
 
 
-class FunctionEdge(StaticGraph, StaticEdge):
+class FunctionEdge(StaticGraph, StaticHash):
     def __init__(self, function: Callable, arity: int):
         super().__init__(arity, uses_hash=False)
         self.function = function
@@ -52,8 +52,13 @@ class FunctionEdge(StaticGraph, StaticEdge):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return ApplyHash(self.function, *inputs)
 
-    def _evaluate(self, inputs: Sequence[Any]) -> Any:
-        return self.function(*inputs)
+    def evaluate(self) -> Generator[Request, Response, Any]:
+        inputs = yield (Command.Await, *(
+            (Command.ParentValue, idx)
+            for idx in range(self.arity)
+        ))
+        result = yield Command.Call, self.function, inputs
+        return result
 
 
 class ComputableHashBase(Edge, ABC):

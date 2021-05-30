@@ -6,7 +6,7 @@ from .node_hash import NodeHash, NodeHashes
 
 
 class Command(Enum):
-    ParentHash, CurrentHash, ParentValue, Payload, Await = range(5)
+    ParentHash, CurrentHash, ParentValue, Payload, Await, Call = range(6)
     Send, Store, Item, ComputeHash, Evaluate, AwaitFrame, Tuple, Return = range(-8, 0)
 
 
