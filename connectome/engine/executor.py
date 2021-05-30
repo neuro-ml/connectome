@@ -15,25 +15,20 @@ class Executor(ABC):
     def __init__(self, frame: Frame):
         self.frame = frame
 
-    @abstractmethod
     def push(self, x):
-        pass
+        self.frame.stack.append(x)
 
-    @abstractmethod
     def pop(self):
-        pass
+        return self.frame.stack.pop()
 
-    @abstractmethod
     def peek(self):
-        pass
+        return self.frame.stack[-1]
 
-    @abstractmethod
     def push_command(self, x):
-        pass
+        self.frame.commands.append(x)
 
-    @abstractmethod
     def pop_command(self):
-        pass
+        return self.frame.commands.pop()
 
     @abstractmethod
     def next_frame(self):
@@ -52,21 +47,6 @@ class SequentialExecutor(Executor):
     def __init__(self, frame: Frame):
         super().__init__(frame)
         self.queue = Queue()
-
-    def push(self, x):
-        self.frame.stack.append(x)
-
-    def pop(self):
-        return self.frame.stack.pop()
-
-    def peek(self):
-        return self.frame.stack[-1]
-
-    def push_command(self, x):
-        self.frame.commands.append(x)
-
-    def pop_command(self):
-        return self.frame.commands.pop()
 
     def next_frame(self):
         self.frame = self.queue.get_nowait()
