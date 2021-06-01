@@ -11,8 +11,7 @@ jobs:
         python-version: [ 3.6, 3.7, 3.8, 3.9 ]
 
     services:
-      # TODO: rename localhost to redis inside tests
-      localhost:
+      redis:
         image: redis
         # Set health checks to wait until redis has started
         options: >-

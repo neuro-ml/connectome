@@ -29,7 +29,7 @@ def test_single_local(tmpdir):
 
 
 @pytest.mark.redis
-def test_parallel_read_threads(tmpdir, subtests):
+def test_parallel_read_threads(tmpdir, subtests, redis_hostname):
     def job():
         storage.load(lambda x: time.sleep(sleep_time), key)
 
@@ -39,7 +39,7 @@ def test_parallel_read_threads(tmpdir, subtests):
     key = storage.store(__file__)
     lockers = [
         ThreadLocker(),
-        RedisLocker.from_url('redis://localhost:6379/0', 'connectome.tests'),
+        RedisLocker.from_url(f'redis://{redis_hostname}:6379/0', 'connectome.tests'),
         # SqliteLocker(tmpdir / 'db.sqlite3'),
     ]
 
@@ -68,11 +68,11 @@ def test_parallel_read_threads(tmpdir, subtests):
 
 
 @pytest.mark.redis
-def test_parallel_read_processes(tmpdir):
+def test_parallel_read_processes(tmpdir, redis_hostname):
     def job():
         storage.load(lambda x: time.sleep(1), key)
 
-    locker = RedisLocker.from_url('redis://localhost:6379/0', 'connectome.tests')
+    locker = RedisLocker.from_url(f'redis://{redis_hostname}:6379/0', 'connectome.tests')
     storage = Storage([Disk(tmpdir, locker=locker)])
     key = storage.store(__file__)
 

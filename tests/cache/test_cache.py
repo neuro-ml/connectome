@@ -96,14 +96,14 @@ def test_errors_handling(block_maker, temp_disk_cache):
 
 
 @pytest.mark.redis
-def test_disk_locking_processes(block_maker, temp_storage):
+def test_disk_locking_processes(block_maker, temp_storage, redis_hostname):
     def visit():
         ds = block_maker.first_ds(first_constant=2, ids_arg=3)
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(
                 folder / 'cache', temp_storage, JsonSerializer(), 'image', locker=RedisLocker.from_url(
-                    'redis://localhost:6379/0', 'connectome.tests.locking.disk'))
+                    f'redis://{redis_hostname}:6379/0', 'connectome.tests.locking.disk'))
 
             for i in ds.ids:
                 assert ds.image(i) == cached.image(i)
