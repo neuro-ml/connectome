@@ -23,8 +23,6 @@ from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild
     _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule, \
     _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict, string_types
 
-NEWER_THAN_38 = sys.version_info[:2] > (3, 8)
-
 
 def sort_dict(d):
     return tuple(sorted(d.items()))
@@ -102,7 +100,9 @@ class PortablePickler(CloudPickler):
         Same reducer as in cloudpickle, except `co_filename`, `co_firstlineno`, `lnotab` are not saved.
         """
         consts = obj.co_consts
-        # remove the docstring
+        # remove the docstring:
+        #  as of py3.9 the docstring is always stored in co_consts[0]
+        #  associated issue: https://bugs.python.org/issue36521
         if consts and isinstance(consts[0], str):
             consts = list(consts)[1:]
             if None in consts:
@@ -149,12 +149,6 @@ class PortablePickler(CloudPickler):
         # base globals are only needed for unpickling
         code, f_globals, defaults, closure_values, dct, _ = self.extract_func_data(func)
         f_globals, dct = map(sort_dict, [f_globals, dct])
-
-        # as of py3.8 the docstring is always stored in co_consts[0]
-        # need this assertion to detect any changes in further versions
-        if func.__doc__ is not None and NEWER_THAN_38:
-            assert code.co_consts
-            assert func.__doc__ == code.co_consts[0]
 
         save(_fill_function)
         write(pickle.MARK)
