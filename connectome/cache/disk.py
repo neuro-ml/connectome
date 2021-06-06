@@ -138,7 +138,7 @@ class DiskCache(Cache):
     def _create_timestamp(self, path):
         with open(path, 'w'):
             pass
-        os.chmod(path, 777)
+        os.chmod(path, 0o777)
         shutil.chown(path, group=self.group)
 
     def _mirror_to_storage(self, folder: Path):
