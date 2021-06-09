@@ -43,6 +43,9 @@ class Locker(ABC):
     def inc_size(self, size: int):
         raise NotImplementedError
 
+    def dec_size(self, size: int):
+        raise NotImplementedError
+
     def set_size(self, size: int):
         raise NotImplementedError
 
@@ -184,6 +187,9 @@ class RedisLocker(Locker):
 
     def inc_size(self, size: int):
         self._redis.incrby(self._volume_key, size)
+
+    def dec_size(self, size: int):
+        self._redis.decrby(self._volume_key, size)
 
     def describe(self) -> str:
         lines = [f'{self._prefix}: {size_to_human(self.get_size())}']

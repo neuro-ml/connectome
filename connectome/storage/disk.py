@@ -133,7 +133,10 @@ class Disk:
                 raise FileNotFoundError
 
             os.chmod(file, self.permissions)
+            size = get_size(file)
             shutil.rmtree(folder)
+            if self._locker.track_size:
+                self._locker.dec_size(size)
 
         finally:
             self.release_write(key)
