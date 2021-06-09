@@ -1,9 +1,8 @@
+import warnings
 from typing import Callable
 
 
-class DecoratorAdapter:
-    name: str
-
+class FactoryAnnotation:
     def __init__(self, func: Callable):
         if not callable(func):
             raise TypeError('Can only decorate callable objects')
@@ -17,49 +16,51 @@ class DecoratorAdapter:
         return self.__func__(*args, **kwargs)
 
 
-class InverseDecoratorAdapter(DecoratorAdapter):
-    name = 'inverse'
+class NodeAnnotation(FactoryAnnotation):
+    """ Used to alter the behaviour of input/output nodes of an edge. """
 
 
-class OptionalDecoratorAdapter(DecoratorAdapter):
-    name = 'optional'
+class EdgeAnnotation(FactoryAnnotation):
+    """ Used to customize the edge's behaviour. """
 
 
-class InsertDecoratorAdapter(DecoratorAdapter):
-    name = 'insert'
+class RuntimeAnnotation(FactoryAnnotation):
+    pass
 
 
-class PositionalDecoratorAdapter(DecoratorAdapter):
-    name = 'positional'
+# implementations
+
+class Inverse(NodeAnnotation):
+    pass
 
 
-class PropertyDecoratorAdapter(DecoratorAdapter):
-    name = 'property'
+class Positional(NodeAnnotation):
+    """
+    Marks the first argument as positional.
+
+    Can be used as an alternative to
+    >>> def f(x, \, y):
+    >>>     ...
+    for older versions of Python.
+    """
 
 
-class ImpureFunction(DecoratorAdapter):
-    name = 'impure'
+class Impure(EdgeAnnotation):
+    pass
 
 
-def inverse(func: Callable):
-    return InverseDecoratorAdapter(func)
+class Optional(RuntimeAnnotation):
+    pass
 
 
-def optional(func: Callable):
-    return OptionalDecoratorAdapter(func)
+class Meta(RuntimeAnnotation):
+    pass
 
 
-def positional(func: Callable):
-    return PositionalDecoratorAdapter(func)
+# low case shortcuts
+inverse, optional, positional, meta, impure = Inverse, Optional, Positional, Meta, Impure
 
 
-def insert(func: Callable):
-    return InsertDecoratorAdapter(func)
-
-
-def meta(func: Callable):
-    return PropertyDecoratorAdapter(func)
-
-
-def impure(func: Callable):
-    return ImpureFunction(func)
+def insert(x):
+    warnings.warn('The `insert` decorator is deprecated. Currently it has no effect.')
+    return x

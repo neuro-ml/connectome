@@ -1,11 +1,6 @@
-from typing import Union, Sequence, Generic, TypeVar
+from typing import Union, Sequence
 
 MaybeStr = Union[Sequence[str], str]
-T = TypeVar('T')
-
-
-class Local(Generic[T]):
-    pass
 
 
 def format_arguments(blocks):

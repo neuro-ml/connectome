@@ -19,16 +19,16 @@ class MultiDict(dict):
         return super().items()
 
     def __setitem__(self, key, value):
-        if key not in self:
-            container = []
-            super().__setitem__(key, container)
+        if key in self:
+            super().__getitem__(key).append(value)
         else:
-            container = super().__getitem__(key)
-
-        container.append(value)
+            super().__setitem__(key, [value])
 
     def __getitem__(self, key):
         return super().__getitem__(key)[-1]
+
+    def __delitem__(self, key):
+        raise ValueError("Can't delete names from this scope")
 
 
 def extract_signature(func):
@@ -42,21 +42,6 @@ def extract_signature(func):
         annotations[parameter.name] = parameter.annotation
 
     return names, annotations
-
-
-def atomize(attribute: str = '_lock'):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            mutex = getattr(self, attribute)
-            if mutex is None:
-                return func(self, *args, **kwargs)
-            with mutex:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
 
 
 # TODO add error message

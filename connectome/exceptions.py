@@ -1,2 +1,10 @@
-class DependencyError(Exception):
+class GraphError(Exception):
+    pass
+
+
+class DependencyError(GraphError):
+    pass
+
+
+class FieldError(Exception):
     pass

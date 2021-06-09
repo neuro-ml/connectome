@@ -8,8 +8,7 @@ class FirstDS(Source):
     """Doc"""
 
     _first_constant = 1
-    _ids_arg = 4
-    _annotated: tuple
+    _ids_arg: int = 4
 
     @meta
     def ids(_ids_arg):
