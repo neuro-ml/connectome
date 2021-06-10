@@ -99,13 +99,13 @@ def infer_nodes(name: str, func: Callable, decorators: Set[Type[FactoryAnnotatio
             raise ValueError('The "positional" can\'t be used with a function without arguments')
 
     # rest
-    inputs.extend(signature_to_types(signature, default_input))
+    inputs.extend(signature_to_types(signature, default_input, name))
 
     assert not any(issubclass(x, NodeAnnotation) for x in decorators)
     return inputs, output, decorators
 
 
-def signature_to_types(signature, default_input):
+def signature_to_types(signature, default_input, field_name):
     inputs = []
     for parameter in signature:
         assert parameter.default == parameter.empty, parameter
@@ -113,8 +113,9 @@ def signature_to_types(signature, default_input):
 
         arg, annotation = parameter.name, parameter.annotation
         if isinstance(annotation, NodeType):
-            raise ValueError(f'Invalid argument "{arg}" annotation ({annotation}) for field "{name}"')
-        if issubclass(annotation, NodeType):
+            raise ValueError(f'Invalid argument "{arg}" annotation ({annotation}) for field "{field_name}"')
+        # need the `isinstance` part for faulty annotations, such as np.array
+        if isinstance(annotation, type) and issubclass(annotation, NodeType):
             node = annotation(arg)
         elif is_private(arg):
             node = Parameter(arg)

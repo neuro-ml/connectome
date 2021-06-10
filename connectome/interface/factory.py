@@ -243,7 +243,7 @@ class SourceFactory(GraphFactory):
         return [x if x != i else Input(self._key_name) for x in inputs]
 
     def _process_precomputed(self, name, value: ComputableHash):
-        inputs = signature_to_types(list(inspect.signature(value.precompute).parameters.values()), Input)
+        inputs = signature_to_types(list(inspect.signature(value.precompute).parameters.values()), Input, name)
         assert len(extract_signature(value.func)[0]) == 1
         inputs = list(map(self._type_to_node, self._validate_inputs(inputs)))
 
