@@ -69,8 +69,12 @@ class TransformBase(APIMeta):
             scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
 
         else:
-            if bases != (Transform,):
-                raise TypeError('Transforms can only inherit directly from the "Transform" class.')
+            bases = set(bases) - {Transform}
+            for base in bases:
+                if not issubclass(base, Mixin):
+                    raise TypeError('Transforms datasets can only inherit directly from "Transform" or mixins.')
+
+            _add_from_mixins(namespace, bases)
             bases = CallableBlock,
             logger.info('Compiling the block "%s"', class_name)
             scope = TransformFactory.make_scope(namespace)
@@ -138,7 +142,11 @@ def _add_from_mixins(namespace, mixins):
         assert issubclass(mixin, Mixin), mixin
         # update without overwriting
         local = mixin.__methods__
-        for name in set(local) - set(namespace):
+        intersection = set(local) & set(namespace)
+        if intersection:
+            raise RuntimeError(f'Trying to overwrite the names {intersection} from mixin {mixin}')
+
+        for name in local:
             namespace[name] = local[name]
 
     return namespace

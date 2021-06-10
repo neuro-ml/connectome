@@ -1,15 +1,8 @@
-"""
-The computation is made in 3 passes:
-1. Compute all node hashes
-2. Use hashes to compute the required input nodes for each edge
-3. Use hashes and masks to compute the output
-"""
 import inspect
 from collections import defaultdict
 from typing import Sequence, Dict, Any
 
 from .base import TreeNode, NodeHash, TreeNodes, Command
-# from .compilers import execute_sequential, execute_sequential_async
 from .node_hash import LeafHash, GraphHash
 from .utils import EvictionCache
 from .vm import execute

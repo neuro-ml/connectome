@@ -1,18 +1,18 @@
 import pytest
 
-from connectome import Mixin, Local, Source, meta, Transform
+from connectome import Mixin, Source, meta, Transform, Output
 
 
 class SizeMixin(Mixin):
     def _size(i):
         return len(i)
 
-    def delta(text: Local, _size):
+    def delta(text: Output, _size):
         return len(text) - _size
 
 
 class SizePositive(Mixin):
-    def positive(delta: Local):
+    def positive(delta: Output):
         return delta > 0
 
 
@@ -27,7 +27,7 @@ class Plain(Source):
     def _size(i):
         return len(i)
 
-    def delta(text: Local, _size):
+    def delta(text: Output, _size):
         return len(text) - _size
 
 
@@ -49,7 +49,7 @@ class Multiple(Source, SizeMixin, SizePositive):
         return f'text for id {i}'
 
 
-def test_mixins():
+def test_source_mixins():
     one = Plain()
     two = Inherited()
     three = Multiple()
@@ -61,12 +61,56 @@ def test_mixins():
         assert three.positive(i)
 
 
+def test_transform_mixins():
+    class B(Transform, SizeMixin):
+        def double_size(_size):
+            return 2 * _size
+
+        def text(text):
+            return text
+
+    b = B()
+    assert set(dir(b)) == {'delta', 'double_size', 'text'}
+    assert b.double_size('123') == 6
+    assert b.delta(text='abc', i='d') == 2
+
+
+def test_overwrite():
+    class A(Mixin):
+        def a(x):
+            return x
+
+        def b(x):
+            return x
+
+    with pytest.raises(RuntimeError):
+        class B(A):
+            def b(x):
+                return 2 * x
+
+            def c(x):
+                return x
+
+    with pytest.raises(RuntimeError):
+        class C(Source, A):
+            def b(x):
+                return 2 * x
+
+            def c(x):
+                return x
+
+    with pytest.raises(RuntimeError):
+        class D(Transform, A):
+            def b(x):
+                return 2 * x
+
+            def c(x):
+                return x
+
+
 def test_inheritance():
     with pytest.raises(TypeError):
         class A(Mixin, int):
-            pass
-    with pytest.raises(TypeError):
-        class B(Transform, SizeMixin):
             pass
     with pytest.raises(TypeError):
         class C(Source, SizeMixin, int):

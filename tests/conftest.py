@@ -6,4 +6,4 @@ markers = ['redis']
 
 @pytest.fixture
 def redis_hostname():
-    return 'redis'
+    return 'localhost'
