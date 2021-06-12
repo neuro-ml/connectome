@@ -39,7 +39,7 @@ def test_parallel_read_threads(tmpdir, subtests, redis_hostname):
     key = storage.store(__file__)
     lockers = [
         ThreadLocker(),
-        RedisLocker.from_url(f'redis://{redis_hostname}:6379/0', 'connectome.tests'),
+        RedisLocker.from_url(f'redis://{redis_hostname}:6379/0', 'connectome.tests', 10),
         # SqliteLocker(tmpdir / 'db.sqlite3'),
     ]
 
@@ -72,7 +72,7 @@ def test_parallel_read_processes(tmpdir, redis_hostname):
     def job():
         storage.load(lambda x: time.sleep(1), key)
 
-    locker = RedisLocker.from_url(f'redis://{redis_hostname}:6379/0', 'connectome.tests')
+    locker = RedisLocker.from_url(f'redis://{redis_hostname}:6379/0', 'connectome.tests', 10)
     storage = Storage([Disk(tmpdir, locker=locker)])
     key = storage.store(__file__)
 

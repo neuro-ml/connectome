@@ -103,7 +103,7 @@ def test_disk_locking_processes(block_maker, temp_storage, redis_hostname):
             folder = Path(folder)
             cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(
                 folder / 'cache', temp_storage, JsonSerializer(), 'image', locker=RedisLocker.from_url(
-                    f'redis://{redis_hostname}:6379/0', 'connectome.tests.locking.disk'))
+                    f'redis://{redis_hostname}:6379/0', 'connectome.tests.locking.disk', 10))
 
             for i in ds.ids:
                 assert ds.image(i) == cached.image(i)

@@ -139,45 +139,54 @@ class ThreadLocker(DictRegistry, Locker):
 
 
 class RedisLocker(Locker):
-    def __init__(self, redis: Redis, prefix: str):
+    def __init__(self, redis: Redis, prefix: str, expire: int):
         super().__init__(True)
         self._redis = redis
-        self._prefix = prefix
-        self._volume_key = f'{self._prefix}.V'
-        self._lock_key = f'{self._prefix}.L'
+        self._prefix = prefix + ':'
+        self._expire = expire
+        self._volume_key = f'{prefix}.V'
         # TODO: how slow are these checks?
         # language=Lua
         self._stop_writing = self._redis.script_load('''
-        if redis.call('hget', KEYS[1], ARGV[1]) == '-1' then 
-            redis.call('hdel', KEYS[1], ARGV[1]) else error('') 
+        if redis.call('get', KEYS[1]) == '-1' then
+            redis.call('del', KEYS[1])
+        else
+            error('')
         end''')
         # language=Lua
-        self._start_reading = self._redis.script_load('''
-        if redis.call('hget', KEYS[1], ARGV[1]) == '-1' then 
-            return 0 else redis.call('hincrby', KEYS[1], ARGV[1], 1); return 1 
+        self._start_reading = self._redis.script_load(f'''
+        local lock = redis.call('get', KEYS[1])
+        if lock == '-1' then 
+            return 0
+        elseif lock == false then
+            redis.call('set', KEYS[1], 1, 'EX', {expire})
+            return 1
+        else
+            redis.call('set', KEYS[1], lock + 1, 'EX', {expire})
+            return 1
         end''')
         # language=Lua
-        self._stop_reading = self._redis.script_load('''
-        local lock = redis.call('hget', KEYS[1], ARGV[1])
+        self._stop_reading = self._redis.script_load(f'''
+        local lock = redis.call('get', KEYS[1])
         if lock == '1' then
-            redis.call('hdel', KEYS[1], ARGV[1]) 
+            redis.call('del', KEYS[1])
         elseif tonumber(lock) < 1 then
             error('')
         else
-            redis.call('hincrby', KEYS[1], ARGV[1], -1)
+            redis.call('set', KEYS[1], lock - 1, 'EX', {expire})
         end''')
 
     def start_writing(self, key: Key) -> bool:
-        return bool(self._redis.hsetnx(self._lock_key, key, -1))
+        return bool(self._redis.set(self._prefix + key, -1, nx=True, ex=self._expire))
 
     def stop_writing(self, key: Key):
-        self._redis.evalsha(self._stop_writing, 1, self._lock_key, key)
+        self._redis.evalsha(self._stop_writing, 1, self._prefix + key)
 
     def start_reading(self, key: Key) -> bool:
-        return bool(self._redis.evalsha(self._start_reading, 1, self._lock_key, key))
+        return bool(self._redis.evalsha(self._start_reading, 1, self._prefix + key))
 
     def stop_reading(self, key: Key):
-        self._redis.evalsha(self._stop_reading, 1, self._lock_key, key)
+        self._redis.evalsha(self._stop_reading, 1, self._prefix + key)
 
     def get_size(self):
         return int(self._redis.get(self._volume_key) or 0)
@@ -193,18 +202,20 @@ class RedisLocker(Locker):
 
     def describe(self) -> str:
         lines = [f'{self._prefix}: {size_to_human(self.get_size())}']
-        for name, value in self._redis.hgetall(self._lock_key).items():
+        for name in self._redis.keys():
             name = name.decode()
-            value = int(value)
-            assert value == -1 or value > 0, value
-            value = 'Write' if value == -1 else 'Read'
-            lines.append(f'{name}: {value}')
+            if name.startswith(self._prefix):
+                value = int(self._redis.get(name))
+                ttl = self._redis.ttl(name)
+                assert value == -1 or value > 0, value
+                value = 'Write' if value == -1 else 'Read'
+                lines.append(f'{name}: {value}: {ttl}')
 
         return '\n'.join(lines)
 
     @classmethod
-    def from_url(cls, url: str, prefix: str):
-        return cls(Redis.from_url(url), prefix)
+    def from_url(cls, url: str, prefix: str, expire: int):
+        return cls(Redis.from_url(url), prefix, expire)
 
 
 def wait_for_true(func, key, sleep_time, max_iterations):

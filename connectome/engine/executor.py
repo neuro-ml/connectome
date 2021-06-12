@@ -39,6 +39,10 @@ class Executor(ABC):
         pass
 
     @abstractmethod
+    def clear(self):
+        pass
+
+    @abstractmethod
     def call(self, func, args):
         pass
 
@@ -47,6 +51,10 @@ class SequentialExecutor(Executor):
     def __init__(self, frame: Frame):
         super().__init__(frame)
         self.queue = Queue()
+
+    def clear(self):
+        while not self.queue.empty():
+            assert self.queue.get_nowait().ready
 
     def next_frame(self):
         self.frame = self.queue.get_nowait()

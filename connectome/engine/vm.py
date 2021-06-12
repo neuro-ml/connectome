@@ -24,9 +24,7 @@ def execute(cmd, node, hashes, cache):
             executor.frame.ready = True
 
             if executor.frame.parent is None:
-                # TODO: not safe
-                # while not frames_queue.empty():
-                #     assert frames_queue.get_nowait().ready
+                executor.clear()
                 return executor.frame.value
 
             enqueue_frame(executor.frame.parent)
