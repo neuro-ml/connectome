@@ -72,7 +72,13 @@ class GraphFactory:
         self.docstring = doc
 
     def _type_to_node(self, x):
-        return self._nodes_dispatch[type(x)][x.name]
+        name = x.name
+        container = self._nodes_dispatch[type(x)]
+        if container.frozen and name not in container:
+            assert container == self.parameters
+            raise FieldError(f'The parameter `{name}` is not defined.')
+
+        return container[name]
 
     # TODO: need an adapters' preprocessor
     def _collect_nodes(self):
