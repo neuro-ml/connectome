@@ -29,22 +29,11 @@ class Storage:
         self._store(key, file)
         return key
 
-    def get_path(self, key: Key, name: str = None) -> Path:
+    def get_path(self, key: Key) -> Path:
         """ This is not safe, but it's fast. """
         path, storage = self._find_storage(key)
-
-        try:
-            if name is None:
-                return path
-
-            link = path.parent / name
-            if not link.exists():
-                link.symlink_to(path.name)
-
-            return link
-
-        finally:
-            storage.release_read(key)
+        storage.release_read(key)
+        return path
 
     def load(self, func: Callable, key: Key, *args, **kwargs) -> Any:
         path, storage = self._find_storage(key)
