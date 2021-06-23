@@ -142,12 +142,12 @@ class CacheToDisk(CacheBlock):
 class CacheColumns(CacheBlock):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None, locker: Locker = None):
+                 names: MaybeStr, metadata: dict = None, locker: Locker = None, verbose: bool = False):
         names = to_seq(names)
         if locker is None:
             locker = DummyLocker()
         super().__init__(CacheColumnsLayer(
-            names, root, storage, _resolve_serializer(serializer), metadata or {}, locker=locker))
+            names, root, storage, _resolve_serializer(serializer), metadata or {}, locker=locker, verbose=verbose))
 
 
 class RemoteStorageBase(CacheBlock):

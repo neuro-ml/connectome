@@ -1,9 +1,11 @@
 from itertools import starmap
 from typing import Any, Generator
 
+from tqdm import tqdm
+
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
 from ..engine import NodeHash
-from ..engine.base import BoundEdge, Node, TreeNode, Edge, HashOutput, Request, Response, Command
+from ..engine.base import Node, TreeNode, Edge, HashOutput, Request, Response, Command
 from ..engine.edges import CacheEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, TupleHash
@@ -80,7 +82,8 @@ class CacheColumnsLayer(CacheBase):
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
 
-    def __init__(self, names, root, storage, serializer, metadata, locker):
+    def __init__(self, names, root, storage, serializer, metadata, locker, verbose):
+        self.verbose = verbose
         self.cache_names = names
         self.disk = DiskCache(root, storage, serializer, metadata, locker)
         self.ram = MemoryCache(None)
@@ -112,7 +115,7 @@ class CacheColumnsLayer(CacheBase):
                 local = Node(name)
                 # build a graph for each node
                 graph = Graph(graph_inputs, mapping[outputs_copy[name]])
-                edges.append(BoundEdge(CachedColumn(self.disk, self.ram, graph), [output, key, keys], local))
+                edges.append(CachedColumn(self.disk, self.ram, graph, self.verbose).bind([output, key, keys], local))
                 outputs.append(local)
 
         return EdgesBag([key], outputs, edges, IdentityContext())
@@ -127,11 +130,12 @@ class CachedColumn(Edge):
     keys: all available keys
     """
 
-    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph):
+    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph, verbose: bool):
         super().__init__(arity=3, uses_hash=True)
         self.graph = graph
         self.disk = disk
         self.ram = ram
+        self.verbose = verbose
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         # propagate the first value
@@ -161,7 +165,9 @@ class CachedColumn(Edge):
 
         values, exists = self.disk.get(compound)
         if not exists:
-            values = tuple(starmap(self.graph.get_value, states))
+            values = tuple(starmap(self.graph.get_value, tqdm(
+                states, desc='Generating the columns cache', disable=not self.verbose,
+            )))
             self.disk.set(compound, values)
 
         for k, h, value in zip(keys, hashes, values):
