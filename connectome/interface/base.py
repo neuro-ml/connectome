@@ -116,15 +116,12 @@ class Chain(CallableBlock):
 
         return Chain(*not_cache)
 
-    def __str__(self):
+    def __repr__(self):
         if len(self._blocks) == 2:
             a, b = self._blocks
             return f'{a} >> {b}'
 
         return 'Chain' + format_arguments(self._blocks)
-
-    def __repr__(self):
-        return str(self)
 
 
 class LazyChain(BaseBlock[LazyPipelineLayer]):
@@ -132,7 +129,7 @@ class LazyChain(BaseBlock[LazyPipelineLayer]):
         super().__init__(LazyPipelineLayer(*(layer._layer for layer in blocks)))
         self._blocks = blocks
 
-    def __str__(self):
+    def __repr__(self):
         return 'LazyChain' + format_arguments(self._blocks)
 
 

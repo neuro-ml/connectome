@@ -1,5 +1,6 @@
 from typing import Dict, Any
 
+from .base import CallableBlock
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
 from ..exceptions import GraphError, FieldError
 from ..layers.transform import TransformLayer
@@ -25,6 +26,10 @@ def unwrap_transform(value):
 
 SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__'}
 DOC_MAGIC = '__doc__'
+
+
+class FactoryBlock(CallableBlock):
+    pass
 
 
 class GraphFactory:
@@ -199,17 +204,24 @@ class GraphFactory:
             arguments.apply_defaults()
             super(type(self), self).__init__(factory.build(arguments.arguments), factory.property_names)
 
-        def __str__(self):
-            return namespace.get('__qualname__', [None])[0] or super(type(self), self).__str__()
+        def __repr__(self):
+            kls = type(self)
+            if hasattr(kls, '__qualname__'):
+                args = ','.join(factory.arguments)
+                return f'{kls.__qualname__}({args})'
+            return super(type(self), self).__repr__()
 
-        # TODO: at this point we need a base class
         __init__.__signature__ = signature
         scope = {
-            '__init__': __init__, '__str__': __str__, '__repr__': __str__,
-            '__signature__': signature,
+            '__init__': __init__, '__signature__': signature, '__repr__': __repr__,
+            DOC_MAGIC: factory.docstring,
         }
-        if factory.docstring is not None:
-            scope[DOC_MAGIC] = factory.docstring
+        qualname = namespace.get('__qualname__', [None])[0]
+        if qualname is not None:
+            scope['__qualname__'] = qualname
+        module = namespace.get('__module__', [None])[0]
+        if module is not None:
+            scope['__module__'] = module
         return scope
 
     def build(self, arguments: dict) -> TransformLayer:

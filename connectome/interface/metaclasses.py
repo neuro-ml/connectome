@@ -1,11 +1,9 @@
 import logging
 
-from .base import CallableBlock
 from .compat import SafeMeta
-
 from ..layers.transform import InheritType
 from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory
+from .factory import SourceFactory, TransformFactory, FactoryBlock
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +27,7 @@ class SourceBase(APIMeta):
             def __init__(*args, **kwargs):
                 raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
 
-            assert bases == (CallableBlock,)
+            assert bases == (FactoryBlock,)
             scope = {'__init__': __init__}
 
         else:
@@ -40,7 +38,7 @@ class SourceBase(APIMeta):
 
             _check_duplicates(namespace)
             _add_from_mixins(namespace, bases)
-            bases = CallableBlock,
+            bases = FactoryBlock,
             scope = SourceFactory.make_scope(namespace)
 
         return super().__new__(mcs, class_name, bases, scope)
@@ -65,7 +63,7 @@ class TransformBase(APIMeta):
                 factory = TransformFactory(local)
                 super(type(self), self).__init__(factory.build({}), factory.property_names)
 
-            assert bases == (CallableBlock,)
+            assert bases == (FactoryBlock,)
             scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
 
         else:
@@ -75,14 +73,14 @@ class TransformBase(APIMeta):
                     raise TypeError('Transforms datasets can only inherit directly from "Transform" or mixins.')
 
             _add_from_mixins(namespace, bases)
-            bases = CallableBlock,
+            bases = FactoryBlock,
             logger.info('Compiling the block "%s"', class_name)
             scope = TransformFactory.make_scope(namespace)
 
         return super().__new__(mcs, class_name, bases, scope)
 
 
-class Source(CallableBlock, metaclass=SourceBase, __root=True):
+class Source(FactoryBlock, metaclass=SourceBase, __root=True):
     """
     Base class for all sources.
     """
@@ -91,7 +89,7 @@ class Source(CallableBlock, metaclass=SourceBase, __root=True):
         pass
 
 
-class Transform(CallableBlock, metaclass=TransformBase, __root=True):
+class Transform(FactoryBlock, metaclass=TransformBase, __root=True):
     """
     Base class for all transforms.
 

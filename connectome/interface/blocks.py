@@ -44,7 +44,7 @@ class Merge(CallableBlock):
         super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks], ids_name), properties)
         self._blocks = blocks
 
-    def __str__(self):
+    def __repr__(self):
         return 'Merge' + format_arguments(self._blocks)
 
 
@@ -77,7 +77,7 @@ class Filter(BaseBlock[FilterLayer]):
         ids = set(ids)
         return cls(lambda id: id in ids)
 
-    def __str__(self):
+    def __repr__(self):
         args = ', '.join(self._layer.names)
         return f'Filter({args})'
 
@@ -93,7 +93,7 @@ class GroupBy(BaseBlock[GroupLayer]):
             comparators.setdefault(name, operator.eq)
         return BaseBlock(MultiGroupLayer(comparators))
 
-    def __str__(self):
+    def __repr__(self):
         return f'GroupBy({repr(self._layer.name)})'
 
 
@@ -102,7 +102,7 @@ class Apply(BaseBlock[ApplyLayer]):
         self.names = sorted(transform)
         super().__init__(ApplyLayer(transform))
 
-    def __str__(self):
+    def __repr__(self):
         args = ', '.join(self.names)
         return f'Apply({args})'
 
@@ -120,7 +120,7 @@ def _resolve_serializer(serializer):
 
 
 class CacheBlock(BaseBlock):
-    def __str__(self):
+    def __repr__(self):
         return self.__class__.__name__
 
 
