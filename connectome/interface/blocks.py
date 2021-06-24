@@ -4,12 +4,12 @@ from typing import Union, Sequence, Callable
 from paramiko.config import SSH_PORT
 
 from .base import BaseBlock, CallableBlock
-from ..layers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheColumnsLayer
-from ..layers.debug import HashDigestLayer
-from ..layers.filter import FilterLayer
-from ..layers.goup import GroupLayer, MultiGroupLayer
-from ..layers.merge import SwitchLayer
-from ..layers.shortcuts import ApplyLayer
+from ..containers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheColumnsLayer
+from ..containers.debug import HashDigestLayer
+from ..containers.filter import FilterLayer
+from ..containers.goup import GroupLayer, MultiGroupLayer
+from ..containers.merge import SwitchLayer
+from ..containers.shortcuts import ApplyLayer
 from ..serializers import Serializer, ChainSerializer
 from ..storage import Storage
 from ..storage.locker import Locker, DummyLocker

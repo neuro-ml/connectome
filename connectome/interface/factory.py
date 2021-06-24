@@ -3,7 +3,7 @@ from typing import Dict, Any
 from .base import CallableBlock
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
 from ..exceptions import GraphError, FieldError
-from ..layers.transform import TransformLayer
+from ..containers.transform import TransformLayer
 from ..utils import extract_signature, MultiDict
 from .prepared import ComputableHash, Prepared
 from .decorators import Meta, Optional, RuntimeAnnotation, Impure

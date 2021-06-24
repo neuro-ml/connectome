@@ -1,7 +1,7 @@
 import pytest
 
-from connectome.layers.cache import MemoryCacheLayer
-from connectome.layers.pipeline import PipelineLayer
+from connectome.containers.cache import MemoryCacheLayer
+from connectome.containers.pipeline import PipelineLayer
 
 
 def test_single(first_simple):

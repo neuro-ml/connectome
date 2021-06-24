@@ -93,7 +93,7 @@ class CacheColumnsLayer(CacheBase):
         edges = list(main.edges)
         key, = main.inputs
         main_outputs = node_to_dict(main.outputs)
-        # TODO: layers must know about property names
+        # TODO: containers must know about property names
         property_name = 'ids'
         if property_name not in main_outputs:
             raise DependencyError(f'The previous layer must contain the "{property_name}" property.')

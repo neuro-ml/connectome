@@ -1,7 +1,7 @@
 import logging
 
 from .compat import SafeMeta
-from ..layers.transform import InheritType
+from ..containers.transform import InheritType
 from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory, FactoryBlock
 

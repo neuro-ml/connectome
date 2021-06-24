@@ -10,11 +10,11 @@ from ..utils import node_to_dict
 logger = logging.getLogger(__name__)
 
 
-class Layer:
+class Container:
     pass
 
 
-class Wrapper(Layer):
+class Wrapper(Container):
     def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
         raise NotImplementedError
 

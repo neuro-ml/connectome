@@ -4,12 +4,12 @@ from typing import Callable, Iterable, TypeVar
 from .compat import Generic
 from .utils import MaybeStr, format_arguments
 from ..engine.base import TreeNode
-from ..layers.base import Layer, EdgesBag
-from ..layers.pipeline import PipelineLayer, LazyPipelineLayer
+from ..containers.base import Container, EdgesBag
+from ..containers.pipeline import PipelineLayer, LazyPipelineLayer
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T', bound=Layer)
+T = TypeVar('T', bound=Container)
 
 
 class BaseBlock(Generic[T]):
