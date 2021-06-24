@@ -15,7 +15,7 @@ class Container:
 
 
 class Wrapper(Container):
-    def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
+    def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         raise NotImplementedError
 
 

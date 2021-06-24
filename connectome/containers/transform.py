@@ -30,7 +30,7 @@ class LayerConnectionState(NamedTuple):
     prev_used_virtual: Set
 
 
-class TransformLayer(EdgesBag):
+class TransformContainer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
                  backward_outputs: Nodes = (), optional_nodes: Sequence[str] = (),
                  virtual_nodes: InheritType = (), persistent_nodes: Sequence[str] = ()):
@@ -50,9 +50,9 @@ class TransformLayer(EdgesBag):
         self.optional_nodes = tuple(optional_nodes)
         self.persistent_nodes = tuple(persistent_nodes)
 
-    def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
+    def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         current = self.freeze()
-        previous = layer.freeze()
+        previous = container.freeze()
         inherit_nodes = self.virtual_nodes
         all_edges = list(previous.edges) + list(current.edges)
 

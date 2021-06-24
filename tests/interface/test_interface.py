@@ -134,7 +134,7 @@ def test_optional(block_maker):
     assert optional.first_optional(10) == 11
     assert optional.second_optional(10) == '10'
 
-    func = optional._layer.loopback(lambda x: x, 'first_optional', 'first_optional')['first_optional']
+    func = optional._container.loopback(lambda x: x, 'first_optional', 'first_optional')['first_optional']
     assert func(100500) == 100500
 
 

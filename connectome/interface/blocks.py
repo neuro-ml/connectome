@@ -3,13 +3,13 @@ from pathlib import Path
 from typing import Union, Sequence, Callable
 from paramiko.config import SSH_PORT
 
-from .base import BaseBlock, CallableBlock
-from ..containers.cache import MemoryCacheLayer, DiskCacheLayer, RemoteStorageLayer, CacheColumnsLayer
-from ..containers.debug import HashDigestLayer
-from ..containers.filter import FilterLayer
-from ..containers.goup import GroupLayer, MultiGroupLayer
-from ..containers.merge import SwitchLayer
-from ..containers.shortcuts import ApplyLayer
+from .base import BaseLayer, CallableLayer
+from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, RemoteStorageContainer, CacheColumnsContainer
+from ..containers.debug import HashDigestContainer
+from ..containers.filter import FilterContainer
+from ..containers.goup import GroupContainer, MultiGroupLayer
+from ..containers.merge import SwitchContainer
+from ..containers.shortcuts import ApplyContainer
 from ..serializers import Serializer, ChainSerializer
 from ..storage import Storage
 from ..storage.locker import Locker, DummyLocker
@@ -18,9 +18,9 @@ from ..utils import PathLike
 from .utils import MaybeStr, format_arguments
 
 
-class Merge(CallableBlock):
-    def __init__(self, *blocks: CallableBlock):
-        properties = [set(block._properties) for block in blocks]
+class Merge(CallableLayer):
+    def __init__(self, *layers: CallableLayer):
+        properties = [set(layer._properties) for layer in layers]
         inter = set.intersection(*properties)
         union = set.union(*properties)
         if inter != union:
@@ -33,7 +33,7 @@ class Merge(CallableBlock):
         ids_name, = properties
 
         id2dataset_index = {}
-        for index, dataset in enumerate(blocks):
+        for index, dataset in enumerate(layers):
             ids = getattr(dataset, ids_name)
             intersection = set(ids) & set(id2dataset_index)
             if intersection:
@@ -41,14 +41,14 @@ class Merge(CallableBlock):
 
             id2dataset_index.update({i: index for i in ids})
 
-        super().__init__(SwitchLayer(id2dataset_index, [s._layer for s in blocks], ids_name), properties)
-        self._blocks = blocks
+        super().__init__(SwitchContainer(id2dataset_index, [s._container for s in layers], ids_name), properties)
+        self._layers = layers
 
     def __repr__(self):
-        return 'Merge' + format_arguments(self._blocks)
+        return 'Merge' + format_arguments(self._layers)
 
 
-class Filter(BaseBlock[FilterLayer]):
+class Filter(BaseLayer[FilterContainer]):
     """
     Filters the `ids` of the current pipeline given a ``predicate``.
 
@@ -61,7 +61,7 @@ class Filter(BaseBlock[FilterLayer]):
     """
 
     def __init__(self, predicate: Callable):
-        super().__init__(FilterLayer(predicate))
+        super().__init__(FilterContainer(predicate))
 
     @classmethod
     def drop(cls, ids: Sequence[str]):
@@ -78,29 +78,29 @@ class Filter(BaseBlock[FilterLayer]):
         return cls(lambda id: id in ids)
 
     def __repr__(self):
-        args = ', '.join(self._layer.names)
+        args = ', '.join(self._container.names)
         return f'Filter({args})'
 
 
-class GroupBy(BaseBlock[GroupLayer]):
+class GroupBy(BaseLayer[GroupContainer]):
     def __init__(self, name: str):
-        super().__init__(GroupLayer(name))
+        super().__init__(GroupContainer(name))
 
     @staticmethod
     def _multiple(*names, **comparators):
         assert set(comparators).issubset(names)
         for name in names:
             comparators.setdefault(name, operator.eq)
-        return BaseBlock(MultiGroupLayer(comparators))
+        return BaseLayer(MultiGroupLayer(comparators))
 
     def __repr__(self):
-        return f'GroupBy({repr(self._layer.name)})'
+        return f'GroupBy({repr(self._container.name)})'
 
 
-class Apply(BaseBlock[ApplyLayer]):
+class Apply(BaseLayer[ApplyContainer]):
     def __init__(self, **transform: Callable):
         self.names = sorted(transform)
-        super().__init__(ApplyLayer(transform))
+        super().__init__(ApplyContainer(transform))
 
     def __repr__(self):
         args = ', '.join(self.names)
@@ -119,42 +119,42 @@ def _resolve_serializer(serializer):
     return serializer
 
 
-class CacheBlock(BaseBlock):
+class CacheLayer(BaseLayer):
     def __repr__(self):
         return self.__class__.__name__
 
 
-class CacheToRam(CacheBlock):
+class CacheToRam(CacheLayer):
     def __init__(self, names: MaybeStr = None, size: int = None):
-        super().__init__(MemoryCacheLayer(names, size))
+        super().__init__(MemoryCacheContainer(names, size))
 
 
-class CacheToDisk(CacheBlock):
+class CacheToDisk(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None, locker: Locker = None):
         names = to_seq(names)
         if locker is None:
             locker = DummyLocker()
-        super().__init__(DiskCacheLayer(names, root, storage, _resolve_serializer(serializer), metadata or {}, locker))
+        super().__init__(DiskCacheContainer(names, root, storage, _resolve_serializer(serializer), metadata or {}, locker))
 
 
-class CacheColumns(CacheBlock):
+class CacheColumns(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: MaybeStr, metadata: dict = None, locker: Locker = None, verbose: bool = False):
         names = to_seq(names)
         if locker is None:
             locker = DummyLocker()
-        super().__init__(CacheColumnsLayer(
+        super().__init__(CacheColumnsContainer(
             names, root, storage, _resolve_serializer(serializer), metadata or {}, locker=locker, verbose=verbose))
 
 
-class RemoteStorageBase(CacheBlock):
+class RemoteStorageBase(CacheLayer):
     def __init__(self, options: Sequence[RemoteOptions],
                  serializer: Union[Serializer, Sequence[Serializer]], names: MaybeStr = None):
         names = to_seq(names)
-        super().__init__(RemoteStorageLayer(names, options, _resolve_serializer(serializer)))
+        super().__init__(RemoteStorageContainer(names, options, _resolve_serializer(serializer)))
 
 
 class RemoteStorage(RemoteStorageBase):
@@ -168,6 +168,6 @@ class RemoteStorage(RemoteStorageBase):
         super().__init__(options, _resolve_serializer(serializer), names)
 
 
-class HashDigest(BaseBlock):
+class HashDigest(BaseLayer):
     def __init__(self, names: MaybeStr):
-        super().__init__(HashDigestLayer(to_seq(names)))
+        super().__init__(HashDigestContainer(to_seq(names)))

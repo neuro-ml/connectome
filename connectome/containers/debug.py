@@ -1,6 +1,6 @@
 from typing import Iterable, Any, Generator
 
-from .transform import TransformLayer
+from .transform import TransformContainer
 from ..cache.disk import key_to_digest
 from ..engine.base import Node, Request, Response, Command
 from ..engine.edges import StaticHash, StaticGraph
@@ -22,7 +22,7 @@ class HashDigestEdge(StaticGraph, StaticHash):
         return value, output.value, digest, pickled
 
 
-class HashDigestLayer(TransformLayer):
+class HashDigestContainer(TransformContainer):
     def __init__(self, names: Iterable[str]):
         inputs, outputs, edges = [], [], []
         for name in names:

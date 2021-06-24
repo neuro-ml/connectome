@@ -1,11 +1,11 @@
 from typing import Callable, Dict, Iterable
 
-from .transform import TransformLayer
+from .transform import TransformContainer
 from ..engine.base import Node
 from ..engine.edges import FunctionEdge, IdentityEdge
 
 
-class ApplyLayer(TransformLayer):
+class ApplyContainer(TransformContainer):
     def __init__(self, transforms: Dict[str, Callable]):
         inputs, outputs, edges = [], [], []
         for name, func in transforms.items():
@@ -17,7 +17,7 @@ class ApplyLayer(TransformLayer):
         super().__init__(inputs, outputs, edges, virtual_nodes=True)
 
 
-class IdentityLayer(TransformLayer):
+class IdentityContainer(TransformContainer):
     def __init__(self, names: Iterable[str]):
         inputs, outputs, edges = [], [], []
         for name in names:

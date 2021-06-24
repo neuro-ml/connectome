@@ -1,9 +1,9 @@
 from typing import Dict, Any
 
-from .base import CallableBlock
+from .base import CallableLayer
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
 from ..exceptions import GraphError, FieldError
-from ..containers.transform import TransformLayer
+from ..containers.transform import TransformContainer
 from ..utils import extract_signature, MultiDict
 from .prepared import ComputableHash, Prepared
 from .decorators import Meta, Optional, RuntimeAnnotation, Impure
@@ -28,7 +28,7 @@ SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__'}
 DOC_MAGIC = '__doc__'
 
 
-class FactoryBlock(CallableBlock):
+class FactoryLayer(CallableLayer):
     pass
 
 
@@ -224,7 +224,7 @@ class GraphFactory:
             scope['__module__'] = module
         return scope
 
-    def build(self, arguments: dict) -> TransformLayer:
+    def build(self, arguments: dict) -> TransformContainer:
         diff = list(set(self.arguments) - set(arguments))
         if diff:
             raise ValueError(f'Missing required arguments: {diff}.')
@@ -233,7 +233,7 @@ class GraphFactory:
             'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
             list(self.inputs), list(self.outputs), list(self.backward_inputs), list(self.backward_outputs),
         )
-        return TransformLayer(
+        return TransformContainer(
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),

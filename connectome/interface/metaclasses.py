@@ -3,7 +3,7 @@ import logging
 from .compat import SafeMeta
 from ..containers.transform import InheritType
 from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory, FactoryBlock
+from .factory import SourceFactory, TransformFactory, FactoryLayer
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class SourceBase(APIMeta):
             def __init__(*args, **kwargs):
                 raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
 
-            assert bases == (FactoryBlock,)
+            assert bases == (FactoryLayer,)
             scope = {'__init__': __init__}
 
         else:
@@ -38,7 +38,7 @@ class SourceBase(APIMeta):
 
             _check_duplicates(namespace)
             _add_from_mixins(namespace, bases)
-            bases = FactoryBlock,
+            bases = FactoryLayer,
             scope = SourceFactory.make_scope(namespace)
 
         return super().__new__(mcs, class_name, bases, scope)
@@ -63,7 +63,7 @@ class TransformBase(APIMeta):
                 factory = TransformFactory(local)
                 super(type(self), self).__init__(factory.build({}), factory.property_names)
 
-            assert bases == (FactoryBlock,)
+            assert bases == (FactoryLayer,)
             scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
 
         else:
@@ -73,14 +73,14 @@ class TransformBase(APIMeta):
                     raise TypeError('Transforms datasets can only inherit directly from "Transform" or mixins.')
 
             _add_from_mixins(namespace, bases)
-            bases = FactoryBlock,
-            logger.info('Compiling the block "%s"', class_name)
+            bases = FactoryLayer,
+            logger.info('Compiling the layer "%s"', class_name)
             scope = TransformFactory.make_scope(namespace)
 
         return super().__new__(mcs, class_name, bases, scope)
 
 
-class Source(FactoryBlock, metaclass=SourceBase, __root=True):
+class Source(FactoryLayer, metaclass=SourceBase, __root=True):
     """
     Base class for all sources.
     """
@@ -89,7 +89,7 @@ class Source(FactoryBlock, metaclass=SourceBase, __root=True):
         pass
 
 
-class Transform(FactoryBlock, metaclass=TransformBase, __root=True):
+class Transform(FactoryLayer, metaclass=TransformBase, __root=True):
     """
     Base class for all transforms.
 

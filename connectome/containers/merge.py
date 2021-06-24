@@ -7,7 +7,7 @@ from ..utils import node_to_dict
 from .base import EdgesBag
 
 
-class SwitchLayer(EdgesBag):
+class SwitchContainer(EdgesBag):
     def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag], keys_name: str):
         inputs = []
         groups = []

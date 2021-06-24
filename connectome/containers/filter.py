@@ -10,7 +10,7 @@ from ..engine.node_hash import NodeHashes, FilterHash
 from ..utils import extract_signature, node_to_dict
 
 
-class FilterLayer(Wrapper):
+class FilterContainer(Wrapper):
     """
     Changes only the `keys` attribute.
     """
@@ -40,8 +40,8 @@ class FilterLayer(Wrapper):
         mapping = TreeNode.from_edges(edges)
         return Graph([mapping[copy.inputs[0]]], mapping[out])
 
-    def wrap(self, layer: EdgesBag) -> EdgesBag:
-        main = layer.freeze()
+    def wrap(self, container: EdgesBag) -> EdgesBag:
+        main = container.freeze()
         outputs = list(main.outputs)
         edges = list(main.edges)
 
@@ -52,7 +52,7 @@ class FilterLayer(Wrapper):
         outputs.append(out)
 
         # filter
-        graph = self._make_graph(layer)
+        graph = self._make_graph(container)
         edges.append(FilterEdge(graph).bind(keys, out))
         return EdgesBag(main.inputs, outputs, edges, IdentityContext())
 

@@ -27,15 +27,15 @@ class CacheBase(Wrapper):
     pass
 
 
-class CacheLayer(CacheBase):
+class CacheContainer(CacheBase):
     def __init__(self, names):
         self.cache_names = names
 
     def get_storage(self) -> Cache:
         raise NotImplementedError
 
-    def wrap(self, layer: 'EdgesBag') -> 'EdgesBag':
-        state = layer.freeze()
+    def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
+        state = container.freeze()
         forward_outputs = node_to_dict(state.outputs)
 
         edges = list(state.edges)
@@ -50,7 +50,7 @@ class CacheLayer(CacheBase):
         return EdgesBag(state.inputs, outputs, edges, IdentityContext())
 
 
-class MemoryCacheLayer(CacheLayer):
+class MemoryCacheContainer(CacheContainer):
     def __init__(self, names, size):
         super().__init__(names)
         self.size = size
@@ -59,7 +59,7 @@ class MemoryCacheLayer(CacheLayer):
         return MemoryCache(self.size)
 
 
-class DiskCacheLayer(CacheLayer):
+class DiskCacheContainer(CacheContainer):
     def __init__(self, names, root, storage, serializer, metadata, locker):
         super().__init__(names)
         self.storage = DiskCache(root, storage, serializer, metadata, locker)
@@ -68,7 +68,7 @@ class DiskCacheLayer(CacheLayer):
         return self.storage
 
 
-class RemoteStorageLayer(CacheLayer):
+class RemoteStorageContainer(CacheContainer):
     def __init__(self, names, options, serializer):
         super().__init__(names)
         self.storage = RemoteCache(options, serializer)
@@ -77,7 +77,7 @@ class RemoteStorageLayer(CacheLayer):
         return self.storage
 
 
-class CacheColumnsLayer(CacheBase):
+class CacheColumnsContainer(CacheBase):
     """
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
@@ -88,8 +88,8 @@ class CacheColumnsLayer(CacheBase):
         self.disk = DiskCache(root, storage, serializer, metadata, locker)
         self.ram = MemoryCache(None)
 
-    def wrap(self, layer: EdgesBag) -> EdgesBag:
-        main = layer.freeze()
+    def wrap(self, container: EdgesBag) -> EdgesBag:
+        main = container.freeze()
         edges = list(main.edges)
         key, = main.inputs
         main_outputs = node_to_dict(main.outputs)
@@ -100,7 +100,7 @@ class CacheColumnsLayer(CacheBase):
 
         keys = main_outputs[property_name]
 
-        copy = layer.freeze()
+        copy = container.freeze()
         mapping = TreeNode.from_edges(copy.edges)
         outputs_copy = node_to_dict(copy.outputs)
         graph_inputs = [mapping[copy.inputs[0]]]

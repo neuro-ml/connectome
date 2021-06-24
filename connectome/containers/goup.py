@@ -10,7 +10,7 @@ from ..engine.graph import Graph
 from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
 
 
-class GroupLayer(Wrapper):
+class GroupContainer(Wrapper):
     def __init__(self, name: str):
         self.name = name
 
@@ -22,8 +22,8 @@ class GroupLayer(Wrapper):
 
         raise ValueError(f'The previous layer must contain the attribute "{name}"')
 
-    def wrap(self, layer: EdgesBag) -> EdgesBag:
-        main = layer.freeze()
+    def wrap(self, container: EdgesBag) -> EdgesBag:
+        main = container.freeze()
 
         inp, = main.inputs
         edges = list(main.edges)
@@ -126,8 +126,8 @@ class MultiGroupLayer(Wrapper):
 
         raise ValueError(f'The previous layer must contain the attribute "{name}"')
 
-    def wrap(self, layer: EdgesBag) -> EdgesBag:
-        main = layer.freeze()
+    def wrap(self, container: EdgesBag) -> EdgesBag:
+        main = container.freeze()
 
         inp, = main.inputs
         edges = list(main.edges)

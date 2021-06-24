@@ -31,7 +31,7 @@ def sleeper(s):
 
 def assert_empty_state(block):
     def find_cache():
-        for edge in block._layer.edges:
+        for edge in block._container.edges:
             edge = edge.edge
             if isinstance(edge, CacheEdge):
                 return edge.cache

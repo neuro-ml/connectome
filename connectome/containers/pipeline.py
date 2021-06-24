@@ -1,22 +1,22 @@
 from .base import Wrapper, EdgesBag
 
 
-class PipelineLayer(EdgesBag):
+class PipelineContainer(EdgesBag):
     def __init__(self, head: EdgesBag, *tail: Wrapper):
-        self.layers = [head, *tail]
+        self.containers = [head, *tail]
         for layer in tail:
             head = layer.wrap(head)
 
         state = head.freeze()
         super().__init__(state.inputs, state.outputs, state.edges, state.context)
 
-    def wrap(self, layer: EdgesBag) -> EdgesBag:
-        return PipelineLayer(layer, *self.layers)
+    def wrap(self, container: EdgesBag) -> EdgesBag:
+        return PipelineContainer(container, *self.containers)
 
 
-class LazyPipelineLayer(Wrapper):
-    def __init__(self, *layers: Wrapper):
-        self.layers = layers
+class LazyPipelineContainer(Wrapper):
+    def __init__(self, *containers: Wrapper):
+        self.containers = containers
 
-    def wrap(self, layer: EdgesBag) -> EdgesBag:
-        return PipelineLayer(layer, *self.layers)
+    def wrap(self, container: EdgesBag) -> EdgesBag:
+        return PipelineContainer(container, *self.containers)
