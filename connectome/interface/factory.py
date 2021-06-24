@@ -59,10 +59,14 @@ class GraphFactory:
             Input: self.inputs, Output: self.outputs, Parameter: self.parameters,
             InverseInput: self.backward_inputs, InverseOutput: self.backward_outputs,
         }
-        self._init()
+        self._before_collect()
         self._collect_nodes()
+        self._after_collect()
 
-    def _init(self):
+    def _before_collect(self):
+        pass
+
+    def _after_collect(self):
         pass
 
     def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
@@ -148,6 +152,7 @@ class GraphFactory:
 
             # runtime stuff
             if Meta in decorators:
+                # TODO: check duplicates
                 self.property_names.add(name)
                 decorators.remove(Meta)
             if Optional in decorators:
@@ -226,7 +231,7 @@ class GraphFactory:
 
 
 class SourceFactory(GraphFactory):
-    def _init(self):
+    def _before_collect(self):
         self._key_name = 'id'
         if self._key_name in self.scope:
             raise FieldError(f'Cannot override the key attribute ({self._key_name})')
@@ -234,10 +239,11 @@ class SourceFactory(GraphFactory):
         self.ID = self.inputs[self._key_name]
         self.inputs.freeze()
         self.edges.append(IdentityEdge().bind(self.ID, self.outputs[self._key_name]))
-        # TODO: remove this
-        self.property_names.add('ids')
-        self.persistent_names.update((self._key_name, 'ids'))
+        self.persistent_names.add(self._key_name)
         self.prepared_dispatch[ComputableHash] = self._process_precomputed
+
+    def _after_collect(self):
+        self.persistent_names.update(self.property_names)
 
     def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
         ids = {x for x in inputs if isinstance(x, Input)}
@@ -259,7 +265,7 @@ class SourceFactory(GraphFactory):
 
 
 class TransformFactory(GraphFactory):
-    def _init(self):
+    def _before_collect(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit
 
     def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:

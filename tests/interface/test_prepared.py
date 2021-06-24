@@ -103,6 +103,7 @@ def test_hash_graph():
         return x
 
     class A(Source):
+        @meta
         def ids():
             return '1',
 

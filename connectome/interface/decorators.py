@@ -8,10 +8,6 @@ class FactoryAnnotation:
             raise TypeError('Can only decorate callable objects')
         self.__func__ = func
 
-    def __get__(self, instance, owner):
-        self.instance = instance
-        return self.__func__
-
     def __call__(self, *args, **kwargs):
         return self.__func__(*args, **kwargs)
 

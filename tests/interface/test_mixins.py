@@ -121,3 +121,15 @@ def test_inheritance():
     with pytest.raises(TypeError):
         class E(Plain, SizeMixin):
             pass
+
+
+def test_mixin_with_ids():
+    class A(Mixin):
+        @meta
+        def ids():
+            return tuple('012')
+
+    class B(Source, A):
+        pass
+
+    assert B().ids == tuple('012')
