@@ -9,6 +9,7 @@ from paramiko import SSHClient, AuthenticationException, SSHException
 from paramiko.config import SSH_PORT, SSHConfig
 from scp import SCPClient, SCPException
 
+from .config import load_config
 from .disk import digest_to_relative, FILENAME
 from .interface import RemoteLocation
 from ..utils import PathLike
@@ -41,6 +42,7 @@ class SSHLocation(RemoteLocation):
         self.hostname, self.port, self.username, self.password, self.key = hostname, port, username, password, key
         self.root = Path(root)
         self.ssh = ssh
+        self._levels = None
 
     def fetch(self, keys: Sequence[str], store: Callable[[str, Path], Any]) -> Sequence[str]:
         visited = set()
@@ -49,7 +51,8 @@ class SSHLocation(RemoteLocation):
                 temp = Path(temp_dir) / 'value'
                 for key in keys:
                     try:
-                        scp.get(str(self.root / digest_to_relative(key) / FILENAME), str(temp))
+                        self._get_levels(scp)
+                        scp.get(str(self.root / digest_to_relative(key, self._levels) / FILENAME), str(temp))
                         store(key, temp)
                         os.remove(temp)
 
@@ -62,10 +65,20 @@ class SSHLocation(RemoteLocation):
     def download(self, key: str, file: Path):
         with SCPClient(self.ssh.get_transport()) as scp:
             try:
-                scp.get(str(self.root / digest_to_relative(key) / FILENAME), str(file))
+                self._get_levels(scp)
+                scp.get(str(self.root / digest_to_relative(key, self._levels) / FILENAME), str(file))
                 return True
             except (SCPException, socket.timeout):
                 return False
+
+    def _get_levels(self, scp):
+        if self._levels is not None:
+            return
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir) / 'config.yml'
+            scp.get(str(self.root / 'config.yml'), str(temp))
+            self._levels = load_config(temp_dir)['levels']
 
     def __enter__(self):
         try:
