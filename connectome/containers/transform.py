@@ -55,9 +55,10 @@ class TransformContainer(EdgesBag):
         previous = container.freeze()
         inherit_nodes = self.virtual_nodes
         all_edges = list(previous.edges) + list(current.edges)
+        persistent_nodes = tuple(set(previous.persistent_nodes) | set(self.persistent_nodes))
 
-        if self.virtual_nodes != INHERIT_ALL:
-            inherit_nodes = list(self.virtual_nodes) + list(self.persistent_nodes)
+        if inherit_nodes != INHERIT_ALL:
+            inherit_nodes = list(inherit_nodes) + list(persistent_nodes)
 
         state = LayerConnectionState(
             cur_inputs=current.inputs,
@@ -90,7 +91,7 @@ class TransformContainer(EdgesBag):
         return EdgesBag(
             state.inputs, state.outputs, state.edges,
             PipelineContext(previous.context, current.context),
-            virtual_nodes=new_virtual_nodes
+            virtual_nodes=new_virtual_nodes, persistent_nodes=persistent_nodes,
         )
 
     @staticmethod

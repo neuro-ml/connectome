@@ -37,11 +37,12 @@ class NoContext(Context):
 
 class EdgesBag(Wrapper):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: Union[bool, Sequence[str]] = ()):
+                 virtual_nodes: Union[bool, Sequence[str]] = (), persistent_nodes: Sequence[str] = ()):
         self.inputs = tuple(inputs)
         self.outputs = tuple(outputs)
         self.edges = tuple(edges)
         self.virtual_nodes = virtual_nodes
+        self.persistent_nodes = persistent_nodes
         self.context = context if context is not None else NoContext()
 
     def freeze(self) -> 'EdgesBag':
@@ -59,7 +60,7 @@ class EdgesBag(Wrapper):
             update_map(self.outputs, node_map),
             edges_copy,
             self.context.update(node_map),
-            virtual_nodes=self.virtual_nodes
+            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
         )
 
     def compile(self):
@@ -76,7 +77,6 @@ class EdgesBag(Wrapper):
             inputs = inputs,
         inputs = tuple(inputs)
 
-        # TODO: is this a problem though?
         if len(set(inputs)) != len(inputs):
             raise ValueError(f'The inputs contain duplicates: {inputs}')
 

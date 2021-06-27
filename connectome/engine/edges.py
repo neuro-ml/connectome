@@ -46,7 +46,7 @@ class StaticEdge(StaticHash):
 
 class FunctionEdge(StaticGraph, StaticHash):
     def __init__(self, function: Callable, arity: int):
-        super().__init__(arity, uses_hash=False)
+        super().__init__(arity)
         self.function = function
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
@@ -63,7 +63,7 @@ class FunctionEdge(StaticGraph, StaticHash):
 
 class ComputableHashBase(Edge, ABC):
     def __init__(self, function: Callable, arity: int):
-        super().__init__(arity, uses_hash=True)
+        super().__init__(arity)
         self.function = function
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
@@ -91,7 +91,7 @@ class ImpureFunctionEdge(ComputableHashBase):
 
 class IdentityEdge(StaticGraph, StaticEdge):
     def __init__(self):
-        super().__init__(arity=1, uses_hash=False)
+        super().__init__(arity=1)
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
@@ -106,7 +106,7 @@ class ConstantEdge(StaticEdge):
     """
 
     def __init__(self, value):
-        super().__init__(arity=0, uses_hash=False)
+        super().__init__(arity=0)
         self.value = value
         self._hash = LeafHash(self.value)
 
@@ -122,7 +122,7 @@ class ConstantEdge(StaticEdge):
 
 class CacheEdge(StaticGraph, StaticHash):
     def __init__(self, storage: Cache):
-        super().__init__(arity=1, uses_hash=True)
+        super().__init__(arity=1)
         self.cache = storage
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
@@ -145,7 +145,7 @@ class CacheEdge(StaticGraph, StaticHash):
 
 class ProductEdge(StaticGraph, StaticEdge):
     def __init__(self, arity: int):
-        super().__init__(arity, uses_hash=False)
+        super().__init__(arity)
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return TupleHash(*inputs)

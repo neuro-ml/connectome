@@ -51,7 +51,7 @@ class SwitchContainer(EdgesBag):
 
 class SwitchEdge(Edge):
     def __init__(self, id_to_index: dict, n_branches: int):
-        super().__init__(arity=1 + n_branches, uses_hash=True)
+        super().__init__(arity=1 + n_branches)
         self.id_to_index = id_to_index
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:

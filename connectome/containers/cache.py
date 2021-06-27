@@ -131,7 +131,7 @@ class CachedColumn(Edge):
     """
 
     def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph, verbose: bool):
-        super().__init__(arity=3, uses_hash=True)
+        super().__init__(arity=3)
         self.graph = graph
         self.disk = disk
         self.ram = ram

@@ -59,7 +59,7 @@ class FilterContainer(Wrapper):
 
 class FilterEdge(StaticEdge):
     def __init__(self, graph: Graph):
-        super().__init__(arity=1, uses_hash=False)
+        super().__init__(arity=1)
         self.graph = graph
         self._hash = self.graph.hash()
 

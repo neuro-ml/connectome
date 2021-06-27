@@ -26,6 +26,7 @@ def unwrap_transform(value):
 
 SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__'}
 DOC_MAGIC = '__doc__'
+BUILTIN_DECORATORS = staticmethod, classmethod, property
 
 
 class FactoryLayer(CallableLayer):
@@ -56,7 +57,7 @@ class GraphFactory:
         self.property_names = set()
         # names of persistent nodes
         # TODO move it somewhere
-        self.persistent_names = {'ids', 'id'}
+        self.persistent_names = set()
         self.docstring = None
         self.magic_dispatch: Dict[str, Callable[[Any], Any]] = {DOC_MAGIC: self._process_doc}
         self.prepared_dispatch: Dict[type, Callable] = {}
@@ -123,6 +124,8 @@ class GraphFactory:
             if len(group) > 1:
                 raise GraphError(f'Private field "{name}" got multiple definitions')
             value, = group
+            if isinstance(value, BUILTIN_DECORATORS):
+                raise FieldError(f"{type(value).__name__} objects can't be private ({name}).")
 
             self.parameters.add(name)
             if not is_callable(value) or value is inspect.Parameter.empty:
@@ -146,6 +149,9 @@ class GraphFactory:
                     raise RuntimeError(f'Unrecognized "prepared" method: "{name}"')
                 self.edges.extend(self.prepared_dispatch[kind](name, value))
                 continue
+
+            if isinstance(value, BUILTIN_DECORATORS):
+                raise FieldError(f"{type(value).__name__} objects are not currently supported ({name}).")
 
             if not is_callable(value):
                 raise FieldError(f'The type of the "{name}" field cannot be determined.')

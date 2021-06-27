@@ -19,3 +19,18 @@ def test_missing_param():
         class A(Transform):
             def f(_param):
                 return
+
+
+def test_builtin_decorators():
+    for decorator in [staticmethod, classmethod, property]:
+        with pytest.raises(FieldError, match='not currently supported'):
+            class A(Transform):
+                @decorator
+                def f():
+                    pass
+
+        with pytest.raises(FieldError, match='private'):
+            class B(Transform):
+                @decorator
+                def _f():
+                    pass

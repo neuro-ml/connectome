@@ -11,9 +11,9 @@ from ..engine.node_hash import NodeHashes, NodeHash
 
 class HashDigestEdge(StaticGraph, StaticHash):
     def __init__(self):
-        super().__init__(arity=1, uses_hash=True)
-        self._folder_levels = 1, 31, 32
-        self._hasher = partial(blake2b, digest_size=sum(self._folder_levels))
+        super().__init__(arity=1)
+        # TODO: find a way to pass different hashers
+        self._hasher = partial(blake2b, digest_size=64)
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]

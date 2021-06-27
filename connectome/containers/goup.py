@@ -63,7 +63,7 @@ class MappingEdge(StaticGraph, StaticHash):
     """ Groups the incoming values using `graph` as a key function."""
 
     def __init__(self, graph):
-        super().__init__(arity=1, uses_hash=True)
+        super().__init__(arity=1)
         self.graph = graph
         # TODO: this is potentially dangerous. should use a composition of Mapping and MemoryCache
         self._mapping = None
@@ -87,7 +87,7 @@ class MappingEdge(StaticGraph, StaticHash):
 
 class GroupEdge(StaticGraph, StaticEdge):
     def __init__(self, graph):
-        super().__init__(arity=2, uses_hash=True)
+        super().__init__(arity=2)
         self.graph = graph
         self._hash = self.graph.hash()
 
@@ -170,7 +170,7 @@ class MultiGroupLayer(Wrapper):
 
 class HashMappingEdge(StaticGraph, StaticHash):
     def __init__(self, graph, comparators):
-        super().__init__(arity=1, uses_hash=True)
+        super().__init__(arity=1)
         self.graph = graph
         self._mapping = None
         self.comparators = comparators

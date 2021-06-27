@@ -16,9 +16,8 @@ Response = Union[NodeHash, Any, Tuple[NodeHash, Any]]
 
 
 class Edge(ABC):
-    def __init__(self, arity: int, uses_hash: bool):
+    def __init__(self, arity: int):
         self.arity = arity
-        self._uses_hash = uses_hash
 
     @abstractmethod
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
@@ -36,10 +35,6 @@ class Edge(ABC):
     @abstractmethod
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         pass
-
-    @property
-    def uses_hash(self) -> bool:
-        return self._uses_hash
 
     def bind(self, inputs: Union['Node', 'Nodes'], output: 'Node') -> 'BoundEdge':
         if isinstance(inputs, Node):

@@ -18,8 +18,6 @@ class Graph:
             inspect.Parameter(x.name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             for x in inputs
         ])
-        # TODO: do we need this optimization?
-        self.use_hash = True  # uses_hash(output)
         self.inputs = inputs
         self.output = output
         self.counts = counts
@@ -35,7 +33,7 @@ class Graph:
     def _prepare_cache(self, arguments):
         # put objects into inputs if hashes are not required
         hashes = EvictionCache(self.counts.copy(), {
-            node: (LeafHash(arguments[node.name] if self.use_hash else object()), None)
+            node: (LeafHash(arguments[node.name]), None)
             for node in self.inputs
         })
         cache = EvictionCache(self.counts.copy(), {node: arguments[node.name] for node in self.inputs})
@@ -67,12 +65,6 @@ def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
 # TODO: deprecate?
 def compile_graph(inputs: TreeNodes, outputs: TreeNode):
     return Graph(inputs, outputs).call
-
-
-def uses_hash(node: TreeNode) -> bool:
-    if node.is_leaf:
-        return False
-    return node.edge.uses_hash or any(map(uses_hash, node.parents))
 
 
 def validate_graph(inputs: TreeNodes, output: TreeNode):
