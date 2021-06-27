@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from connectome import Source, Transform, Chain, CacheToRam, insert, meta
+from connectome import Source, Transform, Chain, CacheToRam, meta
 from connectome.exceptions import DependencyError
 from connectome.interface.base import LazyChain
 from connectome.interface.blocks import HashDigest, CacheColumns
@@ -17,11 +17,9 @@ class DS(Source):
 class Some(Transform):
     __inherit__ = True
 
-    @insert
     def shape(image):
         return image.shape
 
-    @insert
     def some_false():
         return False
 

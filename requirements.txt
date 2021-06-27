@@ -6,3 +6,4 @@ scp
 tqdm
 redis
 pyyaml
+humanfriendly

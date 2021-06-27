@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import humanfriendly
 from tqdm import tqdm
 
 from .config import root_params, load_config, make_locker, make_algorithm
@@ -31,8 +32,8 @@ class Disk:
         assert set(config) <= {'algorithm', 'levels', 'max_size', 'free_disk_size', 'locker'}
 
         self.locker = make_locker(config)
-        self._min_free_size = config.get('free_disk_size', 0)
-        self._max_size = config.get('max_size')
+        self._min_free_size = parse_size(config.get('free_disk_size', 0))
+        self._max_size = parse_size(config.get('max_size'))
 
         if not self.locker.track_size:
             assert self._max_size is None or self._max_size == float('inf'), self._max_size
@@ -178,3 +179,12 @@ def copy_file(source, destination):
 def match_files(first: Path, second: Path):
     if not filecmp.cmp(first, second, shallow=False):
         raise ValueError(f'Files do not match: {first} vs {second}')
+
+
+def parse_size(x):
+    if isinstance(x, int):
+        return x
+    if isinstance(x, str):
+        return humanfriendly.parse_size(x)
+    if x is not None:
+        raise ValueError(f"Couldn't understand the size format: {x}")

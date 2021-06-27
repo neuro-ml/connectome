@@ -16,8 +16,8 @@ def root_params(root: Path):
     return root.stat().st_mode & 0o777, root.group()
 
 
-def load_config(root: Path):
-    with open(root / FILENAME) as file:
+def load_config(root: PathLike):
+    with open(Path(root) / FILENAME) as file:
         # TODO: assert read-only
         # TODO: require algorithm, levels
         return safe_load(file)

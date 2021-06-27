@@ -29,8 +29,8 @@ Key = str
 class DiskCache(Cache):
     def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict):
         super().__init__()
-        self.root = root
-        self.permissions, self.group = root_params(root)
+        self.root = Path(root)
+        self.permissions, self.group = root_params(self.root)
         self.metadata = metadata
         self.serializer = serializer
         self.storage = storage
