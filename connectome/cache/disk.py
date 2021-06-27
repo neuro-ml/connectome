@@ -4,16 +4,16 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Union, Tuple
+from typing import Any, Tuple
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 from ..storage import Storage
-from ..storage.digest import digest_to_relative, digest_bytes
-from ..storage.disk import wait_for_true, init_root
+from ..storage.config import root_params, make_algorithm, load_config, make_locker
+from ..storage.digest import digest_to_relative
+from ..storage.disk import wait_for_true
 from ..engine import NodeHash
 from ..serializers import Serializer
-from ..storage.locker import Locker
 from ..storage.utils import touch, create_folders, to_read_only, get_size
 
 logger = logging.getLogger(__name__)
@@ -27,21 +27,26 @@ Key = str
 
 
 class DiskCache(Cache):
-    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict, locker: Locker,
-                 permissions: Union[int, None] = None, group: Union[str, int, None] = None):
+    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict):
         super().__init__()
-        self.root, self.permissions, self.group = init_root(root, permissions, group)
+        self.root = root
+        self.permissions, self.group = root_params(root)
         self.metadata = metadata
         self.serializer = serializer
         self.storage = storage
 
-        self._locker = locker
+        config = load_config(root)
+        assert set(config) <= {'algorithm', 'levels', 'locker'}
+
+        self._hasher, self._folder_levels = make_algorithm(config)
+        self.locker = make_locker(config)
+
         self._sleep_time = 0.1
         self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
 
     def get(self, param: NodeHash) -> Tuple[Any, bool]:
         key = param.value
-        pickled, digest = key_to_digest(key)
+        pickled, digest = key_to_digest(self._hasher, key)
         logger.info('Writing %s', digest)
 
         # try to load
@@ -51,7 +56,7 @@ class DiskCache(Cache):
 
         # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
-            local_pickled, local_digest = key_to_digest(key, version)
+            local_pickled, local_digest = key_to_digest(self._hasher, key, version)
 
             # we can simply load the previous version, because nothing really changed
             value, exists = self._load(local_digest, local_pickled)
@@ -61,18 +66,18 @@ class DiskCache(Cache):
         return None, False
 
     def set(self, param: NodeHash, value: Any):
-        pickled, digest = key_to_digest(param.value)
+        pickled, digest = key_to_digest(self._hasher, param.value)
         logger.info('Reading %s', digest)
-        wait_for_true(self._locker.start_writing, digest, self._sleep_time, self._sleep_iters)
+        wait_for_true(self.locker.start_writing, digest, self._sleep_time, self._sleep_iters)
         try:
             self._save_value(digest, value, pickled)
         finally:
-            self._locker.stop_writing(digest)
+            self.locker.stop_writing(digest)
 
     def _load(self, digest, pickled):
-        wait_for_true(self._locker.start_reading, digest, self._sleep_time, self._sleep_iters)
+        wait_for_true(self.locker.start_reading, digest, self._sleep_time, self._sleep_iters)
         try:
-            base = self.root / digest_to_relative(digest)
+            base = self.root / digest_to_relative(digest, self._folder_levels)
             if not base.exists():
                 return None, False
 
@@ -87,10 +92,10 @@ class DiskCache(Cache):
             return self.serializer.load(base / DATA_FOLDER), True
 
         finally:
-            self._locker.stop_reading(digest)
+            self.locker.stop_reading(digest)
 
     def _save_value(self, digest: str, value, pickled):
-        base = self.root / digest_to_relative(digest)
+        base = self.root / digest_to_relative(digest, self._folder_levels)
         if base.exists():
             check_consistency(base / HASH_FILENAME, pickled)
             # TODO: also compare the raw bytes of `value` and dumped value?
@@ -106,8 +111,8 @@ class DiskCache(Cache):
             # meta
             size = self._save_meta(base, pickled)
             self._mirror_to_storage(data_folder)
-            if self._locker.track_size:
-                self._locker.inc_size(size)
+            if self.locker.track_size:
+                self.locker.inc_size(size)
 
         except BaseException as e:
             shutil.rmtree(base)
@@ -153,9 +158,9 @@ class DiskCache(Cache):
             file.symlink_to(path)
 
 
-def key_to_digest(key, version=LATEST_VERSION):
+def key_to_digest(algorithm, key, version=LATEST_VERSION):
     pickled = dumps(key, version=version)
-    digest = digest_bytes(pickled)
+    digest = algorithm(pickled).hexdigest()
     return pickled, digest
 
 

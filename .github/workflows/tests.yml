@@ -22,10 +22,15 @@ jobs:
           pip install -r tests/requirements.txt
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml -m "not redis"
-      - name: Upload pytest and coverage results
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml -m "not redis" --cov=./connectome --cov-report=xml
+      - name: Upload pytest results
         uses: actions/upload-artifact@v2
         with:
           name: pytest-results-${{ matrix.python-version }}
           path: reports/junit-${{ matrix.python-version }}.xml
         if: ${{ always() }}
+      - name: Upload coverage results
+        uses: codecov/codecov-action@v1
+        with:
+          fail_ci_if_error: true
+          verbose: true

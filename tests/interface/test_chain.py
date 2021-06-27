@@ -1,8 +1,11 @@
+from pathlib import Path
+
 import pytest
 from connectome import Source, Transform, Chain, CacheToRam, insert, meta
 from connectome.exceptions import DependencyError
 from connectome.interface.base import LazyChain
 from connectome.interface.blocks import HashDigest, CacheColumns
+from connectome.storage.config import init_storage
 
 
 class DS(Source):
@@ -143,7 +146,7 @@ def test_inheritance():
         FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll()
 
 
-def test_lazy(tmpdir, temp_storage):
+def test_lazy(tmpdir, storage_factory):
     class A(Source):
         @meta
         def ids():
@@ -161,12 +164,15 @@ def test_lazy(tmpdir, temp_storage):
         def g(y):
             return y
 
-    cache = CacheColumns(tmpdir, temp_storage, [], [])
-    A() >> B() >> cache
-    with pytest.raises(DependencyError):
-        B() >> cache
+    with storage_factory() as storage:
+        root = Path(tmpdir) / 'cache'
+        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32])
+        cache = CacheColumns(root, storage, [], [])
+        A() >> B() >> cache
+        with pytest.raises(DependencyError):
+            B() >> cache
 
-    lc = LazyChain(B(), cache)
-    ds = A() >> lc
-    assert ds.ids == ('0',)
-    assert ds.g(1) == 1
+        lc = LazyChain(B(), cache)
+        ds = A() >> lc
+        assert ds.ids == ('0',)
+        assert ds.g(1) == 1

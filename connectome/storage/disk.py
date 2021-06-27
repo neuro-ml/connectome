@@ -4,64 +4,65 @@ import os
 import errno
 import shutil
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from tqdm import tqdm
 
+from .config import root_params, load_config, make_locker, make_algorithm
 from .digest import digest_to_relative
-from .locker import Locker, DummyLocker, wait_for_true
-from .utils import get_size, mkdir, create_folders, to_read_only
+from .locker import wait_for_true
+from .utils import get_size, create_folders, to_read_only
 from ..utils import PathLike
 
 Key = str
 FILENAME = 'data'
 # TODO: make sure it's not a symlink
+# TODO: generate a random temp name, or remove this altogether
 TEMPFILE = '.temp'
 logger = logging.getLogger(__name__)
 
 
 class Disk:
-    def __init__(self, root: PathLike, min_free_size: int = 0, max_size: int = None, locker: Locker = None,
-                 permissions: Union[int, None] = None, group: Union[str, int, None] = None, lock_prefix_size: int = 2):
-        if locker is None:
-            locker = DummyLocker()
-        if not locker.track_size:
-            assert max_size is None or max_size == float('inf'), max_size
+    def __init__(self, root: PathLike):
+        self.root = Path(root)
+        self.permissions, self.group = root_params(self.root)
 
-        self.root, self.permissions, self.group = init_root(root, permissions, group)
-        self.min_free_space = min_free_size
-        self.max_size = max_size
+        config = load_config(self.root)
+        assert set(config) <= {'algorithm', 'levels', 'max_size', 'free_disk_size', 'locker'}
 
-        self._locker = locker
+        self.locker = make_locker(config)
+        self._min_free_size = config.get('free_disk_size', 0)
+        self._max_size = config.get('max_size')
+
+        if not self.locker.track_size:
+            assert self._max_size is None or self._max_size == float('inf'), self._max_size
+
+        self._hasher, self._folder_levels = make_algorithm(config)
+
+        # TODO: remove this
         self._sleep_time = 0.01
         self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
-        self._prefix_size = lock_prefix_size
 
     def _key_to_path(self, key: Key, temp: bool = False):
         name = TEMPFILE if temp else FILENAME
-        return self.root / digest_to_relative(key) / name
-
-    def _to_lock_key(self, key: Key):
-        return key[:self._prefix_size]
+        return self.root / digest_to_relative(key, self._folder_levels) / name
 
     def _writeable(self):
         result = True
 
-        if self.min_free_space > 0:
-            result = result and shutil.disk_usage(self.root).free >= self.min_free_space
+        if self._min_free_size > 0:
+            result = result and shutil.disk_usage(self.root).free >= self._min_free_size
 
-        if self.max_size is not None and self.max_size < float('inf'):
-            result = result and self._locker.get_size() <= self.max_size
+        if self._max_size is not None and self._max_size < float('inf'):
+            result = result and self.locker.get_size() <= self._max_size
 
         return result
 
     def reserve_write(self, key: Key):
-        key = self._to_lock_key(key)
-        wait_for_true(self._locker.start_writing, key, self._sleep_time, self._sleep_iters)
+        wait_for_true(self.locker.start_writing, key, self._sleep_time, self._sleep_iters)
 
     def release_write(self, key: Key):
-        key = self._to_lock_key(key)
-        self._locker.stop_writing(key)
+        self.locker.stop_writing(key)
 
     def write(self, key: Key, file: Path) -> bool:
         file = Path(file)
@@ -89,8 +90,8 @@ class Disk:
 
         try:
             copy_file(file, temporary)
-            if self._locker.track_size:
-                self._locker.inc_size(get_size(temporary))
+            if self.locker.track_size:
+                self.locker.inc_size(get_size(temporary))
 
         except BaseException as e:
             shutil.rmtree(folder)
@@ -105,24 +106,22 @@ class Disk:
     def reserve_read(self, key: Key) -> Optional[Path]:
         path = self._key_to_path(key)
         temporary = self._key_to_path(key, True)
-        key = self._to_lock_key(key)
 
-        wait_for_true(self._locker.start_reading, key, self._sleep_time, self._sleep_iters)
+        wait_for_true(self.locker.start_reading, key, self._sleep_time, self._sleep_iters)
 
         # something went really wrong
         if temporary.exists():
-            self._locker.stop_reading(key)
+            self.locker.stop_reading(key)
             raise RuntimeError(f'The storage for {temporary.parent} appears to be broken.')
 
         if not path.exists():
-            self._locker.stop_reading(key)
+            self.locker.stop_reading(key)
             return None
 
         return path
 
     def release_read(self, key: Key):
-        key = self._to_lock_key(key)
-        self._locker.stop_reading(key)
+        self.locker.stop_reading(key)
 
     def remove(self, key: Key):
         file = self._key_to_path(key)
@@ -136,8 +135,8 @@ class Disk:
             os.chmod(file, self.permissions)
             size = get_size(file)
             shutil.rmtree(folder)
-            if self._locker.track_size:
-                self._locker.dec_size(size)
+            if self.locker.track_size:
+                self.locker.dec_size(size)
 
         finally:
             self.release_write(key)
@@ -160,7 +159,7 @@ class Disk:
             assert not file.is_symlink()
             size += get_size(file)
 
-        self._locker.set_size(size)
+        self.locker.set_size(size)
 
 
 def copy_file(source, destination):
@@ -179,22 +178,3 @@ def copy_file(source, destination):
 def match_files(first: Path, second: Path):
     if not filecmp.cmp(first, second, shallow=False):
         raise ValueError(f'Files do not match: {first} vs {second}')
-
-
-def init_root(root: PathLike, permissions: Union[int, None], group: Union[str, int, None]):
-    root = Path(root)
-
-    if not root.exists():
-        mkdir(root, permissions, group)
-
-    root_permissions = root.stat().st_mode & 0o777
-    if permissions is None:
-        permissions = root_permissions
-    else:
-        assert permissions == root_permissions
-    if group is None:
-        group = root.group()
-    else:
-        assert root.group() == group
-
-    return root, permissions, group

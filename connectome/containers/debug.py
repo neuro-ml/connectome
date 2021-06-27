@@ -1,3 +1,5 @@
+from functools import partial
+from hashlib import blake2b
 from typing import Iterable, Any, Generator
 
 from .transform import TransformContainer
@@ -10,6 +12,8 @@ from ..engine.node_hash import NodeHashes, NodeHash
 class HashDigestEdge(StaticGraph, StaticHash):
     def __init__(self):
         super().__init__(arity=1, uses_hash=True)
+        self._folder_levels = 1, 31, 32
+        self._hasher = partial(blake2b, digest_size=sum(self._folder_levels))
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return inputs[0]
@@ -18,7 +22,7 @@ class HashDigestEdge(StaticGraph, StaticHash):
         value = yield Command.ParentValue, 0
         output = yield Command.CurrentHash,
 
-        pickled, digest = key_to_digest(output.value)
+        pickled, digest = key_to_digest(self._hasher, output.value)
         return value, output.value, digest, pickled
 
 

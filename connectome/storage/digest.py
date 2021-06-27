@@ -1,12 +1,9 @@
-from hashlib import blake2b
 from pathlib import Path
-
-FOLDER_LEVELS = 1, 31, 32
-DIGEST_SIZE = sum(FOLDER_LEVELS)
+from typing import Sequence
 
 
-def digest_file(path: Path, block_size=2 ** 20) -> str:
-    hasher = blake2b(digest_size=DIGEST_SIZE)
+def digest_file(path: Path, algorithm, block_size=2 ** 20) -> str:
+    hasher = algorithm()
 
     with open(path, 'rb') as f:
         while True:
@@ -18,21 +15,15 @@ def digest_file(path: Path, block_size=2 ** 20) -> str:
     return hasher.hexdigest()
 
 
-def digest_to_relative(key: str, suffix: str = None):
-    assert len(key) == DIGEST_SIZE * 2, len(key)
+def digest_to_relative(key: str, levels: Sequence[int]):
+    # TODO: too expensive?
+    assert len(key) == sum(levels) * 2, len(key)
 
     parts = []
     start = 0
-    for level in FOLDER_LEVELS:
+    for level in levels:
         stop = start + level * 2
         parts.append(key[start:stop])
         start = stop
 
-    path = Path(*parts)
-    if suffix is not None:
-        path /= suffix
-    return path
-
-
-def digest_bytes(pickled: bytes) -> str:
-    return blake2b(pickled, digest_size=DIGEST_SIZE).hexdigest()
+    return Path(*parts)

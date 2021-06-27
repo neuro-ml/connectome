@@ -10,15 +10,8 @@ from connectome import CacheToRam, Apply, CacheToDisk
 from connectome.cache import MemoryCache, DiskCache
 from connectome.engine.edges import CacheEdge
 from connectome.serializers import JsonSerializer
-from connectome.storage.locker import ThreadLocker, RedisLocker
-
-
-@pytest.fixture
-def temp_disk_cache(tmpdir, tmpdir_factory, temp_storage):
-    def maker(serializer, locker, names):
-        return CacheToDisk(tmpdir_factory.mktemp(tmpdir) / 'cache', temp_storage, serializer, names, locker=locker)
-
-    return maker
+from connectome.storage.config import init_storage
+from connectome.storage.locker import ThreadLocker
 
 
 def sleeper(s):
@@ -40,10 +33,10 @@ def assert_empty_state(block):
 
     cache = find_cache()
     assert isinstance(cache, (MemoryCache, DiskCache))
-    assert isinstance(cache._locker, ThreadLocker)
+    assert isinstance(cache.locker, ThreadLocker)
     # the state must be cleaned up
-    assert not cache._locker._reading
-    assert not cache._locker._writing
+    assert not cache.locker._reading
+    assert not cache.locker._writing
 
 
 def test_memory_locking(block_maker):
@@ -60,7 +53,7 @@ def test_memory_locking(block_maker):
     th.join()
 
 
-def test_errors_handling(block_maker, temp_disk_cache):
+def test_errors_handling(block_maker, disk_cache_factory):
     class LocalException(Exception):
         pass
 
@@ -76,63 +69,70 @@ def test_errors_handling(block_maker, temp_disk_cache):
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
     i = ds.ids[0]
 
-    for layer in [CacheToRam(), temp_disk_cache(JsonSerializer(), ThreadLocker(), 'image')]:
-        # one thread
-        cached = ds >> Apply(image=throw) >> layer
-        with pytest.raises(LocalException):
-            cached.image(i)
+    with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}) as disk_cache:
+        for layer in [CacheToRam(), disk_cache]:
+            # one thread
+            cached = ds >> Apply(image=throw) >> layer
+            with pytest.raises(LocalException):
+                cached.image(i)
 
-        assert_empty_state(cached)
+            assert_empty_state(cached)
 
-        # many threads
-        cached = ds >> Apply(image=sleeper(0.1)) >> Apply(image=throw) >> layer
-        th = Thread(target=visit)
-        th.start()
-        with pytest.raises(LocalException):
-            cached.image(i)
-        th.join()
+            # many threads
+            cached = ds >> Apply(image=sleeper(0.1)) >> Apply(image=throw) >> layer
+            th = Thread(target=visit)
+            th.start()
+            with pytest.raises(LocalException):
+                cached.image(i)
+            th.join()
 
-        assert_empty_state(cached)
+            assert_empty_state(cached)
 
 
 @pytest.mark.redis
-def test_disk_locking_processes(block_maker, temp_storage, redis_hostname):
-    def visit():
+def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
+    def visit(storage, root):
         ds = block_maker.first_ds(first_constant=2, ids_arg=3)
-        with tempfile.TemporaryDirectory() as folder:
-            folder = Path(folder)
-            cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(
-                folder / 'cache', temp_storage, JsonSerializer(), 'image', locker=RedisLocker.from_url(
-                    f'redis://{redis_hostname}:6379/0', 'connectome.tests.locking.disk', 10))
+        cached = ds >> Apply(image=sleeper(0.1)) >> CacheToDisk(root, storage, JsonSerializer(), 'image')
 
-            for i in ds.ids:
-                assert ds.image(i) == cached.image(i)
+        for i in ds.ids:
+            assert ds.image(i) == cached.image(i)
 
     for _ in range(5):
-        th = Process(target=visit)
-        th.start()
-        visit()
-        th.join()
+        with tempfile.TemporaryDirectory() as temp, storage_factory() as temp_storage:
+            temp = Path(temp) / 'cache'
+            init_storage(
+                temp, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32], locker={
+                    'name': 'RedisLocker', 'args': [redis_hostname],
+                    'kwargs': {'prefix': 'connectome.tests', 'expire': 10}
+                }
+            )
+
+            th = Process(target=visit, args=(temp_storage, temp))
+            th.start()
+            visit(temp_storage, temp)
+            th.join()
 
 
-def test_disk_locking_threads(block_maker, temp_disk_cache):
+def test_disk_locking_threads(block_maker, disk_cache_factory):
     def visit():
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
 
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
-    cached = ds >> Apply(image=sleeper(0.1)) >> temp_disk_cache(JsonSerializer(), ThreadLocker(), 'image')
     for _ in range(5):
-        th = Thread(target=visit)
-        th.start()
-        visit()
-        th.join()
+        with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}) as disk_cache:
+            cached = ds >> Apply(image=sleeper(0.1)) >> disk_cache
+            th = Thread(target=visit)
+            th.start()
+            visit()
+            th.join()
 
 
-def test_disk_idempotency(block_maker, temp_disk_cache):
+def test_disk_idempotency(block_maker, disk_cache_factory):
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
-    cache = temp_disk_cache(JsonSerializer(), None, 'image')
-    cached = ds >> cache >> cache
+    with disk_cache_factory('image', JsonSerializer()) as cache:
+        cached = ds >> cache >> cache
 
-    for i in ds.ids:
-        assert ds.image(i) == cached.image(i)
+        for i in ds.ids:
+            assert ds.image(i) == cached.image(i)

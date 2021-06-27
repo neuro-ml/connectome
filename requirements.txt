@@ -5,3 +5,4 @@ paramiko==2.*
 scp
 tqdm
 redis
+pyyaml

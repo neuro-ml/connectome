@@ -20,12 +20,14 @@ class StorageError(Exception):
 
 class Storage:
     def __init__(self, local: Sequence[Disk], remote: Sequence[RemoteLocation] = ()):
+        # TODO: check consistency of hashes
         self.local, self.remote = local, remote
+        self._hasher = self.local[0]._hasher
 
     def store(self, file: PathLike) -> Key:
         file = Path(file)
         assert file.exists(), file
-        key = digest_file(file)
+        key = digest_file(file, self._hasher)
         self._store(key, file)
         return key
 

@@ -139,8 +139,13 @@ class ThreadLocker(DictRegistry, Locker):
 
 
 class RedisLocker(Locker):
-    def __init__(self, redis: Redis, prefix: str, expire: int):
+    def __init__(self, *args, prefix: str, expire: int):
         super().__init__(True)
+        if len(args) == 1 and isinstance(args[0], Redis):
+            redis, = args
+        else:
+            redis = Redis(*args)
+
         self._redis = redis
         self._prefix = prefix + ':'
         self._expire = expire
@@ -209,15 +214,16 @@ class RedisLocker(Locker):
                 ttl = self._redis.ttl(name)
                 assert value == -1 or value > 0, value
                 value = 'Write' if value == -1 else 'Read'
-                lines.append(f'{name}: {value}: {ttl}')
+                lines.append(f'{name} {value}: {ttl}')
 
         return '\n'.join(lines)
 
     @classmethod
     def from_url(cls, url: str, prefix: str, expire: int):
-        return cls(Redis.from_url(url), prefix, expire)
+        return cls(Redis.from_url(url), prefix=prefix, expire=expire)
 
 
+# TODO: replace by a context manager
 def wait_for_true(func, key, sleep_time, max_iterations):
     i = 0
     while not func(key):

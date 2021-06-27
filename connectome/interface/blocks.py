@@ -132,22 +132,18 @@ class CacheToRam(CacheLayer):
 class CacheToDisk(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None, locker: Locker = None):
+                 names: MaybeStr, metadata: dict = None):
         names = to_seq(names)
-        if locker is None:
-            locker = DummyLocker()
-        super().__init__(DiskCacheContainer(names, root, storage, _resolve_serializer(serializer), metadata or {}, locker))
+        super().__init__(DiskCacheContainer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
 
 
 class CacheColumns(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None, locker: Locker = None, verbose: bool = False):
+                 names: MaybeStr, metadata: dict = None, verbose: bool = False):
         names = to_seq(names)
-        if locker is None:
-            locker = DummyLocker()
         super().__init__(CacheColumnsContainer(
-            names, root, storage, _resolve_serializer(serializer), metadata or {}, locker=locker, verbose=verbose))
+            names, root, storage, _resolve_serializer(serializer), metadata or {}, verbose=verbose))
 
 
 class RemoteStorageBase(CacheLayer):
