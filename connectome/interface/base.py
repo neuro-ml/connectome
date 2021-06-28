@@ -75,9 +75,15 @@ class Instance:
         self._layer = layer
         self._args, self._kwargs = args, kwargs
 
-    def __getattr__(self, name):
-        method = getattr(self._layer, name)
+    def _get(self, key):
+        method = self._layer._compile(key)
         return method(*self._args, **self._kwargs)
+
+    def __getattr__(self, name):
+        return self._get(name)
+
+    def __getitem__(self, name):
+        return self._get(name)
 
     def __dir__(self):
         return dir(self._layer)

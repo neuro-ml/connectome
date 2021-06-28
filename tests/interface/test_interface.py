@@ -175,9 +175,14 @@ def test_instance(block_maker):
 
     for i in pipeline.ids:
         instance = pipeline(i)
-        assert instance.id == pipeline.id(i) == i
-        assert instance.image == pipeline.image(i)
-        assert instance.lungs == pipeline.lungs(i)
+        assert instance.id == instance['id'] == pipeline.id(i) == i
+        assert instance.image == instance['image'] == pipeline.image(i)
+        assert instance.lungs == instance['lungs'] == pipeline.lungs(i)
+
+        loader = pipeline._compile(['image', 'lungs'])
+        assert loader(i) == instance['image', 'lungs']
+        loader = pipeline._compile(['id', 'lungs'])
+        assert loader(i) == instance['id', 'lungs']
 
 
 def test_locals(block_maker):
