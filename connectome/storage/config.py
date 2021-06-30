@@ -13,7 +13,8 @@ FILENAME = 'config.yml'
 
 
 def root_params(root: Path):
-    return root.stat().st_mode & 0o777, root.stat().st_gid
+    stat = root.stat()
+    return stat.st_mode & 0o777, stat.st_gid
 
 
 def load_config(root: PathLike):

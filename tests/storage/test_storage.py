@@ -27,7 +27,7 @@ def test_single_local(storage_factory):
         assert filecmp.cmp(file, stored, shallow=False)
         assert file.stat().st_mode & 0o777 == permissions
         assert stored.stat().st_mode & 0o777 == disk.permissions & 0o444
-        assert stored.group() == disk.group
+        assert stored.stat().st_gid == disk.group
 
 
 @pytest.mark.redis
