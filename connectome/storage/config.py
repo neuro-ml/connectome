@@ -24,11 +24,11 @@ def load_config(root: PathLike):
 
 
 def init_storage(root: PathLike, *, permissions: Union[int, None] = None, group: Union[str, int, None] = None,
-                 algorithm: dict, levels: list, locker=None, **params):
+                 algorithm: dict, levels: list, locker=None, exist_ok: bool = False, **params):
     root = Path(root)
-    mkdir(root, permissions, group, parents=True)
+    mkdir(root, permissions, group, parents=True, exist_ok=exist_ok)
     config = {
-        'algorithm': algorithm,
+        'hash': algorithm,
         'levels': levels,
         **params,
     }
@@ -59,7 +59,7 @@ def make_locker(config) -> Locker:
 
 
 def make_algorithm(config):
-    algorithm = config['algorithm']
+    algorithm = config['hash']
     hasher = getattr(hashlib, algorithm.pop('name'))
     if algorithm:
         hasher = partial(hasher, **algorithm)

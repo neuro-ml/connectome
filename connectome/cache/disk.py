@@ -35,8 +35,8 @@ class DiskCache(Cache):
         self.serializer = serializer
         self.storage = storage
 
-        config = load_config(root)
-        assert set(config) <= {'algorithm', 'levels', 'locker'}
+        config = load_config(self.root)
+        assert set(config) <= {'hash', 'levels', 'locker'}
 
         self._hasher, self._folder_levels = make_algorithm(config)
         self.locker = make_locker(config)

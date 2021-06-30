@@ -29,7 +29,7 @@ class Disk:
         self.permissions, self.group = root_params(self.root)
 
         config = load_config(self.root)
-        assert set(config) <= {'algorithm', 'levels', 'max_size', 'free_disk_size', 'locker'}
+        assert set(config) <= {'hash', 'levels', 'max_size', 'free_disk_size', 'locker'}
 
         self.locker = make_locker(config)
         self._min_free_size = parse_size(config.get('free_disk_size', 0))
