@@ -1,6 +1,6 @@
 import pytest
 
-from connectome import Mixin, Source, meta, Transform, Output
+from connectome import Mixin, Source, meta, Transform, Output, inverse
 
 
 class SizeMixin(Mixin):
@@ -133,3 +133,18 @@ def test_mixin_with_ids():
         pass
 
     assert B().ids == tuple('012')
+
+
+def test_inverse():
+    class A(Mixin):
+        def f(x):
+            pass
+
+        @inverse
+        def f(x):
+            pass
+
+    class B(Transform, A):
+        pass
+
+    assert 'f' in dir(B())

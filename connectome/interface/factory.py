@@ -213,7 +213,7 @@ class GraphFactory:
         def __repr__(self):
             kls = type(self)
             if hasattr(kls, '__qualname__'):
-                args = ','.join(factory.arguments)
+                args = ', '.join(factory.arguments)
                 return f'{kls.__qualname__}({args})'
             return super(type(self), self).__repr__()
 
