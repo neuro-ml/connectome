@@ -1,19 +1,24 @@
 import inspect
-from functools import wraps
 from collections import Counter
 from pathlib import Path
-from typing import Union
+from typing import Union, Dict, List, Sequence, Callable
 from contextlib import suppress
-from typing import Sequence, Callable
 
 PathLike = Union[Path, str]
 
 
-class MultiDict(dict):
+class MultiDict(Dict[str, List]):
     def items(self):
         for key, values in self.groups():
             for value in values:
                 yield key, value
+
+    def to_dict(self):
+        result = {}
+        for name, values in self.groups():
+            assert len(values) == 1
+            result[name], = values
+        return result
 
     def groups(self):
         return super().items()

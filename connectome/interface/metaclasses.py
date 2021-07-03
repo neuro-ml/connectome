@@ -1,17 +1,12 @@
 import logging
+from typing import Callable
 
 from .compat import SafeMeta
 from ..containers.transform import InheritType
 from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory, FactoryLayer
+from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals
 
 logger = logging.getLogger(__name__)
-
-
-class APIMeta(SafeMeta):
-    @classmethod
-    def __prepare__(mcs, *args, **kwargs):
-        return MultiDict()
 
 
 def _check_duplicates(namespace):
@@ -20,76 +15,57 @@ def _check_duplicates(namespace):
         raise TypeError(f'Duplicated methods found: {duplicates}')
 
 
-# TODO: move all the logic to a single metaclass
-class SourceBase(APIMeta):
+class APIMeta(SafeMeta):
+    @classmethod
+    def __prepare__(mcs, *args, **kwargs):
+        return MultiDict()
+
     def __new__(mcs, class_name, bases, namespace, **flags):
-        if flags.get('__root', False):
-            def __init__(*args, **kwargs):
-                raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
-
+        if flags.pop('__root', False):
             assert bases == (FactoryLayer,)
-            scope = {'__init__': __init__}
+            scope = namespace.to_dict()
+            return super().__new__(mcs, class_name, bases, scope, **flags)
 
-        else:
-            bases = set(bases) - {Source}
-            for base in bases:
-                if not issubclass(base, Mixin):
-                    raise TypeError('Source datasets can only inherit directly from "Source" or mixins.')
+        bases = set(bases)
+        intersection = {Transform, Source, Mixin} & bases
+        if len(intersection) != 1:
+            raise TypeError('Layers must inherit from either Source, Transform or Mixin.')
 
-            _check_duplicates(namespace)
-            _add_from_mixins(namespace, bases)
-            bases = FactoryLayer,
-            scope = SourceFactory.make_scope(namespace)
+        main, = intersection
+        bases -= intersection
+        base_name = main.__name__
+        for base in bases:
+            if not issubclass(base, Mixin):
+                raise TypeError(f'{base_name}s can only inherit directly from "{base_name}" or other mixins.')
 
-        return super().__new__(mcs, class_name, bases, scope)
+        logger.info('Compiling the layer "%s" of type %s', class_name, base_name)
 
-
-class TransformBase(APIMeta):
-    def __new__(mcs, class_name, bases, namespace, **flags):
-        if flags.get('__root', False):
-            # we can construct transforms on the fly
-            def __init__(*args, __inherit__=(), **kwargs):
-                assert args
-                if len(args) > 1:
-                    raise TypeError('This constructor accepts only keyword arguments.')
-                self, = args
-
-                local = MultiDict()
-                local['__inherit__'] = __inherit__
-                for name, value in kwargs.items():
-                    assert callable(value)
-                    local[name] = value
-
-                factory = TransformFactory(local)
-                super(type(self), self).__init__(factory.build({}), factory.property_names)
-
-            assert bases == (FactoryLayer,)
-            scope = {'__init__': __init__, '__doc__': namespace['__doc__']}
-
-        else:
-            bases = set(bases) - {Transform}
-            for base in bases:
-                if not issubclass(base, Mixin):
-                    raise TypeError('Transforms datasets can only inherit directly from "Transform" or mixins.')
-
-            _add_from_mixins(namespace, bases)
-            bases = FactoryLayer,
-            logger.info('Compiling the layer "%s"', class_name)
+        if main == Mixin:
+            add_from_mixins(namespace, bases)
+            scope = add_quals({'__methods__': namespace}, namespace)
+        elif main == Transform:
+            add_from_mixins(namespace, bases)
             scope = TransformFactory.make_scope(namespace)
+        elif main == Source:
+            _check_duplicates(namespace)
+            add_from_mixins(namespace, bases)
+            scope = SourceFactory.make_scope(namespace)
+        else:
+            assert False, main
 
-        return super().__new__(mcs, class_name, bases, scope)
+        return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 
-class Source(FactoryLayer, metaclass=SourceBase, __root=True):
+class Source(FactoryLayer, metaclass=APIMeta, __root=True):
     """
     Base class for all sources.
     """
 
     def __init__(self, *args, **kwargs):
-        pass
+        raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
 
 
-class Transform(FactoryLayer, metaclass=TransformBase, __root=True):
+class Transform(FactoryLayer, metaclass=APIMeta, __root=True):
     """
     Base class for all transforms.
 
@@ -106,13 +82,25 @@ class Transform(FactoryLayer, metaclass=TransformBase, __root=True):
     """
     __inherit__: InheritType = ()
 
-    # these methods are ignored in the metaclass
-    # we use them only to help IDEs
-    def __init__(self, *args, **kwargs):
-        pass
+    def __init__(*args, __inherit__=(), **kwargs: Callable):
+        assert args
+        if len(args) > 1:
+            raise TypeError('This constructor accepts only keyword arguments.')
+        self, = args
+
+        local = MultiDict()
+        local['__inherit__'] = __inherit__
+        for name, value in kwargs.items():
+            if not callable(value):
+                raise TypeError(f'All arguments for Transform must be callable. "{name}" is not callable')
+
+            local[name] = value
+
+        factory = TransformFactory(local)
+        super(Transform, self).__init__(factory.build({}), factory.property_names)
 
 
-class Mixin:
+class Mixin(FactoryLayer, metaclass=APIMeta, __root=True):
     """
     Base class for all Mixins.
     """
@@ -121,30 +109,3 @@ class Mixin:
         raise RuntimeError("Mixins can't be directly initialized.")
 
     __methods__: dict = {}
-
-    def __init_subclass__(cls, **kwargs):
-        if cls.__init__ != Mixin.__init__:
-            raise RuntimeError("Mixins can't be directly initialized.")
-
-        bases = cls.__bases__
-        for base in bases:
-            if not issubclass(base, Mixin):
-                raise TypeError(f'Mixins can only inherit other mixins.')
-
-        namespace = {name: getattr(cls, name) for name in dir(cls) if not name.startswith('__')}
-        cls.__methods__ = _add_from_mixins(dict(namespace.items()), bases)
-
-
-def _add_from_mixins(namespace, mixins):
-    for mixin in mixins:
-        assert issubclass(mixin, Mixin), mixin
-        # update without overwriting
-        local = mixin.__methods__
-        intersection = set(local) & set(namespace)
-        if intersection:
-            raise RuntimeError(f'Trying to overwrite the names {intersection} from mixin {mixin}')
-
-        for name in local:
-            namespace[name] = local[name]
-
-    return namespace

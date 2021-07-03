@@ -84,7 +84,7 @@ def test_overwrite():
             return x
 
     with pytest.raises(RuntimeError):
-        class B(A):
+        class B(Mixin, A):
             def b(x):
                 return 2 * x
 
@@ -137,14 +137,17 @@ def test_mixin_with_ids():
 
 def test_inverse():
     class A(Mixin):
-        def f(x):
-            pass
+        def f(f):
+            return f
 
         @inverse
-        def f(x):
-            pass
+        def f(f):
+            return f
 
     class B(Transform, A):
         pass
 
-    assert 'f' in dir(B())
+    b = B()
+    assert 'f' in dir(b)
+    f = b._wrap(lambda x: x, 'f')
+    assert f(1) == 1

@@ -24,13 +24,57 @@ def unwrap_transform(value):
     return value, set(decorators)
 
 
-SILENT_MAGIC = {'__module__', '__qualname__', '__annotations__'}
+def add_from_mixins(namespace, mixins):
+    # we have 2 scopes here:
+    # 1. the `namespace`
+    # 2. the __annotations__
+    # TODO: make annotations a MultiDict
+    annotations, = namespace.get(ANN_MAGIC, [{}])
+
+    for mixin in mixins:
+        # update without overwriting
+        local = mixin.__methods__
+        local_annotations, = local.get(ANN_MAGIC, [{}])
+
+        intersection = (set(local) & set(namespace)) - OVERRIDABLE_MAGIC
+        intersection |= set(annotations) & set(local_annotations)
+        if intersection:
+            raise RuntimeError(f'Trying to overwrite the names {intersection} from mixin {mixin}')
+
+        for name in set(local) - OVERRIDABLE_MAGIC:
+            for value in local.get(name):
+                namespace[name] = value
+        for name in local_annotations:
+            annotations[name] = local_annotations[name]
+
+    if ANN_MAGIC not in namespace:
+        namespace[ANN_MAGIC] = annotations
+
+
+def add_quals(scope, namespace):
+    qualname = namespace.get('__qualname__', [None])[0]
+    if qualname is not None:
+        scope['__qualname__'] = qualname
+    module = namespace.get('__module__', [None])[0]
+    if module is not None:
+        scope['__module__'] = module
+    return scope
+
+
 DOC_MAGIC = '__doc__'
+ANN_MAGIC = '__annotations__'
+SILENT_MAGIC = {'__module__', '__qualname__', ANN_MAGIC}
+OVERRIDABLE_MAGIC = SILENT_MAGIC | {DOC_MAGIC}
 BUILTIN_DECORATORS = staticmethod, classmethod, property
 
 
 class FactoryLayer(CallableLayer):
-    pass
+    def __repr__(self):
+        kls = type(self)
+        if hasattr(kls, '__qualname__'):
+            args = ', '.join(kls.__signature__.parameters if hasattr(kls, '__signature__') else [])
+            return f'{kls.__qualname__}({args})'
+        return super(type(self), self).__repr__()
 
 
 class GraphFactory:
@@ -112,7 +156,7 @@ class GraphFactory:
 
         # gather private fields from annotations
         # TODO: detect duplicates
-        for name, value in self.scope.get('__annotations__', [{}])[0].items():
+        for name, value in self.scope.get(ANN_MAGIC, [{}])[0].items():
             if not is_private(name):
                 raise FieldError(f'Only private fields can be defined via type annotations ({name})')
             if name not in private:
@@ -208,27 +252,14 @@ class GraphFactory:
 
             arguments = signature.bind_partial(**kwargs)
             arguments.apply_defaults()
-            super(type(self), self).__init__(factory.build(arguments.arguments), factory.property_names)
-
-        def __repr__(self):
-            kls = type(self)
-            if hasattr(kls, '__qualname__'):
-                args = ', '.join(factory.arguments)
-                return f'{kls.__qualname__}({args})'
-            return super(type(self), self).__repr__()
+            FactoryLayer.__init__(self, factory.build(arguments.arguments), factory.property_names)
 
         __init__.__signature__ = signature
         scope = {
-            '__init__': __init__, '__signature__': signature, '__repr__': __repr__,
+            '__init__': __init__, '__signature__': signature,
             DOC_MAGIC: factory.docstring,
         }
-        qualname = namespace.get('__qualname__', [None])[0]
-        if qualname is not None:
-            scope['__qualname__'] = qualname
-        module = namespace.get('__module__', [None])[0]
-        if module is not None:
-            scope['__module__'] = module
-        return scope
+        return add_quals(scope, namespace)
 
     def build(self, arguments: dict) -> TransformContainer:
         diff = list(set(self.arguments) - set(arguments))
