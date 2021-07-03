@@ -141,6 +141,10 @@ class DiskCache(Cache):
 
             # FIXME
             path = self.storage.get_path(self.storage.store(file))
+            # TODO: this might be incorrect if the user changes the cwd
+            if not path.is_absolute():
+                path = Path(os.getcwd()) / path
+
             assert path.exists(), path
             os.remove(file)
             file.symlink_to(path)

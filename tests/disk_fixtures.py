@@ -1,3 +1,4 @@
+import os
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -46,3 +47,13 @@ def disk_cache_factory(storage_factory):
 @pytest.fixture
 def temp_dir(tmpdir):
     return Path(tmpdir)
+
+
+@contextmanager
+def chdir(folder):
+    current = os.getcwd()
+    try:
+        os.chdir(folder)
+        yield
+    finally:
+        os.chdir(current)
