@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Sequence, Dict, Any
 
 from .base import TreeNode, NodeHash, TreeNodes, Command
+from .executor import Backend, Synchronous
 from .node_hash import LeafHash, GraphHash
 from .utils import EvictionCache
 from .vm import execute
@@ -21,11 +22,12 @@ class Graph:
         self.inputs = inputs
         self.output = output
         self.counts = counts
+        self.backend: Backend = Synchronous()
 
         def caller(*args, **kwargs):
             scope = signature.bind(*args, **kwargs)
             hashes, cache = self._prepare_cache(scope.arguments)
-            return evaluate(output, hashes, cache)
+            return evaluate(output, hashes, cache, self.backend)
 
         caller.__signature__ = signature
         self.call = caller
@@ -44,22 +46,22 @@ class Graph:
         assert all(not isinstance(v, NodeHash) for v in inputs)
 
         hashes, cache = self._prepare_cache({n.name: v for n, v in zip(self.inputs, inputs)})
-        result, _ = compute_hash(self.output, hashes, cache)
+        result, _ = compute_hash(self.output, hashes, cache, self.backend)
         return result, (hashes, cache)
 
     def get_value(self, hashes, cache):
-        return evaluate(self.output, hashes, cache)
+        return evaluate(self.output, hashes, cache, self.backend)
 
     def hash(self):
         return GraphHash(hash_graph(self.inputs, self.output))
 
 
-def evaluate(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
-    return execute(Command.Evaluate, node, hashes, cache)
+def evaluate(node: TreeNode, hashes: EvictionCache, cache: EvictionCache, backend: Backend):
+    return execute(Command.Evaluate, node, hashes, cache, backend)
 
 
-def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
-    return execute(Command.ComputeHash, node, hashes, cache)
+def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache, backend: Backend):
+    return execute(Command.ComputeHash, node, hashes, cache, backend)
 
 
 # TODO: deprecate?

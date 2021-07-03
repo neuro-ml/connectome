@@ -1,10 +1,10 @@
 from .base import Command
-from .executor import SequentialExecutor, Frame
+from .executor import Frame, Backend
 
 
 # TODO: replace cache by a thunk tree
-def execute(cmd, node, hashes, cache):
-    executor = SequentialExecutor(Frame([node], [(Command.Return,), (cmd,)], None))
+def execute(cmd, node, hashes, cache, backend: Backend):
+    executor = backend.build(Frame([node], [(Command.Return,), (cmd,)], None))
     push, pop, peek = executor.push, executor.pop, executor.peek
     push_command, pop_command = executor.push_command, executor.pop_command
     next_frame, enqueue_frame = executor.next_frame, executor.enqueue_frame
@@ -129,7 +129,7 @@ def execute(cmd, node, hashes, cache):
             push_command((Command.Tuple, len(args)))
             for arg in args:
                 local = Frame([node], [(Command.Return,), arg], executor.frame)
-                push_command((Command.AwaitFrame, local))
+                push_command((Command.AwaitThunk, local))
                 enqueue_frame(local)
 
         elif cmd == Command.Call:
@@ -155,9 +155,12 @@ def execute(cmd, node, hashes, cache):
             n, = args
             push(tuple(pop() for _ in range(n)))
 
-        elif cmd == Command.AwaitFrame:
+        elif cmd == Command.AwaitThunk:
             child, = args
             if child.ready:
+                if child.error:
+                    raise RuntimeError('Error while computing frame')
+
                 push(child.value)
             else:
                 push_command((cmd, *args))
