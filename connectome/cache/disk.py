@@ -1,5 +1,4 @@
 import gzip
-import json
 import logging
 import os
 import shutil
@@ -20,18 +19,16 @@ logger = logging.getLogger(__name__)
 
 DATA_FOLDER = 'data'
 HASH_FILENAME = 'hash.bin'
-META_FILENAME = 'meta.json'
 TIME_FILENAME = 'time'
 GZIP_COMPRESSION = 1
 Key = str
 
 
 class DiskCache(Cache):
-    def __init__(self, root: Path, storage: Storage, serializer: Serializer, metadata: dict):
+    def __init__(self, root: Path, storage: Storage, serializer: Serializer):
         super().__init__()
         self.root = Path(root)
         self.permissions, self.group = root_params(self.root)
-        self.metadata = metadata
         self.serializer = serializer
         self.storage = storage
 
@@ -121,24 +118,15 @@ class DiskCache(Cache):
     def _save_meta(self, local, pickled):
         # hash
         hash_path = local / HASH_FILENAME
-        meta_path = local / META_FILENAME
         if hash_path.exists():
             check_consistency(hash_path, pickled)
             return
 
         save_hash(hash_path, pickled)
-        size = get_size(hash_path)
-
-        # user meta
-        if self.metadata:
-            with open(meta_path, 'w') as file:
-                json.dump(self.metadata, file)
-            size += get_size(meta_path)
-            to_read_only(meta_path, self.permissions, self.group)
 
         self._create_timestamp(local / TIME_FILENAME)
         to_read_only(hash_path, self.permissions, self.group)
-        return size
+        return get_size(hash_path)
 
     def _create_timestamp(self, path):
         with open(path, 'w'):

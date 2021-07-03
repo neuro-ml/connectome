@@ -43,6 +43,7 @@ def test_memory_locking(block_maker):
     def visit():
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
+            assert ds.image(i) == cached.image(i)
 
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
     cached = ds >> Apply(image=sleeper(0.1)) >> CacheToRam()
@@ -97,6 +98,7 @@ def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
 
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
+            assert ds.image(i) == cached.image(i)
 
     for _ in range(5):
         with tempfile.TemporaryDirectory() as temp, storage_factory() as temp_storage:
@@ -118,6 +120,7 @@ def test_disk_locking_threads(block_maker, disk_cache_factory):
     def visit():
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
+            assert ds.image(i) == cached.image(i)
 
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
     for _ in range(5):
@@ -135,4 +138,15 @@ def test_disk_idempotency(block_maker, disk_cache_factory):
         cached = ds >> cache >> cache
 
         for i in ds.ids:
+            # first call is from mem, second - from disk
             assert ds.image(i) == cached.image(i)
+            assert ds.image(i) == cached.image(i)
+
+
+def test_simple_classmethod(block_maker, temp_dir):
+    ds = block_maker.first_ds(first_constant=2, ids_arg=3)
+    cached = ds >> CacheToDisk.simple('image', root=temp_dir)
+
+    for i in ds.ids:
+        assert ds.image(i) == cached.image(i)
+        assert ds.image(i) == cached.image(i)

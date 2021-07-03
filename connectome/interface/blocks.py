@@ -1,6 +1,8 @@
 import operator
 from pathlib import Path
 from typing import Union, Sequence, Callable
+
+import numpy as np
 from paramiko.config import SSH_PORT
 
 from .base import BaseLayer, CallableLayer
@@ -10,9 +12,9 @@ from ..containers.filter import FilterContainer
 from ..containers.goup import GroupContainer, MultiGroupLayer
 from ..containers.merge import SwitchContainer
 from ..containers.shortcuts import ApplyContainer
-from ..serializers import Serializer, ChainSerializer
-from ..storage import Storage
-from ..storage.locker import Locker, DummyLocker
+from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
+from ..storage import Storage, Disk
+from ..storage.config import init_storage
 from ..storage.remote import RemoteOptions
 from ..utils import PathLike
 from .utils import MaybeStr, format_arguments
@@ -125,25 +127,78 @@ class CacheLayer(BaseLayer):
 
 
 class CacheToRam(CacheLayer):
+    """ Caches the fields from ``names`` to RAM. """
+
     def __init__(self, names: MaybeStr = None, size: int = None):
         super().__init__(MemoryCacheContainer(names, size))
 
 
 class CacheToDisk(CacheLayer):
-    def __init__(self, root: PathLike, storage: Storage,
-                 serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None):
+    """
+    A persistent cache stored on disk.
+
+    Parameters
+    ----------
+    index
+        the folder where the cache index is stored
+    storage
+        the storage which holds the actual data
+    serializer
+        the serializer used to save and load the data
+    names
+        field names that will be cached
+    """
+
+    def __init__(self, index: PathLike, storage: Storage, serializer: Union[Serializer, Sequence[Serializer]],
+                 names: MaybeStr):
         names = to_seq(names)
-        super().__init__(DiskCacheContainer(names, root, storage, _resolve_serializer(serializer), metadata or {}))
+        super().__init__(DiskCacheContainer(names, index, storage, _resolve_serializer(serializer)))
+
+    @classmethod
+    def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None):
+        """
+        A simple version of caching to disk with adequate default settings.
+
+        Parameters
+        ----------
+        names:
+            the field names to cache
+        root:
+            the folder where the cache will be stored
+        serializer
+            the serializer used to save and load the data
+        """
+        root = Path(root)
+        root.mkdir(exist_ok=True, parents=True)
+        children = set(root.iterdir())
+        index = root / 'index'
+        storage = root / 'storage'
+
+        if not children:
+            init_storage(index, algorithm={'name': 'sha256'}, levels=[1, 31])
+            init_storage(storage, algorithm={'name': 'sha256'}, levels=[1, 31])
+        elif children != {index, storage}:
+            names = tuple(x.name for x in children)
+            raise FileNotFoundError(
+                f'The root is expected to contain the "index" and "storage" folders, but found {names}'
+            )
+
+        if serializer is None:
+            serializer = ChainSerializer(
+                JsonSerializer(),
+                NumpySerializer({np.bool_: 1, np.int_: 1}),
+                PickleSerializer(),
+            )
+
+        return cls(index, Storage([Disk(storage)]), serializer, names)
 
 
 class CacheColumns(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, metadata: dict = None, verbose: bool = False):
+                 names: MaybeStr, verbose: bool = False):
         names = to_seq(names)
-        super().__init__(CacheColumnsContainer(
-            names, root, storage, _resolve_serializer(serializer), metadata or {}, verbose=verbose))
+        super().__init__(CacheColumnsContainer(names, root, storage, _resolve_serializer(serializer), verbose=verbose))
 
 
 class RemoteStorageBase(CacheLayer):

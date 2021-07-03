@@ -41,3 +41,8 @@ def disk_cache_factory(storage_factory):
                 yield init(Path(root) / 'cache', storage, serializer, names, locker)
 
     return factory
+
+
+@pytest.fixture
+def temp_dir(tmpdir):
+    return Path(tmpdir)
