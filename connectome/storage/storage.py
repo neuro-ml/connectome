@@ -107,4 +107,4 @@ class Storage:
                         assert path is not None
                         return path, storage
 
-        raise KeyError(key)
+        raise KeyError(f'Key {key} is not present both locally and among your {len(self.remote)} remotes')
