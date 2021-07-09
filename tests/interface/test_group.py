@@ -10,6 +10,9 @@ class DS(Source):
     def ids():
         return tuple('0123456789')
 
+    def two_int(i):
+        return int(i) // 2
+
     def same(i):
         return i
 
@@ -92,6 +95,26 @@ def test_multi_group_by():
     for group in id_groups:
         assert chain.two(compute_new_id(group)) == {idx: str(int(idx) // 2) for idx in group}
         assert chain.three(compute_new_id(group)) == {idx: str(int(idx) // 3) for idx in group}
+
+    # test multiple comparators
+    def cmp_int(x, y):
+        assert isinstance(x, int)
+        assert isinstance(y, int)
+        return x == y
+
+    def cmp_str(x, y):
+        assert isinstance(x, str)
+        assert isinstance(y, str)
+        return x == y
+
+    chain = DS() >> GroupBy._multiple('two_int', 'three', two_int=cmp_int, three=cmp_str)
+
+    id_groups = ['01', '2', '3', '45', '67', '8', '9']
+    assert chain.ids == tuple(sorted(map(compute_new_id, id_groups)))
+
+    for group in id_groups:
+        assert chain.same(compute_new_id(group)) == {idx: idx for idx in group}
+        assert chain.double(compute_new_id(group)) == {idx: str(2 * int(idx)) for idx in group}
 
 
 def test_impure():
