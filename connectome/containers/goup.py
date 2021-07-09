@@ -139,7 +139,9 @@ class MultiGroupLayer(Wrapper):
                     graph_outputs.append(node)
                 else:
                     group_outputs.append(node)
-        assert len(graph_outputs) == len(self.names)
+
+        graph_outputs = sorted(graph_outputs, key=lambda x: x.name)
+        assert [x.name for x in graph_outputs] == self.names
 
         # create a mapping: {new_id: [old_ids]}
         graph_output = Node('$product')
