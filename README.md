@@ -18,6 +18,10 @@ pip install -e .
 pip install git+https://github.com/neuro-ml/connectome.git
 ```
 
+# Getting started
+
+You can check out our `Intro to connectome` series of tutorials [here](https://github.com/neuro-ml/connectome-tutorials)
+
 # Acknowledgements
 
 Some parts of our automatic cache invalidation machinery vere heavily inspired by
