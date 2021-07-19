@@ -31,7 +31,7 @@ class Inverse(NodeAnnotation):
 
 
 class Positional(NodeAnnotation):
-    """
+    r"""
     Marks the first argument as positional.
 
     Can be used as an alternative to
