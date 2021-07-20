@@ -12,7 +12,6 @@ from connectome.engine.edges import CacheEdge
 from connectome.serializers import JsonSerializer
 from connectome.storage.config import init_storage
 from connectome.storage.locker import ThreadLocker
-from tests.disk_fixtures import chdir
 
 
 def sleeper(s):
@@ -153,7 +152,7 @@ def test_simple_classmethod(block_maker, temp_dir):
         assert ds.image(i) == cached.image(i)
 
 
-def test_relative_root(block_maker, temp_dir):
+def test_relative_root(block_maker, temp_dir, chdir):
     with chdir(temp_dir):
         ds = block_maker.first_ds(first_constant=2, ids_arg=3)
         cached = ds >> CacheToDisk.simple('image', root='cache')

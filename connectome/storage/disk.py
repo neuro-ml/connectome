@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 from .config import root_params, load_config, make_locker, make_algorithm
 from .digest import digest_to_relative
-from .locker import wait_for_true
 from .utils import get_size, create_folders, to_read_only
 from ..utils import PathLike
 
@@ -40,10 +39,6 @@ class Disk:
 
         self._hasher, self._folder_levels = make_algorithm(config)
 
-        # TODO: remove this
-        self._sleep_time = 0.01
-        self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
-
     def _key_to_path(self, key: Key, temp: bool = False):
         name = TEMPFILE if temp else FILENAME
         return self.root / digest_to_relative(key, self._folder_levels) / name
@@ -60,7 +55,7 @@ class Disk:
         return result
 
     def reserve_write(self, key: Key):
-        wait_for_true(self.locker.start_writing, key, self._sleep_time, self._sleep_iters)
+        self.locker.reserve_write(key)
 
     def release_write(self, key: Key):
         self.locker.stop_writing(key)
@@ -108,7 +103,7 @@ class Disk:
         path = self._key_to_path(key)
         temporary = self._key_to_path(key, True)
 
-        wait_for_true(self.locker.start_reading, key, self._sleep_time, self._sleep_iters)
+        self.locker.reserve_read(key)
 
         # something went really wrong
         if temporary.exists():

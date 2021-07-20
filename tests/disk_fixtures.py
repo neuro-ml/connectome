@@ -49,11 +49,15 @@ def temp_dir(tmpdir):
     return Path(tmpdir)
 
 
-@contextmanager
-def chdir(folder):
-    current = os.getcwd()
-    try:
-        os.chdir(folder)
-        yield
-    finally:
-        os.chdir(current)
+@pytest.fixture
+def chdir():
+    @contextmanager
+    def internal(folder):
+        current = os.getcwd()
+        try:
+            os.chdir(folder)
+            yield
+        finally:
+            os.chdir(current)
+
+    return internal

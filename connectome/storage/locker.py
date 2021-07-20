@@ -1,6 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from threading import Lock
 from typing import ContextManager, MutableMapping
 
@@ -15,6 +16,32 @@ logger = logging.getLogger(__name__)
 class Locker(ABC):
     def __init__(self, track_size: bool):
         self.track_size = track_size
+
+    @contextmanager
+    def read(self, key: Key):
+        self.reserve_read(key)
+        try:
+            yield
+        finally:
+            self.stop_reading(key)
+
+    @contextmanager
+    def write(self, key: Key):
+        self.reserve_write(key)
+        try:
+            yield
+        finally:
+            self.stop_writing(key)
+
+    def reserve_read(self, key: Key):
+        sleep_time = 0.1
+        sleep_iters = int(600 / sleep_time) or 1  # 10 minutes
+        wait_for_true(self.start_reading, key, sleep_time, sleep_iters)
+
+    def reserve_write(self, key: Key):
+        sleep_time = 0.1
+        sleep_iters = int(600 / sleep_time) or 1  # 10 minutes
+        wait_for_true(self.start_writing, key, sleep_time, sleep_iters)
 
     @abstractmethod
     def start_reading(self, key: Key) -> bool:
@@ -35,8 +62,9 @@ class Locker(ABC):
 
     @abstractmethod
     def describe(self) -> str:
-        """ Returns a report regarding the locker's state """
+        """ Returns a report regarding the locker's state. """
 
+    # TODO: move this to another interface?
     def get_size(self):
         raise NotImplementedError
 
@@ -223,13 +251,16 @@ class RedisLocker(Locker):
         return cls(Redis.from_url(url), prefix=prefix, expire=expire)
 
 
-# TODO: replace by a context manager
+class PotentialDeadLock(RuntimeError):
+    pass
+
+
 def wait_for_true(func, key, sleep_time, max_iterations):
     i = 0
     while not func(key):
         if i >= max_iterations:
             logger.error('Potential deadlock detected for %s', key)
-            raise RuntimeError(f"It seems like you've hit a deadlock for key {key}.")
+            raise PotentialDeadLock(f"It seems like you've hit a deadlock for key {key}.")
 
         time.sleep(sleep_time)
         i += 1

@@ -2,7 +2,7 @@ from typing import Union, Any, Tuple
 
 from .base import Cache
 from ..engine import NodeHash
-from ..storage.locker import ThreadLocker, wait_for_true
+from ..storage.locker import ThreadLocker
 
 
 class MemoryCache(Cache):
@@ -13,24 +13,15 @@ class MemoryCache(Cache):
 
         self._cache = {}
         self.locker = ThreadLocker()
-        self._sleep_time = 0.1
-        self._sleep_iters = int(600 / self._sleep_time) or 1  # 10 minutes
 
     def get(self, param: NodeHash) -> Tuple[Any, bool]:
         key = param.value
-        wait_for_true(self.locker.start_reading, key, self._sleep_time, self._sleep_iters)
-        try:
+        with self.locker.read(key):
             if key in self._cache:
                 return self._cache[key], True
             return None, False
 
-        finally:
-            self.locker.stop_reading(key)
-
     def set(self, param: NodeHash, value: Any):
         key = param.value
-        wait_for_true(self.locker.start_writing, key, self._sleep_time, self._sleep_iters)
-        try:
+        with self.locker.write(key):
             self._cache[key] = value
-        finally:
-            self.locker.stop_writing(key)
