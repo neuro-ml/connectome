@@ -10,11 +10,20 @@ Connectome is a framework for datasets management with strong emphasis on simpli
 
 # Install
 
+The simplest way is to get it from PyPi:
+
+```shell
+pip install connectome
+```
+
+Or if you want to try the latest version from GitHub:
+
 ```shell
 git clone https://github.com/neuro-ml/connectome.git
 cd connectome
 pip install -e .
-# or simply
+
+# or let pip handle the cloning:
 pip install git+https://github.com/neuro-ml/connectome.git
 ```
 
