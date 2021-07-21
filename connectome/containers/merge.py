@@ -8,7 +8,7 @@ from .base import EdgesBag
 
 
 class SwitchContainer(EdgesBag):
-    def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag], keys_name: str):
+    def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag], keys_name: str, persistent_names: Sequence[str]):
         inputs = []
         groups = []
         edges = []
@@ -45,7 +45,7 @@ class SwitchContainer(EdgesBag):
         outputs.append(ids)
         edges.append(ConstantEdge(tuple(sorted(id_to_index))).bind([], ids))
 
-        super().__init__([inp], outputs, edges, context=None)
+        super().__init__([inp], outputs, edges, context=None, persistent_nodes=persistent_names)
         self.layers = layers
 
 

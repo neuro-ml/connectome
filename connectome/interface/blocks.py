@@ -43,7 +43,11 @@ class Merge(CallableLayer):
 
             id2dataset_index.update({i: index for i in ids})
 
-        super().__init__(SwitchContainer(id2dataset_index, [s._container for s in layers], ids_name), properties)
+        persistent = tuple(set.intersection(*(set(layer._container.persistent_nodes) for layer in layers)))
+        super().__init__(SwitchContainer(
+            id2dataset_index, [s._container for s in layers], ids_name, persistent),
+            properties,
+        )
         self._layers = layers
 
     def __repr__(self):

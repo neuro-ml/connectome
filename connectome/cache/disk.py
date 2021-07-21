@@ -112,9 +112,8 @@ class DiskCache(Cache):
             check_consistency(hash_path, pickled)
             return
 
-        save_hash(hash_path, pickled)
-
         self._create_timestamp(local / TIME_FILENAME)
+        save_hash(hash_path, pickled)
         to_read_only(hash_path, self.permissions, self.group)
         return get_size(hash_path)
 

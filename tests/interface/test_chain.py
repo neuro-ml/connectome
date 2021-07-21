@@ -4,7 +4,7 @@ import pytest
 from connectome import Source, Transform, Chain, CacheToRam, meta
 from connectome.exceptions import DependencyError
 from connectome.interface.base import LazyChain
-from connectome.interface.blocks import HashDigest, CacheColumns
+from connectome.interface.blocks import HashDigest, CacheColumns, Merge
 from connectome.storage.config import init_storage
 
 
@@ -174,3 +174,11 @@ def test_lazy(tmpdir, storage_factory):
         ds = A() >> lc
         assert ds.ids == ('0',)
         assert ds.g(1) == 1
+
+
+def test_missing_ids(block_maker):
+    ds = block_maker.first_ds(first_constant=2, ids_arg=15)
+    for source in [ds, Merge(ds)]:
+        ids = source.ids
+        for block in [block_maker.crop(), CacheToRam(), Transform(image=lambda image: image)]:
+            assert (source >> block).ids == ids
