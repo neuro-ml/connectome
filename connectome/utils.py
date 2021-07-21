@@ -5,6 +5,8 @@ from typing import Union, Dict, List, Sequence, Callable
 from contextlib import suppress
 
 PathLike = Union[Path, str]
+Strings = Sequence[str]
+StringsLike = Union[str, Strings]
 
 
 class MultiDict(Dict[str, List]):

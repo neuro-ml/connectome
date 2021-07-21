@@ -16,8 +16,8 @@ from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySeri
 from ..storage import Storage, Disk
 from ..storage.config import init_storage
 from ..storage.remote import RemoteOptions
-from ..utils import PathLike
-from .utils import MaybeStr, format_arguments
+from ..utils import PathLike, StringsLike
+from .utils import format_arguments
 
 
 class Merge(CallableLayer):
@@ -133,7 +133,7 @@ class CacheLayer(BaseLayer):
 class CacheToRam(CacheLayer):
     """ Caches the fields from ``names`` to RAM. """
 
-    def __init__(self, names: MaybeStr = None, size: int = None):
+    def __init__(self, names: StringsLike = None, size: int = None):
         super().__init__(MemoryCacheContainer(names, size))
 
 
@@ -154,7 +154,7 @@ class CacheToDisk(CacheLayer):
     """
 
     def __init__(self, index: PathLike, storage: Storage, serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr):
+                 names: StringsLike):
         names = to_seq(names)
         super().__init__(DiskCacheContainer(names, index, storage, _resolve_serializer(serializer)))
 
@@ -200,14 +200,14 @@ class CacheToDisk(CacheLayer):
 class CacheColumns(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: MaybeStr, verbose: bool = False):
+                 names: StringsLike, verbose: bool = False):
         names = to_seq(names)
         super().__init__(CacheColumnsContainer(names, root, storage, _resolve_serializer(serializer), verbose=verbose))
 
 
 class RemoteStorageBase(CacheLayer):
     def __init__(self, options: Sequence[RemoteOptions],
-                 serializer: Union[Serializer, Sequence[Serializer]], names: MaybeStr = None):
+                 serializer: Union[Serializer, Sequence[Serializer]], names: StringsLike = None):
         names = to_seq(names)
         super().__init__(RemoteStorageContainer(names, options, _resolve_serializer(serializer)))
 
@@ -215,7 +215,7 @@ class RemoteStorageBase(CacheLayer):
 class RemoteStorage(RemoteStorageBase):
     def __init__(self, hostname: str, storage: Union[PathLike, Sequence[PathLike]], port: int = SSH_PORT,
                  *, serializer: Union[Serializer, Sequence[Serializer]],
-                 username: str = None, password: str = None, names: MaybeStr = None):
+                 username: str = None, password: str = None, names: StringsLike = None):
         if isinstance(storage, (str, Path)):
             storage = [storage]
         names = to_seq(names)
@@ -224,5 +224,5 @@ class RemoteStorage(RemoteStorageBase):
 
 
 class HashDigest(BaseLayer):
-    def __init__(self, names: MaybeStr):
+    def __init__(self, names: StringsLike):
         super().__init__(HashDigestContainer(to_seq(names)))

@@ -40,15 +40,13 @@ class TransformContainer(EdgesBag):
         else:
             virtual_nodes = tuple(virtual_nodes)
 
+        check_for_duplicates(node_to_dict(inputs).keys())
         super().__init__(
             inputs, outputs, edges,
             BagContext(backward_inputs, backward_outputs, virtual_nodes),
-            virtual_nodes=virtual_nodes
+            virtual_nodes=virtual_nodes, persistent_nodes=tuple(persistent_nodes)
         )
-
-        check_for_duplicates(node_to_dict(inputs).keys())
         self.optional_nodes = tuple(optional_nodes)
-        self.persistent_nodes = tuple(persistent_nodes)
 
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         current = self.freeze()

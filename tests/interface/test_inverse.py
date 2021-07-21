@@ -1,3 +1,5 @@
+import pytest
+
 from connectome import Transform, inverse
 
 
@@ -27,3 +29,21 @@ def test_different_inputs():
         return x
 
     assert func(x=1, y=2) == 3
+
+
+@pytest.mark.xfail
+def test_inherit():
+    class A(Transform):
+        __inherit__ = 'image'
+
+        @inverse
+        def image(image):
+            return image
+
+    dec = (A() >> Transform(__inherit__=True))._decorate('image')
+
+    @dec
+    def func(x):
+        return x
+
+    assert func(1) == 1

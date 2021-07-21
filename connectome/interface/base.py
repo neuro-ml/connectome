@@ -2,10 +2,11 @@ import logging
 from typing import Callable, Iterable, TypeVar
 
 from .compat import Generic
-from .utils import MaybeStr, format_arguments
+from .utils import format_arguments
 from ..engine.base import TreeNode
 from ..containers.base import Container, EdgesBag
 from ..containers.pipeline import PipelineContainer, LazyPipelineContainer
+from ..utils import StringsLike
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,11 @@ class CallableLayer(BaseLayer[EdgesBag]):
     def __dir__(self):
         return [x.name for x in self._container.outputs]
 
-    def _wrap(self, func: Callable, inputs: MaybeStr, outputs: MaybeStr = None, final: MaybeStr = None) -> Callable:
+    def _wrap(self, func: Callable, inputs: StringsLike, outputs: StringsLike = None,
+              final: StringsLike = None) -> Callable:
         return self._decorate(inputs, outputs, final)(func)
 
-    def _decorate(self, inputs: MaybeStr, outputs: MaybeStr = None, final: MaybeStr = None) -> Callable:
+    def _decorate(self, inputs: StringsLike, outputs: StringsLike = None, final: StringsLike = None) -> Callable:
         if outputs is None:
             outputs = inputs
         if final is None:
@@ -58,7 +60,7 @@ class CallableLayer(BaseLayer[EdgesBag]):
 
         return decorator
 
-    def _compile(self, inputs: MaybeStr):
+    def _compile(self, inputs: StringsLike):
         if not isinstance(inputs, str):
             inputs = tuple(inputs)
         return self._methods[inputs]

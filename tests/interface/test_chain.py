@@ -144,6 +144,18 @@ def test_inheritance():
         FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll()
 
 
+@pytest.mark.xfail
+def test_all_inherit():
+    class A(Transform):
+        __inherit__ = 'x'
+
+    class B(Transform):
+        def x(x):
+            return x
+
+    assert set(dir(A() >> A() >> B())) == {'x'}
+
+
 def test_lazy(tmpdir, storage_factory):
     class A(Source):
         @meta

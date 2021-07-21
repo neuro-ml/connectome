@@ -1,8 +1,3 @@
-from typing import Union, Sequence
-
-MaybeStr = Union[Sequence[str], str]
-
-
 def format_arguments(blocks):
     if not blocks:
         return '()'
