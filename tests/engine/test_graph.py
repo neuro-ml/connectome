@@ -1,7 +1,6 @@
 import pytest
 
 from connectome.containers.cache import MemoryCacheContainer
-from connectome.containers.loopback import loopback
 from connectome.containers.pipeline import PipelineContainer
 
 
@@ -110,10 +109,10 @@ def test_backward_methods(first_backward, second_backward):
 def test_loopback(first_backward, second_backward, layer_maker):
     layer = PipelineContainer(first_backward, second_backward)
 
-    wrapped = loopback(layer, lambda x: x, 'prod', 'prod')
+    wrapped = layer.loopback(lambda x: x, 'prod', 'prod')
     assert wrapped['prod'](4) == 4
 
-    wrapped = loopback(layer, lambda x: x * 2, 'prod', 'prod')
+    wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod')
     assert wrapped['prod'](4) == 49
 
     def counter():
@@ -129,7 +128,7 @@ def test_loopback(first_backward, second_backward, layer_maker):
     )
 
     layer = PipelineContainer(layer, cross_pipes_checker)
-    wrapped = loopback(layer, lambda x: x * 2, 'prod', 'prod')
+    wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod')
     assert wrapped['prod'](4) == 49
     assert count == 1
 
