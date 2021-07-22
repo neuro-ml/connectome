@@ -133,8 +133,8 @@ class CacheLayer(BaseLayer):
 class CacheToRam(CacheLayer):
     """ Caches the fields from ``names`` to RAM. """
 
-    def __init__(self, names: StringsLike = None, size: int = None):
-        super().__init__(MemoryCacheContainer(names, size))
+    def __init__(self, names: StringsLike = None, size: int = None, impure: bool = False):
+        super().__init__(MemoryCacheContainer(names, size, impure))
 
 
 class CacheToDisk(CacheLayer):
@@ -154,9 +154,9 @@ class CacheToDisk(CacheLayer):
     """
 
     def __init__(self, index: PathLike, storage: Storage, serializer: Union[Serializer, Sequence[Serializer]],
-                 names: StringsLike):
+                 names: StringsLike, impure: bool = False):
         names = to_seq(names)
-        super().__init__(DiskCacheContainer(names, index, storage, _resolve_serializer(serializer)))
+        super().__init__(DiskCacheContainer(names, index, storage, _resolve_serializer(serializer), impure))
 
     @classmethod
     def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None):
@@ -206,10 +206,10 @@ class CacheColumns(CacheLayer):
 
 
 class RemoteStorageBase(CacheLayer):
-    def __init__(self, options: Sequence[RemoteOptions],
-                 serializer: Union[Serializer, Sequence[Serializer]], names: StringsLike = None):
+    def __init__(self, options: Sequence[RemoteOptions], serializer: Union[Serializer, Sequence[Serializer]],
+                 names: StringsLike = None, impure: bool = False):
         names = to_seq(names)
-        super().__init__(RemoteStorageContainer(names, options, _resolve_serializer(serializer)))
+        super().__init__(RemoteStorageContainer(names, options, _resolve_serializer(serializer), impure))
 
 
 class RemoteStorage(RemoteStorageBase):

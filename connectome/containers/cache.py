@@ -6,7 +6,7 @@ from tqdm import tqdm
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
 from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, Edge, HashOutput, Request, Response, Command
-from ..engine.edges import CacheEdge, IdentityEdge
+from ..engine.edges import CacheEdge, IdentityEdge, ImpureFunctionEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, TupleHash
 from ..exceptions import DependencyError
@@ -28,8 +28,9 @@ class CacheBase(Wrapper):
 
 
 class CacheContainer(CacheBase):
-    def __init__(self, names):
+    def __init__(self, names, allow_impure):
         self.cache_names = names
+        self.allow_impure = allow_impure
 
     def get_storage(self) -> Cache:
         raise NotImplementedError
@@ -40,19 +41,34 @@ class CacheContainer(CacheBase):
 
         edges = list(state.edges)
         outputs = [Node(name) for name in forward_outputs]
+        mapping = TreeNode.from_edges(state.edges)
 
         for node in outputs:
             if self.cache_names is None or node.name in self.cache_names:
+                if not self.allow_impure:
+                    self._detect_impure(mapping[forward_outputs[node.name]], node.name)
                 edges.append(CacheEdge(self.get_storage()).bind(forward_outputs[node.name], node))
             else:
                 edges.append(IdentityEdge().bind(forward_outputs[node.name], node))
 
         return EdgesBag(state.inputs, outputs, edges, IdentityContext())
 
+    @staticmethod
+    def _detect_impure(node: TreeNode, name: str):
+        if node.is_leaf:
+            return
+
+        if isinstance(node.edge, ImpureFunctionEdge):
+            raise ValueError(f'Our are trying to cache the field "{name}", '
+                             f'which has an `impure` dependency - "{node.name}"')
+
+        for parent in node.parents:
+            CacheContainer._detect_impure(parent, name)
+
 
 class MemoryCacheContainer(CacheContainer):
-    def __init__(self, names, size):
-        super().__init__(names)
+    def __init__(self, names, size, allow_impure):
+        super().__init__(names, allow_impure)
         self.size = size
 
     def get_storage(self):
@@ -60,8 +76,8 @@ class MemoryCacheContainer(CacheContainer):
 
 
 class DiskCacheContainer(CacheContainer):
-    def __init__(self, names, root, storage, serializer):
-        super().__init__(names)
+    def __init__(self, names, root, storage, serializer, allow_impure):
+        super().__init__(names, allow_impure)
         self.storage = DiskCache(root, storage, serializer)
 
     def get_storage(self):
@@ -69,8 +85,8 @@ class DiskCacheContainer(CacheContainer):
 
 
 class RemoteStorageContainer(CacheContainer):
-    def __init__(self, names, options, serializer):
-        super().__init__(names)
+    def __init__(self, names, options, serializer, allow_impure):
+        super().__init__(names, allow_impure)
         self.storage = RemoteCache(options, serializer)
 
     def get_storage(self):

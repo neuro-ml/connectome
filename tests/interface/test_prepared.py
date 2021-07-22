@@ -1,3 +1,5 @@
+import pytest
+
 from connectome import Source, meta, impure, Transform
 from connectome.interface.blocks import HashDigest, CacheToRam, Merge
 from connectome.interface.prepared import ComputableHash
@@ -57,14 +59,20 @@ def test_impure():
             return f'{text}{_suffix}'
 
     source = A()
-    cached = source >> CacheToRam()
+    with pytest.raises(ValueError):
+        source >> CacheToRam()
+
+    cached = source >> CacheToRam(impure=True)
     assert source.text('0') != source.text('0')
     assert cached.text('0') != cached.text('0')
     assert counter == 4
 
     change = B()
     changed = source >> change
-    cached = changed >> CacheToRam()
+    with pytest.raises(ValueError):
+        changed >> CacheToRam()
+
+    cached = changed >> CacheToRam(impure=True)
     assert change.text('some') != change.text('some')
     assert changed.text('0') != changed.text('0')
     assert cached.text('0') != cached.text('0')

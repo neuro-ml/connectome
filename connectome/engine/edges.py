@@ -144,9 +144,6 @@ class CacheEdge(StaticGraph, StaticHash):
 
 
 class ProductEdge(StaticGraph, StaticEdge):
-    def __init__(self, arity: int):
-        super().__init__(arity)
-
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         return TupleHash(*inputs)
 

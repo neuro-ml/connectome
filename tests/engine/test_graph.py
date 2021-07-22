@@ -50,7 +50,7 @@ def test_cache(layer_maker):
     assert first.compile()['x'](1) == 1
     assert count == 1
 
-    chain = PipelineContainer(first, MemoryCacheContainer(size=None, names=['x']))
+    chain = PipelineContainer(first, MemoryCacheContainer(size=None, names=['x'], allow_impure=False))
     methods = chain.compile()
     assert methods['x'](1) == 1
     assert count == 2
