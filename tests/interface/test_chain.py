@@ -194,3 +194,26 @@ def test_missing_ids(block_maker):
         ids = source.ids
         for block in [block_maker.crop(), CacheToRam(), Transform(image=lambda image: image)]:
             assert (source >> block).ids == ids
+
+
+def test_dir_duplicates():
+    class A(Transform):
+        def image(x):
+            return x
+
+    class B(Transform):
+        __inherit__ = True
+
+        def image(image):
+            return image
+
+    class C(Transform):
+        __inherit__ = 'image'
+
+        def image(image):
+            return image
+
+    items = dir(A() >> B())
+    assert len(items) == len(set(items))
+    items = dir(A() >> C())
+    assert len(items) == len(set(items))
