@@ -21,7 +21,7 @@ class BaseLayer(Generic[T]):
 class CallableLayer(BaseLayer[EdgesBag]):
     def __init__(self, container: EdgesBag, properties: Iterable[str]):
         super().__init__(container)
-        self._methods: dict = self._container.compile()
+        self._methods = self._container.compile()
         self._properties = set(properties)
 
     def __getattr__(self, name):
@@ -37,7 +37,7 @@ class CallableLayer(BaseLayer[EdgesBag]):
         return Instance(self, args, kwargs)
 
     def __dir__(self):
-        return [x.name for x in self._container.outputs]
+        return list(self._methods.outputs)
 
     def _wrap(self, func: Callable, inputs: StringsLike, outputs: StringsLike = None,
               final: StringsLike = None) -> Callable:

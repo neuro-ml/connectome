@@ -32,19 +32,20 @@ class LayerConnectionState(NamedTuple):
 
 class TransformContainer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
-                 backward_outputs: Nodes = (), optional_nodes: Sequence[str] = (),
-                 virtual_nodes: InheritType = (), persistent_nodes: Sequence[str] = ()):
+                 backward_outputs: Nodes = (), *, optional_nodes: Sequence[str] = (),
+                 forward_virtual: InheritType, backward_virtual: InheritType,
+                 persistent_nodes: Sequence[str] = ()):
 
-        if isinstance(virtual_nodes, bool):
-            assert virtual_nodes
-        else:
-            virtual_nodes = tuple(virtual_nodes)
+        forward_virtual, valid = normalize_inherit(forward_virtual)
+        assert valid
+        backward_virtual, valid = normalize_inherit(backward_virtual)
+        assert valid
 
-        check_for_duplicates(node_to_dict(inputs).keys())
+        check_for_duplicates(inputs)
         super().__init__(
             inputs, outputs, edges,
-            BagContext(backward_inputs, backward_outputs, virtual_nodes),
-            virtual_nodes=virtual_nodes, persistent_nodes=tuple(persistent_nodes)
+            BagContext(backward_inputs, backward_outputs, backward_virtual),
+            virtual_nodes=forward_virtual, persistent_nodes=tuple(persistent_nodes)
         )
         self.optional_nodes = tuple(optional_nodes)
 
@@ -170,7 +171,7 @@ class TransformContainer(EdgesBag):
 
     @staticmethod
     def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: BoundEdges):
-        check_for_duplicates(node_to_dict(inputs).keys())
+        check_for_duplicates(inputs)
 
         tree_node_map = TreeNode.from_edges(edges)
         inputs = [tree_node_map[x] for x in inputs]
@@ -185,15 +186,27 @@ class TransformContainer(EdgesBag):
 
 
 def is_reachable(inputs: TreeNodes, output: TreeNode):
-    def find_parents(x: TreeNode):
+    def reachable(x: TreeNode):
         if x.is_leaf:
-            yield x
-            return
+            return x in inputs
 
-        for parent in x.parents:
-            yield from find_parents(parent)
+        return all(map(reachable, x.parents))
 
-    return set(find_parents(output)).issubset(inputs)
+    inputs = set(inputs)
+    return reachable(output)
+
+
+def normalize_inherit(value):
+    if isinstance(value, str):
+        value = [value]
+
+    if isinstance(value, bool):
+        valid = value
+    else:
+        value = tuple(value)
+        valid = all(isinstance(node_name, str) for node_name in value)
+
+    return value, valid
 
 
 class PipelineContext(Context):
