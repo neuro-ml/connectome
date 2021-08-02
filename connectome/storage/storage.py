@@ -20,8 +20,16 @@ class StorageError(Exception):
 
 class Storage:
     def __init__(self, local: Sequence[Disk], remote: Sequence[RemoteLocation] = ()):
-        # TODO: check consistency of hashes
+        if not local:
+            raise ValueError('The storage must have at least 1 local config')
+
         self.local, self.remote = local, remote
+        reference = local[0].config['hash']
+        for loc in local[1:]:
+            if loc.config != reference:
+                raise ValueError('Local storage locations have inconsistent hash algorithms')
+
+        # FIXME
         self._hasher = self.local[0]._hasher
 
     def store(self, file: PathLike) -> Key:
@@ -31,14 +39,14 @@ class Storage:
         self._store(key, file)
         return key
 
-    def get_path(self, key: Key) -> Path:
+    def get_path(self, key: Key, fetch: bool = True) -> Path:
         """ This is not safe, but it's fast. """
-        path, storage = self._find_storage(key)
+        path, storage = self._find_storage(key, fetch)
         storage.release_read(key)
         return path
 
-    def load(self, func: Callable, key: Key, *args, **kwargs) -> Any:
-        path, storage = self._find_storage(key)
+    def load(self, func: Callable, key: Key, *args, fetch: bool = True, **kwargs) -> Any:
+        path, storage = self._find_storage(key, fetch)
 
         try:
             return func(path, *args, **kwargs)
@@ -87,7 +95,7 @@ class Storage:
 
         raise StorageError('The file could not be written to any storage.')
 
-    def _find_storage(self, key: Key):
+    def _find_storage(self, key: Key, fetch: bool):
         # find in local
         for storage in self.local:
             path = storage.reserve_read(key)
@@ -95,16 +103,21 @@ class Storage:
                 return path, storage
 
         # fetch
-        with tempfile.TemporaryDirectory() as folder:
-            file = Path(folder) / 'file'
-            for remote in self.remote:
-                with remote:
-                    if remote.download(key, file):
-                        # TODO: this is not safe
-                        #  need an atomic write_and_read
-                        storage = self._store(key, file)
-                        path = storage.reserve_read(key)
-                        assert path is not None
-                        return path, storage
+        if fetch:
+            with tempfile.TemporaryDirectory() as folder:
+                file = Path(folder) / 'file'
+                for remote in self.remote:
+                    with remote:
+                        if remote.download(key, file):
+                            # TODO: this is not safe
+                            #  need an atomic write_and_read
+                            storage = self._store(key, file)
+                            path = storage.reserve_read(key)
+                            assert path is not None
+                            return path, storage
 
-        raise KeyError(f'Key {key} is not present both locally and among your {len(self.remote)} remotes')
+            message = f'Key {key} is not present neither locally nor among your {len(self.remote)} remotes'
+        else:
+            message = f'Key {key} is not present locally'
+
+        raise KeyError(message)

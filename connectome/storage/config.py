@@ -60,7 +60,7 @@ def make_locker(config) -> Locker:
 
 
 def make_algorithm(config):
-    algorithm = config['hash']
+    algorithm = config['hash'].copy()
     hasher = getattr(hashlib, algorithm.pop('name'))
     if algorithm:
         hasher = partial(hasher, **algorithm)

@@ -10,7 +10,7 @@ import humanfriendly
 from tqdm import tqdm
 
 from .config import root_params, load_config, make_locker, make_algorithm
-from .digest import digest_to_relative
+from .digest import digest_to_relative, digest_file
 from .utils import get_size, create_folders, to_read_only
 from ..utils import PathLike
 
@@ -26,8 +26,7 @@ class Disk:
     def __init__(self, root: PathLike):
         self.root = Path(root)
         self.permissions, self.group = root_params(self.root)
-
-        config = load_config(self.root)
+        self.config = config = load_config(self.root)
         assert set(config) <= {'hash', 'levels', 'max_size', 'free_disk_size', 'locker'}
 
         self.locker = make_locker(config)
@@ -97,6 +96,12 @@ class Disk:
         # make file read-only
         to_read_only(temporary, self.permissions, self.group)
         temporary.rename(stored)
+        digest = digest_file(stored, self._hasher)
+        if digest != key:
+            shutil.rmtree(folder)
+            raise ValueError(f'The stored file has a wrong hash: expected {key} got {digest}. '
+                             'The file was most likely corrupted while copying')
+
         return True
 
     def reserve_read(self, key: Key) -> Optional[Path]:
