@@ -9,9 +9,13 @@ import pytest
 
 
 def test_storage_fixture(storage_factory):
-    for _ in range(3):
-        with storage_factory() as storage:
-            pass
+    with storage_factory() as storage:
+        pass
+    assert not any(x.root.exists() for x in storage.local)
+
+    with storage_factory(names=['1', '2', '3']) as storage:
+        pass
+    assert not any(x.root.exists() for x in storage.local)
 
 
 def test_single_local(storage_factory):

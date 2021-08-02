@@ -13,14 +13,18 @@ from connectome.storage.config import init_storage
 @pytest.fixture
 def storage_factory():
     @contextmanager
-    def factory(locker=None, group=None):
+    def factory(locker=None, group=None, names=('storage',)):
         with tempfile.TemporaryDirectory() as root:
-            root = Path(root) / 'storage'
-            init_storage(
-                root, group=group,
-                algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32], locker=locker
-            )
-            yield Storage([Disk(root)])
+            roots = []
+            for name in names:
+                root = Path(root) / name
+                roots.append(root)
+                init_storage(
+                    root, group=group,
+                    algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32], locker=locker
+                )
+
+            yield Storage(list(map(Disk, roots)))
 
     return factory
 

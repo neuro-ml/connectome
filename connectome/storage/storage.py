@@ -26,7 +26,7 @@ class Storage:
         self.local, self.remote = local, remote
         reference = local[0].config['hash']
         for loc in local[1:]:
-            if loc.config != reference:
+            if loc.config['hash'] != reference:
                 raise ValueError('Local storage locations have inconsistent hash algorithms')
 
         # FIXME
