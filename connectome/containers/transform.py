@@ -72,7 +72,7 @@ class TransformContainer(EdgesBag):
             prev_outputs=previous.outputs,
             prev_virtual=previous.virtual_nodes,
             inputs=list(previous.inputs),
-            outputs=list(),
+            outputs=list(current.outputs),
             used_names=set(),
             cur_used_virtual=set(),
             prev_used_virtual=set(),
@@ -83,13 +83,13 @@ class TransformContainer(EdgesBag):
         self._connect_cur_virtual(state)
         self._connect_prev_virtual(state)
 
-        essential_input_names = self.get_essential_input_names(current.inputs, current.outputs,
-                                                               current.edges)
+        essential_input_names = self.get_essential_input_names(current.inputs, current.outputs, current.edges)
         for o in current.outputs:
             # drop nodes that depend on inactive inputs
-            if all(name in state.used_names for name in essential_input_names[o]):
-                state.outputs.append(o)
+            if any(name not in state.used_names for name in essential_input_names[o]):
+                state.outputs.remove(o)
 
+        check_for_duplicates(state.outputs)
         new_virtual_nodes = self._merge_virtual_nodes(state)
         return EdgesBag(
             state.inputs, state.outputs, state.edges,
@@ -107,8 +107,12 @@ class TransformContainer(EdgesBag):
 
     @staticmethod
     def _connect_cur_virtual(state: LayerConnectionState):
+        cur_outputs = node_to_dict(state.cur_outputs)
         prev_outputs = node_to_dict(state.prev_outputs)
+
         for name, prev_output in prev_outputs.items():
+            if name in cur_outputs:
+                continue
             # propagate identity transformation
             if state.cur_virtual == INHERIT_ALL or name in state.cur_virtual:
                 output = Node(name)
@@ -120,6 +124,7 @@ class TransformContainer(EdgesBag):
     @staticmethod
     def _connect_prev_virtual(state: LayerConnectionState):
         cur_inputs = node_to_dict(state.cur_inputs)
+        cur_outputs = node_to_dict(state.cur_outputs)
         prev_inputs = node_to_dict(state.prev_inputs)
         unused_names = set(cur_inputs.keys()).difference(set(state.used_names))
 
@@ -138,7 +143,9 @@ class TransformContainer(EdgesBag):
                     else:
                         output = cur_inputs[name]
 
-                    state.outputs.append(output)
+                    if name not in cur_outputs:
+                        state.outputs.append(output)
+
                     state.used_names.add(name)
                     state.prev_used_virtual.add(name)
                     state.edges.append(BoundEdge(IdentityEdge(), [input_node], output))
