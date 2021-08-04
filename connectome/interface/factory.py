@@ -113,6 +113,9 @@ class GraphFactory:
         self._before_collect()
         self._collect_nodes()
         self._after_collect()
+        # TODO: each output node must be associated to exactly 1 edge
+        for x in [self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
+            x.freeze()
 
     def _before_collect(self):
         pass
@@ -225,11 +228,6 @@ class GraphFactory:
             assert not decorators, decorators
             self.edges.append(edge.bind(inputs, output))
 
-        for x in [self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
-            x.freeze()
-
-        # TODO: each output node must be associated to exactly 1 edge
-
     def _get_constant_edges(self, arguments: dict):
         for name, value in arguments.items():
             yield ConstantEdge(value).bind([], self.arguments[name])
@@ -318,20 +316,26 @@ class TransformFactory(GraphFactory):
     def _before_collect(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit
 
+    def _after_collect(self):
+        value, valid = normalize_inherit(self.forward_inherit)
+        if not valid:
+            raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
+
+        self.backward_inherit = value
+        if isinstance(value, tuple):
+            self.forward_inherit = ()
+
+            for name in value:
+                # we only need inheritance if the output value is not defined
+                if name not in self.outputs:
+                    self.edges.append(IdentityEdge().bind(self.inputs[name], self.outputs[name]))
+
+        else:
+            self.forward_inherit = value
+
     def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
         return inputs
 
     def _process_inherit(self, value):
-        value, valid = normalize_inherit(value)
-        if not valid:
-            raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
-
-        if isinstance(value, tuple):
-            self.forward_inherit = ()
-            self.backward_inherit = value
-
-            for name in value:
-                self.edges.append(IdentityEdge().bind(self.inputs[name], self.outputs[name]))
-
-        else:
-            self.forward_inherit = self.backward_inherit = value
+        # save this value for final step
+        self.forward_inherit = value
