@@ -207,13 +207,5 @@ def test_dir_duplicates():
         def image(image):
             return image
 
-    class C(Transform):
-        __inherit__ = 'image'
-
-        def image(image):
-            return image
-
     items = dir(A() >> B())
-    assert len(items) == len(set(items))
-    items = dir(A() >> C())
     assert len(items) == len(set(items))

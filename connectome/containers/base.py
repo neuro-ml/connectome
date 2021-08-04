@@ -5,7 +5,7 @@ from typing import Tuple, Optional, Union, Sequence
 from ..engine.edges import FunctionEdge, ProductEdge
 from ..engine.graph import compile_graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
-from ..utils import node_to_dict
+from ..utils import node_to_dict, check_for_duplicates
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +63,8 @@ class EdgesBag(Wrapper):
             virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
         )
 
-    def compile(self):
-        return bake_methods(self.inputs, self.outputs, self.edges)
+    def compile(self) -> 'GraphContainer':
+        return GraphContainer(self.inputs, self.outputs, self.edges)
 
     def loopback(self, func, inputs, output):
         state = self.freeze()
@@ -110,10 +110,6 @@ def update_map(nodes, node_map):
         if node not in node_map:
             node_map[node] = Node(node.name)
     return [node_map[x] for x in nodes]
-
-
-def bake_methods(inputs: Nodes, outputs: Nodes, edges: BoundEdges):
-    return GraphContainer(inputs, outputs, edges)
 
 
 class GraphContainer:

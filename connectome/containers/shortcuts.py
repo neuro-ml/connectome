@@ -14,7 +14,7 @@ class ApplyContainer(TransformContainer):
             outputs.append(out)
             edges.append(FunctionEdge(func, arity=1).bind(inp, out))
 
-        super().__init__(inputs, outputs, edges, virtual_nodes=True)
+        super().__init__(inputs, outputs, edges, forward_virtual=True, backward_virtual=True)
 
 
 class IdentityContainer(TransformContainer):
@@ -26,4 +26,4 @@ class IdentityContainer(TransformContainer):
             outputs.append(out)
             edges.append(IdentityEdge().bind(inp, out))
 
-        super().__init__(inputs, outputs, edges, virtual_nodes=True)
+        super().__init__(inputs, outputs, edges, forward_virtual=True, backward_virtual=True)

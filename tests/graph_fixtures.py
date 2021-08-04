@@ -67,8 +67,11 @@ class LayerMaker:
             cur_inputs = [get_related_nodes(name, True) for name in attr_names]
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 
-        return TransformContainer(list(inputs.values()), list(outputs.values()), edges,
-                                  list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes)
+        return TransformContainer(
+            list(inputs.values()), list(outputs.values()), edges,
+            list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes=optional_nodes,
+            forward_virtual=(), backward_virtual=(),
+        )
 
 
 @pytest.fixture(scope='module')

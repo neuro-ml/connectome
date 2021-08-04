@@ -81,7 +81,7 @@ def test_errors_handling(block_maker, disk_cache_factory):
 
             # many threads
             cached = ds >> Apply(image=sleeper(0.1)) >> Apply(image=throw) >> layer
-            th = Thread(target=visit)
+            th = Thread(target=visit, args=(cached,))
             th.start()
             with pytest.raises(LocalException):
                 cached.image(i)

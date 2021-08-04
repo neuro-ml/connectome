@@ -51,13 +51,14 @@ def extract_signature(func):
     return names, annotations
 
 
-# TODO add error message
-def check_for_duplicates(collection):
-    counts: dict = Counter(list(collection))
-    assert not any(v > 1 for k, v in counts.items())
+def check_for_duplicates(nodes):
+    counts: dict = Counter(node.name for node in nodes)
+    assert not any(v > 1 for k, v in counts.items()), counts
 
 
 def node_to_dict(nodes):
+    nodes = tuple(nodes)
+    check_for_duplicates(nodes)
     return {node.name: node for node in nodes}
 
 

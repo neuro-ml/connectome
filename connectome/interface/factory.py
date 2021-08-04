@@ -3,7 +3,7 @@ from typing import Dict, Any
 from .base import CallableLayer
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
 from ..exceptions import GraphError, FieldError
-from ..containers.transform import TransformContainer
+from ..containers.transform import TransformContainer, normalize_inherit
 from ..utils import extract_signature, MultiDict
 from .prepared import ComputableHash, Prepared
 from .decorators import Meta, Optional, RuntimeAnnotation, Impure
@@ -96,7 +96,8 @@ class GraphFactory:
         # names of optional nodes
         self.optional_names = set()
         # names of inherited nodes
-        self.inherited_names = set()
+        self.forward_inherit = set()
+        self.backward_inherit = set()
         # metadata
         self.property_names = set()
         # names of persistent nodes
@@ -112,6 +113,9 @@ class GraphFactory:
         self._before_collect()
         self._collect_nodes()
         self._after_collect()
+        # TODO: each output node must be associated to exactly 1 edge
+        for x in [self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
+            x.freeze()
 
     def _before_collect(self):
         pass
@@ -224,11 +228,6 @@ class GraphFactory:
             assert not decorators, decorators
             self.edges.append(edge.bind(inputs, output))
 
-        for x in [self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
-            x.freeze()
-
-        # TODO: each output node must be associated to exactly 1 edge
-
     def _get_constant_edges(self, arguments: dict):
         for name, value in arguments.items():
             yield ConstantEdge(value).bind([], self.arguments[name])
@@ -274,8 +273,8 @@ class GraphFactory:
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            optional_nodes=tuple(self.optional_names), virtual_nodes=self.inherited_names,
-            persistent_nodes=tuple(self.persistent_names),
+            optional_nodes=tuple(self.optional_names), persistent_nodes=tuple(self.persistent_names),
+            forward_virtual=self.forward_inherit, backward_virtual=self.backward_inherit,
         )
 
 
@@ -317,19 +316,26 @@ class TransformFactory(GraphFactory):
     def _before_collect(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit
 
+    def _after_collect(self):
+        value, valid = normalize_inherit(self.forward_inherit)
+        if not valid:
+            raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
+
+        self.backward_inherit = value
+        if isinstance(value, tuple):
+            self.forward_inherit = ()
+
+            for name in value:
+                # we only need inheritance if the output value is not defined
+                if name not in self.outputs:
+                    self.edges.append(IdentityEdge().bind(self.inputs[name], self.outputs[name]))
+
+        else:
+            self.forward_inherit = value
+
     def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
         return inputs
 
     def _process_inherit(self, value):
-        if isinstance(value, str):
-            value = [value]
-
-        if isinstance(value, bool):
-            invalid = not value
-        else:
-            value = tuple(value)
-            invalid = not all(isinstance(node_name, str) for node_name in value)
-        if invalid:
-            raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
-
-        self.inherited_names = value
+        # save this value for final step
+        self.forward_inherit = value
