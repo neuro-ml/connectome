@@ -104,6 +104,17 @@ class DictFromKeys(CompoundBase):
         super().__init__(func, key, mapping)
 
 
+class JoinMappingHash(PrecomputeHash):
+    type = 14
+
+    def __init__(self, left: GraphHash, right: GraphHash, left_keys: NodeHash, right_keys: NodeHash, id_maker):
+        args = left, right, left_keys, right_keys
+        super().__init__(
+            (self.type, *tuple(h.value for h in args), id_maker),
+            (self.type, *args, id_maker),
+        )
+
+
 # Experimental stuff
 
 class MultiMappingHash(CompoundBase):

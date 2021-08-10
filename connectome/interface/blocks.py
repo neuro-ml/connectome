@@ -10,6 +10,7 @@ from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, RemoteS
 from ..containers.debug import HashDigestContainer
 from ..containers.filter import FilterContainer
 from ..containers.goup import GroupContainer, MultiGroupLayer
+from ..containers.join import JoinContainer
 from ..containers.merge import SwitchContainer
 from ..containers.shortcuts import ApplyContainer
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
@@ -52,6 +53,11 @@ class Merge(CallableLayer):
 
     def __repr__(self):
         return 'Merge' + format_arguments(self._layers)
+
+
+class Join(CallableLayer):
+    def __init__(self, left: CallableLayer, right: CallableLayer, on: StringsLike, pair_to_id: Callable):
+        super().__init__(JoinContainer(left._container, right._container, to_seq(on), pair_to_id), ['ids'])
 
 
 class Filter(BaseLayer[FilterContainer]):

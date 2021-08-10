@@ -8,6 +8,8 @@ from ..cache import Cache
 
 
 class StaticHash(Edge):
+    """ Computes the current hash from all the parents' hashes. """
+
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         inputs = yield (Command.Await, *(
             (Command.ParentHash, idx)
@@ -21,6 +23,8 @@ class StaticHash(Edge):
 
 
 class StaticGraph:
+    """ Mixin for edges which share a the same hash computation for `_compute_hash` and `_hash_graph`. """
+
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         raise NotImplementedError
 
@@ -32,6 +36,10 @@ class StaticGraph:
 
 
 class StaticEdge(StaticHash):
+    """
+    Computes the current value from all the parents' values and current hash from all parents' hashes.
+    """
+
     def evaluate(self) -> Generator[Request, Response, Any]:
         inputs = yield (Command.Await, *(
             (Command.ParentValue, idx)
