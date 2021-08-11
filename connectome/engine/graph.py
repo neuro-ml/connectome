@@ -1,6 +1,6 @@
 import inspect
 from collections import defaultdict
-from typing import Sequence, Dict, Any
+from typing import Sequence, Any
 
 from .base import TreeNode, NodeHash, TreeNodes, Command
 from .executor import Backend, Synchronous
@@ -84,54 +84,19 @@ def validate_graph(inputs: TreeNodes, output: TreeNode):
     visitor(output)
 
 
-def count_entries(inputs: TreeNodes, output: TreeNode, masks=None, multiplier: int = 1):
+def count_entries(inputs: TreeNodes, output: TreeNode, multiplier: int = 1):
     def visitor(node: TreeNode):
         entry_counts[node] += multiplier
         # input doesn't need parents
         if node in inputs:
             return
 
-        parents = node.parents
-        if masks is not None:
-            parents = [parents[idx] for idx in masks[node]]
-
-        for n in parents:
+        for n in node.parents:
             visitor(n)
 
     entry_counts = defaultdict(int)
     visitor(output)
     return dict(entry_counts)
-
-
-def compute_hashes(inputs: Dict[TreeNode, NodeHash], output: TreeNode):
-    def visitor(node: TreeNode):
-        if node not in cache:
-            cache[node], payload[node] = node.edge.propagate_hash(list(map(visitor, node.parents)))
-
-        return cache[node]
-
-    cache = inputs.copy()
-    payload = dict.fromkeys(cache, None)
-    visitor(output)
-    return cache, payload
-
-
-def compute_masks(output: TreeNode, hashes):
-    def visitor(node: TreeNode):
-        if node not in masks:
-            if node.is_leaf:
-                masks[node] = ()
-                payloads[node] = None
-                return
-
-            parents = node.parents
-            masks[node], payloads[node] = mask, _ = node.edge.compute_mask([hashes[n] for n in parents], hashes[node])
-            for idx in mask:
-                visitor(parents[idx])
-
-    masks, payloads = {}, {}
-    visitor(output)
-    return masks, payloads
 
 
 def hash_graph(inputs: Sequence[TreeNode], output: TreeNode):

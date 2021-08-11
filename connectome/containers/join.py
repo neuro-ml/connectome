@@ -1,13 +1,13 @@
 from collections import defaultdict
 from typing import Callable, Generator, Any
 
-from connectome.containers.base import EdgesBag
-from connectome.engine import NodeHash
-from connectome.engine.base import Node, Edge, Command, Request, Response, HashOutput, TreeNode
-from connectome.engine.edges import StaticGraph, StaticHash, FunctionEdge, ProductEdge
-from connectome.engine.graph import Graph
-from connectome.engine.node_hash import LeafHash, NodeHashes, JoinMappingHash
-from connectome.utils import Strings, node_to_dict
+from ..containers.base import EdgesBag
+from ..engine import NodeHash
+from ..engine.base import Node, Edge, Command, Request, Response, HashOutput, TreeNode
+from ..engine.edges import StaticGraph, StaticHash, FunctionEdge, ProductEdge
+from ..engine.graph import Graph
+from ..engine.node_hash import LeafHash, NodeHashes, JoinMappingHash
+from ..utils import Strings, node_to_dict
 
 
 class JoinContainer(EdgesBag):

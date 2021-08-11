@@ -5,9 +5,9 @@ from typing import Union
 
 from yaml import safe_load, safe_dump
 
-from connectome.storage.locker import Locker, DummyLocker
-from connectome.storage.utils import mkdir
-from connectome.utils import PathLike
+from .locker import Locker, DummyLocker
+from .utils import mkdir
+from ..utils import PathLike
 
 FILENAME = 'config.yml'
 

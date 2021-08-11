@@ -1,16 +1,15 @@
 from abc import ABC, abstractmethod
 from multiprocessing.pool import ThreadPool
-from queue import Queue
+from queue import SimpleQueue
 
-from connectome.engine.base import Command
+from .base import Command
 
 
 class Thunk:
     def __init__(self, parent):
         self.parent = parent
-        self.error = False
         self.ready = False
-        self.value = None
+        self.error = self.value = None
 
 
 class Frame(Thunk):
@@ -63,85 +62,78 @@ class Backend:
 
 
 class Synchronous(Backend):
+    class _Executor(Executor):
+        def __init__(self, frame: Frame):
+            super().__init__(frame)
+            self.frames = SimpleQueue()
+
+        def clear(self):
+            q = self.frames
+            while not q.empty():
+                assert q.get_nowait().ready
+
+        def next_frame(self):
+            self.frame = self.frames.get_nowait()
+
+        def enqueue_frame(self, x):
+            self.frames.put_nowait(x)
+
+        def call(self, func, args):
+            self.push(func(*args))
+
     def build(self, frame: Frame) -> Executor:
-        return SequentialExecutor(frame)
+        return self._Executor(frame)
 
 
 class Threads(Backend):
+    class _Executor(Executor):
+        def __init__(self, frame: Frame, queue: SimpleQueue):
+            super().__init__(frame)
+            self.frames, self.requests = SimpleQueue(), queue
+
+        def clear(self):
+            q = self.frames
+            while not q.empty():
+                assert q.get_nowait().ready
+
+        def next_frame(self):
+            self.frame = self.frames.get()
+
+        def enqueue_frame(self, x):
+            self.frames.put(x)
+
+        def call(self, func, args):
+            thunk = Thunk(self.frame)
+            self.requests.put((func, args, thunk, self.frames))
+            self.push_command((Command.AwaitThunk, thunk))
+            self.next_frame()
+
     def build(self, frame: Frame) -> Executor:
-        return ThreadPoolExecutor(frame, self.thunks)
+        return self._Executor(frame, self.thunks)
 
     def __init__(self, n: int):
         self.n = n
-        self.thunks = Queue()
+        self.thunks = SimpleQueue()
         self.pool = ThreadPool(n, self._loop, (self.thunks,))
         self.pool.close()
 
     @staticmethod
-    def _loop(thunks: Queue):
+    def _loop(thunks: SimpleQueue):
         while True:
             value = thunks.get()
             if value is None:
-                thunks.task_done()
                 break
 
             func, args, thunk, frames = value
             try:
                 thunk.value = func(*args)
-            # FIXME
-            except BaseException:
-                thunk.error = True
+            except BaseException as e:
+                thunk.error = e
 
             thunk.ready = True
-            thunks.task_done()
             frames.put(thunk.parent)
 
     def __del__(self):
         for _ in range(self.n):
             self.thunks.put(None)
-
-        self.thunks.join()
         self.pool.join()
-
-
-class SequentialExecutor(Executor):
-    def __init__(self, frame: Frame):
-        super().__init__(frame)
-        self.frames = Queue()
-
-    def clear(self):
-        q = self.frames
-        while not q.empty():
-            assert q.get_nowait().ready
-
-    def next_frame(self):
-        self.frame = self.frames.get_nowait()
-
-    def enqueue_frame(self, x):
-        self.frames.put_nowait(x)
-
-    def call(self, func, args):
-        self.push(func(*args))
-
-
-class ThreadPoolExecutor(Executor):
-    def __init__(self, frame: Frame, queue: Queue):
-        super().__init__(frame)
-        self.frames, self.requests = Queue(), queue
-
-    def clear(self):
-        q = self.frames
-        while not q.empty():
-            assert q.get_nowait().ready
-
-    def next_frame(self):
-        self.frame = self.frames.get()
-
-    def enqueue_frame(self, x):
-        self.frames.put(x)
-
-    def call(self, func, args):
-        thunk = Thunk(self.frame)
-        self.requests.put((func, args, thunk, self.frames))
-        self.push_command((Command.AwaitThunk, thunk))
-        self.next_frame()

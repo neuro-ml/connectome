@@ -158,8 +158,8 @@ def execute(cmd, node, hashes, cache, backend: Backend):
         elif cmd == Command.AwaitThunk:
             child, = args
             if child.ready:
-                if child.error:
-                    raise RuntimeError('Error while computing frame')
+                if child.error is not None:
+                    raise child.error
 
                 push(child.value)
             else:

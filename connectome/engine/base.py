@@ -117,11 +117,8 @@ class Node:
     def __init__(self, name: str):
         self.name = name
 
-    def __str__(self):
-        return f'<Node: {self.name}>'
-
     def __repr__(self):
-        return str(self)
+        return f'<Node: {self.name}>'
 
 
 class BoundEdge(NamedTuple):
