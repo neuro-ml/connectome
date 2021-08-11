@@ -1,8 +1,13 @@
+import sys
 from abc import ABC, abstractmethod
 from multiprocessing.pool import ThreadPool
-from queue import SimpleQueue
 
 from .base import Command
+
+if sys.version_info[:2] < (3, 7):
+    from queue import Queue as SafeQueue
+else:
+    from queue import SimpleQueue as SafeQueue
 
 
 class Thunk:
@@ -65,7 +70,7 @@ class Synchronous(Backend):
     class _Executor(Executor):
         def __init__(self, frame: Frame):
             super().__init__(frame)
-            self.frames = SimpleQueue()
+            self.frames = SafeQueue()
 
         def clear(self):
             q = self.frames
@@ -87,9 +92,9 @@ class Synchronous(Backend):
 
 class Threads(Backend):
     class _Executor(Executor):
-        def __init__(self, frame: Frame, queue: SimpleQueue):
+        def __init__(self, frame: Frame, queue: SafeQueue):
             super().__init__(frame)
-            self.frames, self.requests = SimpleQueue(), queue
+            self.frames, self.requests = SafeQueue(), queue
 
         def clear(self):
             q = self.frames
@@ -113,12 +118,12 @@ class Threads(Backend):
 
     def __init__(self, n: int):
         self.n = n
-        self.thunks = SimpleQueue()
+        self.thunks = SafeQueue()
         self.pool = ThreadPool(n, self._loop, (self.thunks,))
         self.pool.close()
 
     @staticmethod
-    def _loop(thunks: SimpleQueue):
+    def _loop(thunks: SafeQueue):
         while True:
             value = thunks.get()
             if value is None:
