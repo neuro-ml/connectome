@@ -29,7 +29,7 @@ jobs:
           pip install -r tests/requirements.txt
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch
       - name: Upload pytest results
         uses: actions/upload-artifact@v2
         with:
