@@ -2,11 +2,13 @@ import gzip
 import logging
 import os
 import shutil
+import warnings
 from pathlib import Path
 from typing import Any, Tuple
 
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
+from ..exceptions import StorageCorruption
 from ..storage import Storage
 from ..storage.config import root_params, make_algorithm, load_config, make_locker
 from ..storage.digest import digest_to_relative
@@ -71,20 +73,23 @@ class DiskCache(Cache):
             if not base.exists():
                 return None, False
 
-            # TODO: how slow is this?
-            check_consistency(base / HASH_FILENAME, pickled)
-            # update the timestamp
-            # TODO: remove the creation, legacy support for now
-            timestamp_file = base / TIME_FILENAME
-            if not timestamp_file.exists():
-                self._create_timestamp(timestamp_file)
-            touch(timestamp_file)
-            return self.serializer.load(base / DATA_FOLDER), True
+            hash_path, time_path = base / HASH_FILENAME, base / TIME_FILENAME
+            # we either have a valid folder
+            if hash_path.exists() and time_path.exists():
+                # TODO: how slow is this?
+                check_consistency(hash_path, pickled)
+                touch(time_path)
+                return self.serializer.load(base / DATA_FOLDER), True
+
+        # or it is corrupted, in which case we can remove it
+        with self.locker.write(digest):
+            self._cleanup_corrupted(base, digest)
+            return None, False
 
     def _save_value(self, digest: str, value, pickled):
         base = self.root / digest_to_relative(digest, self.levels)
         if base.exists():
-            check_consistency(base / HASH_FILENAME, pickled)
+            check_consistency(base / HASH_FILENAME, pickled, check_existence=True)
             # TODO: also compare the raw bytes of `value` and dumped value?
             return
 
@@ -106,22 +111,16 @@ class DiskCache(Cache):
             raise RuntimeError(f'An error occurred while caching at {base}. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
+        hash_path, time_path = local / HASH_FILENAME, local / TIME_FILENAME
+        # time
+        with open(time_path, 'w'):
+            pass
+        os.chmod(time_path, 0o777)
+        shutil.chown(time_path, group=self.group)
         # hash
-        hash_path = local / HASH_FILENAME
-        if hash_path.exists():
-            check_consistency(hash_path, pickled)
-            return
-
-        self._create_timestamp(local / TIME_FILENAME)
         save_hash(hash_path, pickled)
         to_read_only(hash_path, self.permissions, self.group)
         return get_size(hash_path)
-
-    def _create_timestamp(self, path):
-        with open(path, 'w'):
-            pass
-        os.chmod(path, 0o777)
-        shutil.chown(path, group=self.group)
 
     def _mirror_to_storage(self, folder: Path):
         for file in folder.glob('**/*'):
@@ -138,6 +137,10 @@ class DiskCache(Cache):
             os.remove(file)
             file.symlink_to(path)
 
+    def _cleanup_corrupted(self, folder, digest):
+        warnings.warn(f'Corrupted storage at {self.root} for key {digest}. Cleaning up.', RuntimeWarning)
+        shutil.rmtree(folder)
+
 
 def key_to_digest(algorithm, key, version=LATEST_VERSION):
     pickled = dumps(key, version=version)
@@ -145,11 +148,17 @@ def key_to_digest(algorithm, key, version=LATEST_VERSION):
     return pickled, digest
 
 
-def check_consistency(hash_path, pickled):
+def check_consistency(hash_path, pickled, check_existence: bool = False):
+    if check_existence and not hash_path.exists():
+        raise StorageCorruption(f'The pickled graph is missing. You may want to delete the {hash_path.parent} folder.')
+
     with gzip.GzipFile(hash_path, 'rb') as file:
         dumped = file.read()
         if dumped != pickled:
-            raise RuntimeError(f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}')
+            raise StorageCorruption(
+                f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}. '
+                f'You may want to delete the {hash_path.parent} folder.'
+            )
 
 
 def save_hash(hash_path, pickled):

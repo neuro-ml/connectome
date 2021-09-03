@@ -8,3 +8,9 @@ class DependencyError(GraphError):
 
 class FieldError(Exception):
     pass
+
+
+class StorageCorruption(OSError):
+    """
+    Denotes various problems with disk-based storage or persistent cache
+    """
