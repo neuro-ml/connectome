@@ -35,8 +35,7 @@ class MultiDict(Dict[str, List]):
         return super().__getitem__(key)[-1]
 
     def __delitem__(self, key):
-        pass
-        # raise ValueError("Can't delete names from this scope")
+        raise ValueError("Can't delete names from this scope")
 
 
 def extract_signature(func):

@@ -35,6 +35,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 import sys
+from collections import ChainMap
 from pickle import _getattribute, _Pickler as Pickler
 from importlib._bootstrap import _find_spec
 
@@ -117,7 +118,7 @@ def extract_func_data(func):
 DISPATCH, DISPATCH_TABLE = Pickler.dispatch.copy(), {}
 # various versions of cloudpickle store the reducers/dispatch table in different places
 #  1. the simplest case:
-if hasattr(CloudPickler, 'dispatch_table') and isinstance(CloudPickler.dispatch_table, dict):
+if hasattr(CloudPickler, 'dispatch_table') and isinstance(CloudPickler.dispatch_table, (dict, ChainMap)):
     DISPATCH_TABLE = CloudPickler.dispatch_table.copy()
 # 2. the `dispatch` dict can actually be a `dispatch_table`:
 elif 'reduce' in CloudPickler.dispatch[classmethod].__name__:
