@@ -56,6 +56,8 @@ class DiskCache(Cache):
             # we can simply load the previous version, because nothing really changed
             value, exists = self._load(local_digest, local_pickled)
             if exists:
+                # and store it for faster access next time
+                self._save(digest, value, pickled)
                 return value, exists
 
         return None, False
@@ -63,9 +65,7 @@ class DiskCache(Cache):
     def set(self, param: NodeHash, value: Any):
         pickled, digest = key_to_digest(self.algorithm, param.value)
         logger.info('Reading %s', digest)
-
-        with self.locker.write(digest):
-            self._save_value(digest, value, pickled)
+        self._save(digest, value, pickled)
 
     def _load(self, digest, pickled):
         with self.locker.read(digest):
@@ -86,29 +86,30 @@ class DiskCache(Cache):
             self._cleanup_corrupted(base, digest)
             return None, False
 
-    def _save_value(self, digest: str, value, pickled):
-        base = self.root / digest_to_relative(digest, self.levels)
-        if base.exists():
-            check_consistency(base / HASH_FILENAME, pickled, check_existence=True)
-            # TODO: also compare the raw bytes of `value` and dumped value?
-            return
+    def _save(self, digest: str, value, pickled):
+        with self.locker.write(digest):
+            base = self.root / digest_to_relative(digest, self.levels)
+            if base.exists():
+                check_consistency(base / HASH_FILENAME, pickled, check_existence=True)
+                # TODO: also compare the raw bytes of `value` and dumped value?
+                return
 
-        # TODO: need a temp data folder
-        data_folder = base / DATA_FOLDER
-        create_folders(data_folder, self.permissions, self.group)
+            # TODO: need a temp data folder
+            data_folder = base / DATA_FOLDER
+            create_folders(data_folder, self.permissions, self.group)
 
-        try:
-            # data
-            self.serializer.save(value, data_folder)
-            self._mirror_to_storage(data_folder)
-            # meta
-            size = self._save_meta(base, pickled)
-            if self.locker.track_size:
-                self.locker.inc_size(size)
+            try:
+                # data
+                self.serializer.save(value, data_folder)
+                self._mirror_to_storage(data_folder)
+                # meta
+                size = self._save_meta(base, pickled)
+                if self.locker.track_size:
+                    self.locker.inc_size(size)
 
-        except BaseException as e:
-            shutil.rmtree(base)
-            raise RuntimeError(f'An error occurred while caching at {base}. Cleaned up.') from e
+            except BaseException as e:
+                shutil.rmtree(base)
+                raise RuntimeError(f'An error occurred while caching at {base}. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
         hash_path, time_path = local / HASH_FILENAME, local / TIME_FILENAME
