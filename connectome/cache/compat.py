@@ -34,7 +34,9 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
+import importlib
 import sys
+from _weakrefset import WeakSet
 from collections import ChainMap
 from pickle import _getattribute, _Pickler as Pickler
 from importlib._bootstrap import _find_spec
@@ -92,6 +94,28 @@ def _is_dynamic(module):
     return _find_spec(module.__name__, pkgpath, module) is None
 
 
+def _is_under_development(obj, name):
+    # the user opted out this function/class
+    if obj in NO_PICKLE_SET:
+        return False
+
+    if name is None:
+        name = getattr(obj, '__qualname__', None)
+    if name is None:
+        name = getattr(obj, '__name__', None)
+
+    base_module = _whichmodule(obj, name).split('.', 1)[0]
+    base = sys.modules.get(base_module)
+    if base is None:
+        base = importlib.import_module(base_module)
+
+    return getattr(base, '__development__', False)
+
+
+def _is_truly_global(obj, name):
+    return _is_global(obj, name=name) and not _is_under_development(obj, name)
+
+
 def extract_func_data(func):
     """A simplified version of the same function from cloudpickle"""
     code = func.__code__
@@ -133,3 +157,5 @@ def to_dispatch(func):
 
 
 DISPATCH.update({k: to_dispatch(v) for k, v in DISPATCH_TABLE.items()})
+# we use a set of weak refs, because we don't want to cause memory leaks
+NO_PICKLE_SET = WeakSet()

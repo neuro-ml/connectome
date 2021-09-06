@@ -5,15 +5,13 @@ This module contains a relaxed but reproducible version of cloudpickle:
     3. we don't need to restore the pickled object, so we can drop any information
         as long as it helps to achieve (or doesn't impede) 1 and 2
 """
-import importlib
+import abc
 import itertools
 import pickle
 import pickletools
-import sys
 import types
 from operator import itemgetter
 from typing import NamedTuple, Any
-from weakref import WeakSet
 from contextlib import suppress
 from enum import Enum
 from io import BytesIO
@@ -22,15 +20,13 @@ from cloudpickle.cloudpickle import is_tornado_coroutine, PYPY, builtin_code_typ
     _rebuild_tornado_coroutine, _fill_function, _find_imported_submodules, _make_skel_func, \
     _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict
 
-from .compat import _is_global, DISPATCH, extract_func_data, Pickler, _whichmodule
+from .compat import DISPATCH, extract_func_data, Pickler, NO_PICKLE_SET, _is_truly_global
 
 
 def sort_dict(d):
     return tuple(sorted(d.items()))
 
 
-# we use a set of weak refs, because we don't want to cause memory leaks
-NO_PICKLE_SET = WeakSet()
 VERSION_METHOD = '__getversion__'
 
 
@@ -46,28 +42,6 @@ def no_pickle(obj):
     """
     NO_PICKLE_SET.add(obj)
     return obj
-
-
-def _is_under_development(obj, name):
-    # the user opted out this function/class
-    if obj in NO_PICKLE_SET:
-        return False
-
-    if name is None:
-        name = getattr(obj, '__qualname__', None)
-    if name is None:
-        name = getattr(obj, '__name__', None)
-
-    base_module = _whichmodule(obj, name).split('.', 1)[0]
-    base = sys.modules.get(base_module)
-    if base is None:
-        base = importlib.import_module(base_module)
-
-    return getattr(base, '__development__', False)
-
-
-def _is_truly_global(obj, name):
-    return _is_global(obj, name=name) and not _is_under_development(obj, name)
 
 
 class PickleError(TypeError):
@@ -109,6 +83,10 @@ class PortablePickler(Pickler):
                               f'while pickling object {obj}') from None
 
     @staticmethod
+    def _is_global(obj, name):
+        return _is_truly_global(obj, name)
+
+    @staticmethod
     def reduce_property(obj: property):
         return property, (obj.fget, obj.fset, obj.fdel, obj.__doc__)
 
@@ -145,7 +123,7 @@ class PortablePickler(Pickler):
     # function reducers will be used after we migrate to newer version
     def reduce_function(self, obj):
         """ Patched version that knows about __development__ mode """
-        if _is_truly_global(obj, None):
+        if self._is_global(obj, None):
             return NotImplemented
         elif PYPY and isinstance(obj.__code__, builtin_code_type):
             raise NotImplementedError
@@ -199,7 +177,7 @@ class PortablePickler(Pickler):
     # for now we'll use the old `save_function`
     def save_function(self, obj, name=None):
         """ Patched version that knows about __development__ mode """
-        if _is_truly_global(obj, name):
+        if self._is_global(obj, name):
             return Pickler.save_global(self, obj, name=name)
         elif PYPY and isinstance(obj.__code__, builtin_code_type):
             return self.save_pypy_builtin_func(obj)
@@ -228,12 +206,12 @@ class PortablePickler(Pickler):
         self.write(pickle.TUPLE)
         self.write(pickle.REDUCE)
 
-    def save_dynamic_class(self, obj):
+    @staticmethod
+    def _get_cls_params(obj):
         clsdict = _extract_class_dict(obj)
         clsdict.pop('__weakref__', None)
 
         if "_abc_impl" in clsdict:
-            import abc
             (registry, _, _, _) = abc._get_dump(obj)
             clsdict["_abc_impl"] = [subclass_weakref() for subclass_weakref in registry]
 
@@ -251,31 +229,55 @@ class PortablePickler(Pickler):
         if isinstance(__dict__, property):
             type_kwargs['__dict__'] = __dict__
 
-        save = self.save
-        write = self.write
-
         # reproducibility
         clsdict.pop('__doc__', None)
         clsdict.pop('__module__', None)
-        type_kwargs = sort_dict(type_kwargs)
+        return clsdict, sort_dict(type_kwargs)
 
+    def reduce_dynamic_class(self, obj):
+        clsdict, type_kwargs = self._get_cls_params(obj)
+
+        args = type(obj), obj.__name__, obj.__bases__, type_kwargs
+        state = sort_dict(clsdict)
         if hasattr(types, 'ClassType') and self.version == 0:
-            save(types.ClassType)
+            reducer = types.ClassType
         else:
-            save(type)
+            reducer = type
 
-        if issubclass(obj, Enum):
-            members = tuple(sorted([(e.name, e.value) for e in obj]))
-            # __qualname__ is only used for debug
-            save((obj.__bases__, obj.__name__, members, obj.__module__))
+        return reducer, args, state
 
-            for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
-                             "_value2member_map_"] + list(map(itemgetter(0), members)):
-                clsdict.pop(attrname, None)
+    def reduce_dynamic_enum(self, obj):
+        clsdict, type_kwargs = self._get_cls_params(obj)
+
+        members = {e.name: e.value for e in obj}
+        for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
+                         "_value2member_map_"] + list(members):
+            clsdict.pop(attrname, None)
+
+        args = obj.__bases__, obj.__name__, sort_dict(members), obj.__module__
+        state = sort_dict(clsdict)
+        if hasattr(types, 'ClassType') and self.version == 0:
+            reducer = types.ClassType
         else:
-            save((type(obj), obj.__name__, obj.__bases__, type_kwargs))
+            reducer = type
 
-        save(sort_dict(clsdict))
+        return reducer, args, state
+
+    def save_dynamic_class(self, obj):
+        if isinstance(obj, Enum):
+            reducer, args, state = self.reduce_dynamic_enum(obj)
+        else:
+            reducer, args, state = self.reduce_dynamic_class(obj)
+
+        if self.version >= 1:
+            return self.save_reduce(reducer, args, state, obj=obj)
+
+        save = self.save
+        write = self.write
+
+        save(reducer)
+        save(args)
+        save(state)
         write(pickle.TUPLE2)
         write(pickle.REDUCE)
 
@@ -300,7 +302,7 @@ class PortablePickler(Pickler):
             self.write(pickle.TUPLE2)
             self.write(pickle.REDUCE)
 
-        elif not _is_truly_global(obj, name=name):
+        elif not self._is_global(obj, name=name):
             self.save_dynamic_class(obj)
         else:
             Pickler.save_global(self, obj, name=name)

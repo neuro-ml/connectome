@@ -1,3 +1,5 @@
+from hashlib import sha256
+
 import pytest
 from pickler_test_helpers import functions
 from pickler_test_helpers import functions2
@@ -7,19 +9,22 @@ from pickler_test_helpers import classes2
 from connectome.cache.pickler import dumps, AVAILABLE_VERSIONS
 
 
+def assert_same_hash(reference, version, obj, references):
+    key = version, obj
+    if key in references:
+        assert sha256(reference).hexdigest() == references[key]
+
+
 @pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
 def test_equal_functions(pickle_references, version):
     reference = dumps(functions.identity, version=version)
-    if (version, functions.identity) in pickle_references:
-        assert reference == pickle_references[version, functions.identity]
+    assert_same_hash(reference, version, functions.identity, pickle_references)
 
     assert dumps(functions2.identity, version=version) == reference
 
     # FIXME: can't use functions.identity because the flag NESTED is different
-    def identity(x):
-        return x
-
-    reference = dumps(identity, version=version)
+    reference = dumps(functions.nested_identity, version=version)
+    assert_same_hash(reference, version, functions.nested_identity, pickle_references)
 
     def identity(x: int) -> int:
         return x
