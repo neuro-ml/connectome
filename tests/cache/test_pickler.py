@@ -95,11 +95,13 @@ def test_different_functions(version):
 
 
 @pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
-def test_class(version):
+def test_class(version, pickle_references):
     reference = dumps(classes.One, version=version)
+    assert_same_hash(reference, version, classes.One, pickle_references)
     assert reference == dumps(classes2.One, version=version)
 
     reference = dumps(classes.A, version=version)
+    assert_same_hash(reference, version, classes.A, pickle_references)
     assert reference != dumps(classes.B, version=version)
 
     classes.A.y = 2
