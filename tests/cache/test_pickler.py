@@ -12,7 +12,10 @@ from connectome.cache.pickler import dumps, AVAILABLE_VERSIONS
 def assert_same_hash(reference, version, obj, references):
     key = version, obj
     if key in references:
-        assert sha256(reference).hexdigest() == references[key]
+        values = references[key]
+        if isinstance(values, str):
+            values = values,
+        assert sha256(reference).hexdigest() in values
 
 
 @pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
