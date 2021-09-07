@@ -61,7 +61,10 @@ for _key in _custom:
 class PortablePickler(Pickler):
     dispatch = DISPATCH
 
-    def __init__(self, file, protocol=None, version=LATEST_VERSION):
+    def __init__(self, file, protocol=None, version=None):
+        if version is None:
+            version = LATEST_VERSION
+
         # legacy from cloudpickle
         if protocol is None and version == 0:
             protocol = pickle.HIGHEST_PROTOCOL
@@ -101,6 +104,7 @@ class PortablePickler(Pickler):
         #  associated issue: https://bugs.python.org/issue36521
         if consts and isinstance(consts[0], str):
             consts = list(consts)[1:]
+            # TODO: this is not enough, None might be referenced in the bytecode under a wrong index
             if None in consts:
                 consts.remove(None)
             consts = (None, *consts)
@@ -320,7 +324,7 @@ class PortablePickler(Pickler):
         dispatch[_lru_cache_wrapper] = save_lru_cache
 
 
-def dumps(obj, protocol: int = None, version: int = LATEST_VERSION) -> bytes:
+def dumps(obj, protocol: int = None, version: int = None) -> bytes:
     with BytesIO() as file:
         PortablePickler(file, protocol=protocol, version=version).dump(obj)
         result = file.getvalue()

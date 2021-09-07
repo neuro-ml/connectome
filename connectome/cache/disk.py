@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Tuple
 
 from .base import Cache
-from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
+from .pickler import dumps, PREVIOUS_VERSIONS
 from ..exceptions import StorageCorruption
 from ..storage import Storage
 from ..storage.config import root_params, make_algorithm, load_config, make_locker
@@ -143,7 +143,7 @@ class DiskCache(Cache):
         shutil.rmtree(folder)
 
 
-def key_to_digest(algorithm, key, version=LATEST_VERSION):
+def key_to_digest(algorithm, key, version=None):
     pickled = dumps(key, version=version)
     digest = algorithm(pickled).hexdigest()
     return pickled, digest
@@ -153,13 +153,16 @@ def check_consistency(hash_path, pickled, check_existence: bool = False):
     if check_existence and not hash_path.exists():
         raise StorageCorruption(f'The pickled graph is missing. You may want to delete the {hash_path.parent} folder.')
 
-    with gzip.GzipFile(hash_path, 'rb') as file:
-        dumped = file.read()
-        if dumped != pickled:
-            raise StorageCorruption(
-                f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}. '
-                f'You may want to delete the {hash_path.parent} folder.'
-            )
+    suggestion = f'You may want to delete the {hash_path.parent} folder.'
+    try:
+        with gzip.GzipFile(hash_path, 'rb') as file:
+            dumped = file.read()
+            if dumped != pickled:
+                raise StorageCorruption(
+                    f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}. {suggestion}'
+                )
+    except gzip.BadGzipFile:
+        raise StorageCorruption(f'The hash is corrupted. {suggestion}') from None
 
 
 def save_hash(hash_path, pickled):
