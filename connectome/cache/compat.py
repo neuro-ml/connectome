@@ -44,6 +44,11 @@ from importlib._bootstrap import _find_spec
 from cloudpickle import CloudPickler
 from cloudpickle.cloudpickle import _whichmodule, _extract_code_globals, _get_cell_contents
 
+try:
+    from gzip import BadGzipFile
+except ImportError:
+    BadGzipFile = OSError
+
 
 def _is_global(obj, name=None):
     if name is None:

@@ -6,8 +6,6 @@ import warnings
 from pathlib import Path
 from typing import Any, Tuple
 
-from .base import Cache
-from .pickler import dumps, PREVIOUS_VERSIONS
 from ..exceptions import StorageCorruption
 from ..storage import Storage
 from ..storage.config import root_params, make_algorithm, load_config, make_locker
@@ -15,6 +13,9 @@ from ..storage.digest import digest_to_relative
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..storage.utils import touch, create_folders, to_read_only, get_size
+from .base import Cache
+from .pickler import dumps, PREVIOUS_VERSIONS
+from .compat import BadGzipFile
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ def check_consistency(hash_path, pickled, check_existence: bool = False):
                 raise StorageCorruption(
                     f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}. {suggestion}'
                 )
-    except gzip.BadGzipFile:
+    except BadGzipFile:
         raise StorageCorruption(f'The hash is corrupted. {suggestion}') from None
 
 
