@@ -5,31 +5,28 @@ This module contains a relaxed but reproducible version of cloudpickle:
     3. we don't need to restore the pickled object, so we can drop any information
         as long as it helps to achieve (or doesn't impede) 1 and 2
 """
-import importlib
+import abc
 import itertools
 import pickle
 import pickletools
-import struct
-import sys
 import types
 from operator import itemgetter
 from typing import NamedTuple, Any
-from weakref import WeakSet
 from contextlib import suppress
 from enum import Enum
 from io import BytesIO
 
-from cloudpickle.cloudpickle import CloudPickler, is_tornado_coroutine, _rebuild_tornado_coroutine, _fill_function, \
-    _find_imported_submodules, _make_skel_func, _is_global, PYPY, builtin_code_type, Pickler, _whichmodule, \
-    _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict, string_types
+from cloudpickle.cloudpickle import is_tornado_coroutine, PYPY, builtin_code_type, \
+    _rebuild_tornado_coroutine, _fill_function, _find_imported_submodules, _make_skel_func, \
+    _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict
+
+from .compat import DISPATCH, extract_func_data, Pickler, NO_PICKLE_SET, _is_truly_global
 
 
 def sort_dict(d):
     return tuple(sorted(d.items()))
 
 
-# we use a set of weak refs, because we don't want to cause memory leaks
-NO_PICKLE_SET = WeakSet()
 VERSION_METHOD = '__getversion__'
 
 
@@ -47,44 +44,37 @@ def no_pickle(obj):
     return obj
 
 
-def _is_under_development(obj, name):
-    # the user opted out this function/class
-    if obj in NO_PICKLE_SET:
-        return False
-
-    if name is None:
-        name = getattr(obj, '__qualname__', None)
-    if name is None:
-        name = getattr(obj, '__name__', None)
-
-    base_module = _whichmodule(obj, name).split('.', 1)[0]
-    base = sys.modules.get(base_module)
-    if base is None:
-        base = importlib.import_module(base_module)
-
-    return getattr(base, '__development__', False)
-
-
-def _is_truly_global(obj, name):
-    return _is_global(obj, name=name) and not _is_under_development(obj, name)
-
-
 class PickleError(TypeError):
     pass
 
 
 # new invalidation bugs will inevitable arise
 # versioning will help diminish the pain from transitioning between updates
-AVAILABLE_VERSIONS = 0,
+AVAILABLE_VERSIONS = 0, 1
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
 
+_custom = types.CodeType, types.FunctionType, type, property
+for _key in _custom:
+    DISPATCH.pop(_key, None)
 
-class PortablePickler(CloudPickler):
-    dispatch = CloudPickler.dispatch.copy()
 
-    def __init__(self, file, protocol=None, version=LATEST_VERSION):
+class PortablePickler(Pickler):
+    dispatch = DISPATCH
+
+    def __init__(self, file, protocol=None, version=None):
+        if version is None:
+            version = LATEST_VERSION
+
+        # legacy from cloudpickle
+        if protocol is None and version == 0:
+            protocol = pickle.HIGHEST_PROTOCOL
+
         super().__init__(file, protocol=protocol)
         self.version = version
+        self.dispatch_table = {
+            types.CodeType: self.reduce_code,
+            property: self.reduce_property,
+        }
 
     def save(self, obj, *args, **kwargs):
         try:
@@ -95,7 +85,16 @@ class PortablePickler(CloudPickler):
             raise PickleError(f'Exception "{e.__class__.__name__}: {e}" '
                               f'while pickling object {obj}') from None
 
-    def save_codeobject(self, obj):
+    @staticmethod
+    def _is_global(obj, name):
+        return _is_truly_global(obj, name)
+
+    @staticmethod
+    def reduce_property(obj: property):
+        return property, (obj.fget, obj.fset, obj.fdel, obj.__doc__)
+
+    @staticmethod
+    def reduce_code(obj: types.CodeType):
         """
         Same reducer as in cloudpickle, except `co_filename`, `co_firstlineno`, `lnotab` are not saved.
         """
@@ -105,6 +104,7 @@ class PortablePickler(CloudPickler):
         #  associated issue: https://bugs.python.org/issue36521
         if consts and isinstance(consts[0], str):
             consts = list(consts)[1:]
+            # TODO: this is not enough, None might be referenced in the bytecode under a wrong index
             if None in consts:
                 consts.remove(None)
             consts = (None, *consts)
@@ -122,78 +122,100 @@ class PortablePickler(CloudPickler):
             obj.co_name,  # obj.co_firstlineno, obj.co_lnotab,
             obj.co_freevars, obj.co_cellvars
         )
-        self.save_reduce(types.CodeType, args, obj=obj)
+        return types.CodeType, args
 
-    dispatch[types.CodeType] = save_codeobject
-
-    def save_function(self, obj, name=None):
+    # function reducers will be used after we migrate to newer version
+    def reduce_function(self, obj):
         """ Patched version that knows about __development__ mode """
-        if _is_truly_global(obj, name):
-            return Pickler.save_global(self, obj, name=name)
+        if self._is_global(obj, None):
+            return NotImplemented
         elif PYPY and isinstance(obj.__code__, builtin_code_type):
-            return self.save_pypy_builtin_func(obj)
+            raise NotImplementedError
         else:
-            return self.save_function_tuple(obj)
+            return self.reduce_dynamic_function(obj)
 
-    dispatch[types.FunctionType] = save_function
-
-    def save_function_tuple(self, func):
-        """ Reproducible function tuple """
+    def reduce_dynamic_function(self, func):
         if is_tornado_coroutine(func):
-            self.save_reduce(_rebuild_tornado_coroutine, (func.__wrapped__,), obj=func)
-            return
+            return _rebuild_tornado_coroutine, (func.__wrapped__,)
 
-        save = self.save
-        write = self.write
+        # stuff we're dropping:
+        #  1. base globals - only needed for unpickling
+        #  2. __qualname__, __module__ - only used for debug
+        #  3. __annotations__, __doc__ - not used at runtime
 
-        # base globals are only needed for unpickling
-        code, f_globals, defaults, closure_values, dct, _ = self.extract_func_data(func)
+        code, f_globals, defaults, closure_values, dct, _ = extract_func_data(func)
         f_globals, dct = map(sort_dict, [f_globals, dct])
 
-        save(_fill_function)
-        write(pickle.MARK)
-
+        # args
+        args = code, (len(closure_values) if closure_values is not None else -1)
+        # state
+        # TODO: do we need this?
         submodules = _find_imported_submodules(
             code,
             # same as f_globals.values()
             itertools.chain(map(itemgetter(1), f_globals), closure_values or ()),
         )
+        name = func.__name__
+        kw_defaults = getattr(func, '__kwdefaults__', None)
+        if self.version >= 1:
+            if kw_defaults is not None:
+                kw_defaults = sort_dict(kw_defaults)
+            slot_state = f_globals, defaults, dct, closure_values, name, submodules, kw_defaults
 
-        save(_make_skel_func)
-        save((
-            code,
-            len(closure_values) if closure_values is not None else -1,
-        ))
-        write(pickle.REDUCE)
+        else:
+            # TODO: deprecated
+            slot_state = {
+                'globals': f_globals,
+                'defaults': defaults,
+                'dict': dct,
+                'closure_values': closure_values,
+                'name': name,
+                '_cloudpickle_submodules': submodules
+            }
+            if getattr(func, '__kwdefaults__', False):
+                slot_state['kwdefaults'] = func.__kwdefaults__
+            slot_state = sort_dict(slot_state)
+
+        return types.FunctionType, args, (slot_state, func.__dict__)
+
+    # for now we'll use the old `save_function`
+    def save_function(self, obj, name=None):
+        """ Patched version that knows about __development__ mode """
+        if self._is_global(obj, name):
+            return Pickler.save_global(self, obj, name=name)
+        elif PYPY and isinstance(obj.__code__, builtin_code_type):
+            return self.save_pypy_builtin_func(obj)
+        else:
+            return self.save_dynamic_function(obj)
+
+    dispatch[types.FunctionType] = save_function
+
+    def save_dynamic_function(self, func):
+        """ Reproducible function tuple """
+        reducer, *args = self.reduce_dynamic_function(func)
+        if self.version >= 1 or is_tornado_coroutine(func):
+            self.save_reduce(reducer, *args, obj=func)
+            return
+
+        args, (state, _) = args
+        self.save(_fill_function)
+        self.write(pickle.MARK)
+
+        self.save(_make_skel_func)
+        self.save(args)
+        self.write(pickle.REDUCE)
         self.memoize(func)
 
-        state = {
-            'globals': f_globals,
-            'defaults': defaults,
-            'dict': dct,
-            'closure_values': closure_values,
-            'name': func.__name__,
-            '_cloudpickle_submodules': submodules
-        }
-        # __qualname__ is only used fo debug
-        if getattr(func, '__kwdefaults__', False):
-            state['kwdefaults'] = func.__kwdefaults__
+        self.save(state)
+        self.write(pickle.TUPLE)
+        self.write(pickle.REDUCE)
 
-        state = sort_dict(state)
-
-        save(state)
-        write(pickle.TUPLE)
-        write(pickle.REDUCE)
-
-    def _save_dynamic_enum(self, obj, clsdict):
-        raise NotImplementedError
-
-    def save_dynamic_class(self, obj):
+    @staticmethod
+    def _get_cls_params(obj):
         clsdict = _extract_class_dict(obj)
         clsdict.pop('__weakref__', None)
 
         if "_abc_impl" in clsdict:
-            import abc
             (registry, _, _, _) = abc._get_dump(obj)
             clsdict["_abc_impl"] = [subclass_weakref() for subclass_weakref in registry]
 
@@ -201,7 +223,7 @@ class PortablePickler(CloudPickler):
         type_kwargs = {}
         if hasattr(obj, "__slots__"):
             type_kwargs['__slots__'] = obj.__slots__
-            if isinstance(obj.__slots__, string_types):
+            if isinstance(obj.__slots__, str):
                 clsdict.pop(obj.__slots__)
             else:
                 for k in obj.__slots__:
@@ -211,31 +233,59 @@ class PortablePickler(CloudPickler):
         if isinstance(__dict__, property):
             type_kwargs['__dict__'] = __dict__
 
-        save = self.save
-        write = self.write
-
         # reproducibility
         clsdict.pop('__doc__', None)
         clsdict.pop('__module__', None)
-        type_kwargs = sort_dict(type_kwargs)
+        return clsdict, sort_dict(type_kwargs)
 
-        save(types.ClassType)
-        if issubclass(obj, Enum):
-            members = tuple(sorted([(e.name, e.value) for e in obj]))
-            # __qualname__ is only used for debug
-            save((obj.__bases__, obj.__name__, members, obj.__module__))
+    def reduce_dynamic_class(self, obj):
+        clsdict, type_kwargs = self._get_cls_params(obj)
 
-            for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
-                             "_value2member_map_"] + list(map(itemgetter(0), members)):
-                clsdict.pop(attrname, None)
+        args = type(obj), obj.__name__, obj.__bases__, type_kwargs
+        state = sort_dict(clsdict)
+        if hasattr(types, 'ClassType') and self.version == 0:
+            reducer = types.ClassType
         else:
-            save((type(obj), obj.__name__, obj.__bases__, type_kwargs))
+            reducer = type
 
-        save(sort_dict(clsdict))
+        return reducer, args, state
+
+    def reduce_dynamic_enum(self, obj):
+        clsdict, type_kwargs = self._get_cls_params(obj)
+
+        members = {e.name: e.value for e in obj}
+        for attrname in ["_generate_next_value_", "_member_names_", "_member_map_", "_member_type_",
+                         "_value2member_map_"] + list(members):
+            clsdict.pop(attrname, None)
+
+        args = obj.__bases__, obj.__name__, sort_dict(members), obj.__module__
+        state = sort_dict(clsdict)
+        if hasattr(types, 'ClassType') and self.version == 0:
+            reducer = types.ClassType
+        else:
+            reducer = type
+
+        return reducer, args, state
+
+    def save_dynamic_class(self, obj):
+        if isinstance(obj, Enum):
+            reducer, args, state = self.reduce_dynamic_enum(obj)
+        else:
+            reducer, args, state = self.reduce_dynamic_class(obj)
+
+        if self.version >= 1:
+            return self.save_reduce(reducer, args, state, obj=obj)
+
+        save = self.save
+        write = self.write
+
+        save(reducer)
+        save(args)
+        save(state)
         write(pickle.TUPLE2)
         write(pickle.REDUCE)
 
-    def save_global(self, obj, name=None, pack=struct.pack):
+    def save_global(self, obj, name=None):
         """ Save a "global" which is not under __development__ """
         if obj is type(None):
             return self.save_reduce(type, (None,), obj=obj)
@@ -247,6 +297,7 @@ class PortablePickler(CloudPickler):
             return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
         elif name is not None:
             Pickler.save_global(self, obj, name=name)
+
         elif hasattr(obj, VERSION_METHOD):
             self.save(VersionedClass)
             version = getattr(obj, VERSION_METHOD)()
@@ -255,13 +306,12 @@ class PortablePickler(CloudPickler):
             self.write(pickle.TUPLE2)
             self.write(pickle.REDUCE)
 
-        elif not _is_truly_global(obj, name=name):
+        elif not self._is_global(obj, name=name):
             self.save_dynamic_class(obj)
         else:
             Pickler.save_global(self, obj, name=name)
 
     dispatch[type] = save_global
-    dispatch[types.ClassType] = save_global
 
     with suppress(ImportError):
         from _functools import _lru_cache_wrapper
@@ -274,7 +324,7 @@ class PortablePickler(CloudPickler):
         dispatch[_lru_cache_wrapper] = save_lru_cache
 
 
-def dumps(obj, protocol: int = None, version: int = LATEST_VERSION) -> bytes:
+def dumps(obj, protocol: int = None, version: int = None) -> bytes:
     with BytesIO() as file:
         PortablePickler(file, protocol=protocol, version=version).dump(obj)
         result = file.getvalue()

@@ -6,8 +6,6 @@ import warnings
 from pathlib import Path
 from typing import Any, Tuple
 
-from .base import Cache
-from .pickler import dumps, PREVIOUS_VERSIONS, LATEST_VERSION
 from ..exceptions import StorageCorruption
 from ..storage import Storage
 from ..storage.config import root_params, make_algorithm, load_config, make_locker
@@ -15,6 +13,9 @@ from ..storage.digest import digest_to_relative
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..storage.utils import touch, create_folders, to_read_only, get_size
+from .base import Cache
+from .pickler import dumps, PREVIOUS_VERSIONS
+from .compat import BadGzipFile
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ class DiskCache(Cache):
             # we can simply load the previous version, because nothing really changed
             value, exists = self._load(local_digest, local_pickled)
             if exists:
+                # and store it for faster access next time
+                self._save(digest, value, pickled)
                 return value, exists
 
         return None, False
@@ -63,9 +66,7 @@ class DiskCache(Cache):
     def set(self, param: NodeHash, value: Any):
         pickled, digest = key_to_digest(self.algorithm, param.value)
         logger.info('Reading %s', digest)
-
-        with self.locker.write(digest):
-            self._save_value(digest, value, pickled)
+        self._save(digest, value, pickled)
 
     def _load(self, digest, pickled):
         with self.locker.read(digest):
@@ -86,29 +87,30 @@ class DiskCache(Cache):
             self._cleanup_corrupted(base, digest)
             return None, False
 
-    def _save_value(self, digest: str, value, pickled):
-        base = self.root / digest_to_relative(digest, self.levels)
-        if base.exists():
-            check_consistency(base / HASH_FILENAME, pickled, check_existence=True)
-            # TODO: also compare the raw bytes of `value` and dumped value?
-            return
+    def _save(self, digest: str, value, pickled):
+        with self.locker.write(digest):
+            base = self.root / digest_to_relative(digest, self.levels)
+            if base.exists():
+                check_consistency(base / HASH_FILENAME, pickled, check_existence=True)
+                # TODO: also compare the raw bytes of `value` and dumped value?
+                return
 
-        # TODO: need a temp data folder
-        data_folder = base / DATA_FOLDER
-        create_folders(data_folder, self.permissions, self.group)
+            # TODO: need a temp data folder
+            data_folder = base / DATA_FOLDER
+            create_folders(data_folder, self.permissions, self.group)
 
-        try:
-            # data
-            self.serializer.save(value, data_folder)
-            self._mirror_to_storage(data_folder)
-            # meta
-            size = self._save_meta(base, pickled)
-            if self.locker.track_size:
-                self.locker.inc_size(size)
+            try:
+                # data
+                self.serializer.save(value, data_folder)
+                self._mirror_to_storage(data_folder)
+                # meta
+                size = self._save_meta(base, pickled)
+                if self.locker.track_size:
+                    self.locker.inc_size(size)
 
-        except BaseException as e:
-            shutil.rmtree(base)
-            raise RuntimeError(f'An error occurred while caching at {base}. Cleaned up.') from e
+            except BaseException as e:
+                shutil.rmtree(base)
+                raise RuntimeError(f'An error occurred while caching at {base}. Cleaned up.') from e
 
     def _save_meta(self, local, pickled):
         hash_path, time_path = local / HASH_FILENAME, local / TIME_FILENAME
@@ -142,7 +144,7 @@ class DiskCache(Cache):
         shutil.rmtree(folder)
 
 
-def key_to_digest(algorithm, key, version=LATEST_VERSION):
+def key_to_digest(algorithm, key, version=None):
     pickled = dumps(key, version=version)
     digest = algorithm(pickled).hexdigest()
     return pickled, digest
@@ -152,13 +154,16 @@ def check_consistency(hash_path, pickled, check_existence: bool = False):
     if check_existence and not hash_path.exists():
         raise StorageCorruption(f'The pickled graph is missing. You may want to delete the {hash_path.parent} folder.')
 
-    with gzip.GzipFile(hash_path, 'rb') as file:
-        dumped = file.read()
-        if dumped != pickled:
-            raise StorageCorruption(
-                f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}. '
-                f'You may want to delete the {hash_path.parent} folder.'
-            )
+    suggestion = f'You may want to delete the {hash_path.parent} folder.'
+    try:
+        with gzip.GzipFile(hash_path, 'rb') as file:
+            dumped = file.read()
+            if dumped != pickled:
+                raise StorageCorruption(
+                    f'The dumped and current pickle do not match at {hash_path}: {dumped} {pickled}. {suggestion}'
+                )
+    except BadGzipFile:
+        raise StorageCorruption(f'The hash is corrupted. {suggestion}') from None
 
 
 def save_hash(hash_path, pickled):

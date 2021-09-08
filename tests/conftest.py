@@ -1,6 +1,6 @@
 import pytest
 
-pytest_plugins = ['graph_fixtures', 'interface_fixtures', 'disk_fixtures']
+pytest_plugins = ['graph_fixtures', 'interface_fixtures', 'disk_fixtures', 'cache_fixtures']
 markers = ['redis']
 
 
