@@ -48,7 +48,7 @@ class PickleError(TypeError):
     pass
 
 
-# new invalidation bugs will inevitable arise
+# new invalidation bugs will inevitably arise
 # versioning will help diminish the pain from transitioning between updates
 AVAILABLE_VERSIONS = 0, 1
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS

@@ -3,10 +3,9 @@ from pathlib import Path
 from typing import Union, Sequence, Callable
 
 import numpy as np
-from paramiko.config import SSH_PORT
 
 from .base import BaseLayer, CallableLayer
-from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, RemoteStorageContainer, CacheColumnsContainer
+from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, CacheColumnsContainer
 from ..containers.debug import HashDigestContainer
 from ..containers.filter import FilterContainer
 from ..containers.goup import GroupContainer, MultiGroupLayer
@@ -16,7 +15,6 @@ from ..containers.shortcuts import ApplyContainer
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..storage.config import init_storage
-from ..storage.remote import RemoteOptions
 from ..utils import PathLike, StringsLike
 from .utils import format_arguments
 
@@ -209,24 +207,6 @@ class CacheColumns(CacheLayer):
                  names: StringsLike, verbose: bool = False):
         names = to_seq(names)
         super().__init__(CacheColumnsContainer(names, root, storage, _resolve_serializer(serializer), verbose=verbose))
-
-
-class RemoteStorageBase(CacheLayer):
-    def __init__(self, options: Sequence[RemoteOptions], serializer: Union[Serializer, Sequence[Serializer]],
-                 names: StringsLike = None, impure: bool = False):
-        names = to_seq(names)
-        super().__init__(RemoteStorageContainer(names, options, _resolve_serializer(serializer), impure))
-
-
-class RemoteStorage(RemoteStorageBase):
-    def __init__(self, hostname: str, storage: Union[PathLike, Sequence[PathLike]], port: int = SSH_PORT,
-                 *, serializer: Union[Serializer, Sequence[Serializer]],
-                 username: str = None, password: str = None, names: StringsLike = None):
-        if isinstance(storage, (str, Path)):
-            storage = [storage]
-        names = to_seq(names)
-        options = [RemoteOptions(hostname, Path(path), port, username, password) for path in storage]
-        super().__init__(options, _resolve_serializer(serializer), names)
 
 
 class HashDigest(BaseLayer):

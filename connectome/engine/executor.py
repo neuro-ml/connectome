@@ -142,3 +142,6 @@ class Threads(Backend):
         for _ in range(self.n):
             self.thunks.put(None)
         self.pool.join()
+
+
+DefaultBackend = Synchronous()

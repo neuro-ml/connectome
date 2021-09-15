@@ -2,11 +2,10 @@ from typing import Callable, Sequence, Any
 
 from .base import EdgesBag, Wrapper
 from .cache import IdentityContext
-from ..engine import NodeHash
-from ..engine.base import Node, TreeNode, HashOutput
-from ..engine.edges import FunctionEdge, StaticEdge
+from ..engine.base import Node, TreeNode
+from ..engine.edges import FunctionEdge, StaticEdge, StaticGraph
 from ..engine.graph import Graph
-from ..engine.node_hash import NodeHashes, FilterHash
+from ..engine.node_hash import FilterHash
 from ..utils import extract_signature, node_to_dict
 
 
@@ -57,7 +56,7 @@ class FilterContainer(Wrapper):
         return EdgesBag(main.inputs, outputs, edges, IdentityContext())
 
 
-class FilterEdge(StaticEdge):
+class FilterEdge(StaticGraph, StaticEdge):
     def __init__(self, graph: Graph):
         super().__init__(arity=1)
         self.graph = graph
@@ -67,12 +66,6 @@ class FilterEdge(StaticEdge):
         keys, = hashes
         return FilterHash(self._hash, keys)
 
-    def _compute_hash(self, inputs: NodeHashes) -> HashOutput:
-        return self._make_hash(inputs), None
-
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         keys, = inputs
         return tuple(filter(self.graph.call, keys))
-
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return self._make_hash(inputs)

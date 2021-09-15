@@ -11,7 +11,7 @@ from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, TupleHash
 from ..exceptions import DependencyError
 from ..utils import node_to_dict
-from ..cache import Cache, MemoryCache, DiskCache, RemoteCache
+from ..cache import Cache, MemoryCache, DiskCache
 
 
 class IdentityContext(Context):
@@ -79,15 +79,6 @@ class DiskCacheContainer(CacheContainer):
     def __init__(self, names, root, storage, serializer, allow_impure):
         super().__init__(names, allow_impure)
         self.storage = DiskCache(root, storage, serializer)
-
-    def get_storage(self):
-        return self.storage
-
-
-class RemoteStorageContainer(CacheContainer):
-    def __init__(self, names, options, serializer, allow_impure):
-        super().__init__(names, allow_impure)
-        self.storage = RemoteCache(options, serializer)
 
     def get_storage(self):
         return self.storage
