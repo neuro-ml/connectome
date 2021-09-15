@@ -1,11 +1,13 @@
 import logging
+from abc import ABC, abstractmethod
 from operator import itemgetter
 from typing import Tuple, Optional, Union, Sequence
 
 from ..engine.edges import FunctionEdge, ProductEdge
-from ..engine.graph import compile_graph
+from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
-from ..utils import node_to_dict, check_for_duplicates
+from ..engine import Backend, DefaultBackend
+from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,14 @@ class Wrapper(Container):
         raise NotImplementedError
 
 
-class Context:
+class Context(ABC):
+    @abstractmethod
     def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def update(self, mapping: dict) -> 'Context':
-        raise NotImplementedError
+        pass
 
 
 class NoContext(Context):
@@ -44,6 +48,7 @@ class EdgesBag(Wrapper):
         self.virtual_nodes = virtual_nodes
         self.persistent_nodes = persistent_nodes
         self.context = context if context is not None else NoContext()
+        self.backend = DefaultBackend
 
     def freeze(self) -> 'EdgesBag':
         # TODO: layer inputs and outputs may not be among the edges
@@ -64,7 +69,7 @@ class EdgesBag(Wrapper):
         )
 
     def compile(self) -> 'GraphContainer':
-        return GraphContainer(self.inputs, self.outputs, self.edges)
+        return GraphContainer(self.inputs, self.outputs, self.edges, self.backend)
 
     def loopback(self, func, inputs, output):
         state = self.freeze()
@@ -102,7 +107,7 @@ class EdgesBag(Wrapper):
                 outputs.append(out)
 
         outputs, edges = state.context.reverse(state.inputs, outputs, edges)
-        return GraphContainer(state.inputs, outputs, edges)
+        return GraphContainer(state.inputs, outputs, edges, self.backend)
 
 
 def update_map(nodes, node_map):
@@ -113,12 +118,13 @@ def update_map(nodes, node_map):
 
 
 class GraphContainer:
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backend: Backend):
         tree_node_map = TreeNode.from_edges(edges)
         self._edges = edges
         self.inputs = [tree_node_map[x] for x in inputs]
         self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
-        self.methods = {node.name: compile_graph(self.inputs, node) for node in self.outputs.values()}
+        self.backend = backend
+        self.methods = {node.name: self._compile(node) for node in self.outputs.values()}
 
     def __getitem__(self, item):
         if item not in self.methods:
@@ -132,9 +138,9 @@ class GraphContainer:
                 outputs.append(self.outputs[name])
 
             product = TreeNode('$product', (ProductEdge(len(item)), outputs))
-            self.methods[item] = compile_graph(self.inputs, product)
+            self.methods[item] = self._compile(product)
 
         return self.methods[item]
 
-    def __getattr__(self, name):
-        return self[name]
+    def _compile(self, node):
+        return Graph(self.inputs, node, self.backend).call

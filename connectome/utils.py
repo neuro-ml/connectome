@@ -1,8 +1,7 @@
 import inspect
 from collections import Counter
 from pathlib import Path
-from typing import Union, Dict, List, Sequence, Callable
-from contextlib import suppress
+from typing import Union, Dict, List, Sequence
 
 PathLike = Union[Path, str]
 Strings = Sequence[str]
@@ -35,8 +34,7 @@ class MultiDict(Dict[str, List]):
         return super().__getitem__(key)[-1]
 
     def __delitem__(self, key):
-        pass
-        # raise ValueError("Can't delete names from this scope")
+        raise ValueError("Can't delete names from this scope")
 
 
 def extract_signature(func):
@@ -61,34 +59,3 @@ def node_to_dict(nodes):
     nodes = tuple(nodes)
     check_for_duplicates(nodes)
     return {node.name: node for node in nodes}
-
-
-class InsertError(KeyError):
-    pass
-
-
-class ChainDict:
-    def __init__(self, dicts: Sequence, selector: Callable = None):
-        self.dicts = dicts
-        self.selector = selector
-
-    def __contains__(self, key):
-        return any(key in d for d in self.dicts)
-
-    def __getitem__(self, key):
-        for d in self.dicts:
-            with suppress(KeyError):
-                return d[key]
-
-        raise KeyError(key)
-
-    def __setitem__(self, key, value):
-        if self.selector is None:
-            raise ValueError('Insertion is not supported.')
-
-        for d in self.dicts:
-            if self.selector(d):
-                d[key] = value
-                return
-
-        raise InsertError('No appropriate mapping was found.')

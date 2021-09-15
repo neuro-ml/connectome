@@ -3,14 +3,14 @@ from collections import defaultdict
 from typing import Sequence, Any
 
 from .base import TreeNode, NodeHash, TreeNodes, Command
-from .executor import Backend, Synchronous
+from .executor import Backend, DefaultBackend
 from .node_hash import LeafHash, GraphHash
 from .utils import EvictionCache
 from .vm import execute
 
 
 class Graph:
-    def __init__(self, inputs: TreeNodes, output: TreeNode):
+    def __init__(self, inputs: TreeNodes, output: TreeNode, backend: Backend = None):
         validate_graph(inputs, output)
         # TODO: need a cumulative eviction policy
         counts = count_entries(inputs, output, multiplier=2)
@@ -22,7 +22,7 @@ class Graph:
         self.inputs = inputs
         self.output = output
         self.counts = counts
-        self.backend: Backend = Synchronous()
+        self.backend = DefaultBackend if backend is None else backend
 
         def caller(*args, **kwargs):
             scope = signature.bind(*args, **kwargs)
@@ -64,22 +64,16 @@ def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache, ba
     return execute(Command.ComputeHash, node, hashes, cache, backend)
 
 
-# TODO: deprecate?
-def compile_graph(inputs: TreeNodes, outputs: TreeNode):
-    return Graph(inputs, outputs).call
-
-
 def validate_graph(inputs: TreeNodes, output: TreeNode):
     def visitor(node):
         # input doesn't need parents
         if node in inputs:
             return
         # no edges - must be an input
-        if node.is_leaf:
-            assert node in inputs, (node, inputs)
-        else:
-            for inp in node.parents:
-                visitor(inp)
+        assert not node.is_leaf, (node, inputs)
+
+        for inp in node.parents:
+            visitor(inp)
 
     visitor(output)
 

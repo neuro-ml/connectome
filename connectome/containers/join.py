@@ -78,7 +78,7 @@ class JoinMappingEdge(StaticGraph, StaticHash):
         self._mapping = None
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return JoinMappingHash(*self._hashes, *inputs, self.id_maker)
+        return JoinMappingHash(*self._hashes, *inputs, id_maker=self.id_maker)
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         if self._mapping is not None:

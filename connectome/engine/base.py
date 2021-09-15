@@ -87,11 +87,8 @@ class TreeNode:
             update(n)
         return mapping
 
-    def __str__(self):
-        return f'<TreeNode: {self.name}>'
-
     def __repr__(self):
-        return str(self)
+        return f'<TreeNode: {self.name}>'
 
     def visualize(self, path, cache=()):
         """
