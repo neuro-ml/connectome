@@ -100,7 +100,7 @@ class Transform(FactoryLayer, metaclass=APIMeta, __root=True):
         super(Transform, self).__init__(factory.build({}), factory.property_names)
 
     def __repr__(self):
-        return 'Transform(' + ', '.join(self._methods.methods) + ')'
+        return '{self.__class__.__name__}(' + ', '.join(self._methods.methods) + ')'
 
 
 class Mixin(FactoryLayer, metaclass=APIMeta, __root=True):
