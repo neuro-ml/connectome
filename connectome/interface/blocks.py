@@ -1,6 +1,6 @@
 import operator
 from pathlib import Path
-from typing import Union, Sequence, Callable
+from typing import Union, Sequence, Callable, Iterable
 
 import numpy as np
 
@@ -74,18 +74,20 @@ class Filter(BaseLayer[FilterContainer]):
         super().__init__(FilterContainer(predicate, verbose))
 
     @classmethod
-    def drop(cls, ids: Sequence[str]):
+    def drop(cls, ids: Iterable[str], verbose: bool = False):
         """Removes the provided ``ids`` from the dataset."""
+        assert not isinstance(ids, str)
+        ids = tuple(sorted(set(ids)))
         assert all(isinstance(i, str) for i in ids)
-        ids = set(ids)
-        return cls(lambda id: id not in ids)
+        return cls(lambda id: id not in ids, verbose=verbose)
 
     @classmethod
-    def keep(cls, ids: Sequence[str]):
+    def keep(cls, ids: Iterable[str], verbose: bool = False):
         """Removes all the ids not present in ``ids``."""
+        assert not isinstance(ids, str)
+        ids = tuple(sorted(set(ids)))
         assert all(isinstance(i, str) for i in ids)
-        ids = set(ids)
-        return cls(lambda id: id in ids)
+        return cls(lambda id: id in ids, verbose=verbose)
 
     def __repr__(self):
         args = ', '.join(self._container.names)
