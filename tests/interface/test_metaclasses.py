@@ -31,3 +31,6 @@ def test_subclasses():
     with pytest.raises(TypeError):
         class G(C):
             pass
+        
+    assert str(B()) == 'B()'
+
