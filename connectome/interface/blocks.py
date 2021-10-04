@@ -70,8 +70,8 @@ class Filter(BaseLayer[FilterContainer]):
     >>> )
     """
 
-    def __init__(self, predicate: Callable):
-        super().__init__(FilterContainer(predicate))
+    def __init__(self, predicate: Callable, verbose: bool = False):
+        super().__init__(FilterContainer(predicate, verbose))
 
     @classmethod
     def drop(cls, ids: Sequence[str]):
