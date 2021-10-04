@@ -1,5 +1,7 @@
 from typing import Callable, Sequence, Any
 
+from tqdm import tqdm
+
 from .base import EdgesBag, Wrapper
 from .cache import IdentityContext
 from ..engine.base import Node, TreeNode
@@ -15,10 +17,11 @@ class FilterContainer(Wrapper):
     """
 
     # TODO: remove default
-    def __init__(self, predicate: Callable, keys: str = 'ids'):
+    def __init__(self, predicate: Callable, verbose: bool, keys: str = 'ids'):
         self.names, _ = extract_signature(predicate)
         assert keys not in self.names
         self.predicate = predicate
+        self.verbose = verbose
         self.keys = keys
 
     @staticmethod
@@ -52,13 +55,14 @@ class FilterContainer(Wrapper):
 
         # filter
         graph = self._make_graph(container)
-        edges.append(FilterEdge(graph).bind(keys, out))
+        edges.append(FilterEdge(graph, self.verbose).bind(keys, out))
         return EdgesBag(main.inputs, outputs, edges, IdentityContext())
 
 
 class FilterEdge(StaticGraph, StaticEdge):
-    def __init__(self, graph: Graph):
+    def __init__(self, graph: Graph, verbose: bool):
         super().__init__(arity=1)
+        self.verbose = verbose
         self.graph = graph
         self._hash = self.graph.hash()
 
@@ -68,4 +72,6 @@ class FilterEdge(StaticGraph, StaticEdge):
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         keys, = inputs
-        return tuple(filter(self.graph.call, keys))
+        return tuple(filter(self.graph.call, tqdm(
+            keys, desc='Filtering', disable=not self.verbose,
+        )))
