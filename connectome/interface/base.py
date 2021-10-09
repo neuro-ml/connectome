@@ -110,14 +110,14 @@ class Chain(CallableLayer):
 
         raise ValueError('The index can be either an int or slice.')
 
-    def _drop_cache(self):
-        from .blocks import CacheLayer
+    def _drop_cache(self, drop_ram_only: bool=False):
+        from .blocks import CacheLayer, CacheToRam
 
         not_cache = []
         for layer in self._layers:
             if isinstance(layer, Chain):
                 layer = layer._drop_cache()
-            if not isinstance(layer, CacheLayer):
+            if not isinstance(layer, CacheToRam if drop_ram_only else CacheLayer):
                 not_cache.append(layer)
 
         return Chain(*not_cache)

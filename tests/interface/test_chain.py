@@ -63,6 +63,18 @@ def test_cache_removal(block_maker):
         assert simple.image(i) == cached.image(i) == nested.image(i)
 
 
+def test_ram_cache_removal(block_maker):
+    one = block_maker.first_ds(first_constant=2, ids_arg=15)
+    two = block_maker.crop()
+
+    simple = one >> two
+    cached = Chain(one, two, CacheToRam())._drop_cache(drop_ram_only=True)
+    nested = (simple >> CacheToRam())._drop_cache(drop_ram_only=True)
+
+    for i in one.ids:
+        assert simple.image(i) == cached.image(i) == nested.image(i)
+
+
 def test_inheritance():
     class FirstInheritAll(Transform):
         __inherit__ = True
