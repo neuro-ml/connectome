@@ -17,10 +17,9 @@ from enum import Enum
 from io import BytesIO
 
 from cloudpickle.cloudpickle import is_tornado_coroutine, PYPY, builtin_code_type, \
-    _rebuild_tornado_coroutine, _fill_function, _find_imported_submodules, _make_skel_func, \
-    _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict
+    _rebuild_tornado_coroutine, _find_imported_submodules, _BUILTIN_TYPE_NAMES, _builtin_type, _extract_class_dict
 
-from .compat import DISPATCH, extract_func_data, Pickler, NO_PICKLE_SET, _is_truly_global
+from .compat import DISPATCH, extract_func_data, Pickler, get_pickle_mode, PickleMode
 
 
 def sort_dict(d):
@@ -35,22 +34,13 @@ class VersionedClass(NamedTuple):
     version: Any
 
 
-def no_pickle(obj):
-    """
-    Decorator that opts out a function or class from being pickled during node hash calculation.
-    Use it if you are sure that your function/class will never change in a way that might affect its behaviour.
-    """
-    NO_PICKLE_SET.add(obj)
-    return obj
-
-
 class PickleError(TypeError):
     pass
 
 
 # new invalidation bugs will inevitably arise
 # versioning will help diminish the pain from transitioning between updates
-AVAILABLE_VERSIONS = 0, 1
+AVAILABLE_VERSIONS = 0,
 *PREVIOUS_VERSIONS, LATEST_VERSION = AVAILABLE_VERSIONS
 
 _custom = types.CodeType, types.FunctionType, type, property
@@ -64,10 +54,6 @@ class PortablePickler(Pickler):
     def __init__(self, file, protocol=None, version=None):
         if version is None:
             version = LATEST_VERSION
-
-        # legacy from cloudpickle
-        if protocol is None and version == 0:
-            protocol = pickle.HIGHEST_PROTOCOL
 
         super().__init__(file, protocol=protocol)
         self.version = version
@@ -85,9 +71,20 @@ class PortablePickler(Pickler):
             raise PickleError(f'Exception "{e.__class__.__name__}: {e}" '
                               f'while pickling object {obj}') from None
 
+    # copied from cloudpickle==2.0.0
+    # used to save functions and classes
+    def _save_reduce(self, func, args, state=None, listitems=None, dictitems=None, state_setter=None, obj=None):
+        self.save_reduce(func, args, state=None, listitems=listitems, dictitems=dictitems, obj=obj)
+        self.save(state_setter)
+        self.save(obj)
+        self.save(state)
+        self.write(pickle.TUPLE2)
+        self.write(pickle.REDUCE)
+        self.write(pickle.POP)
+
     @staticmethod
     def _is_global(obj, name):
-        return _is_truly_global(obj, name)
+        return get_pickle_mode(obj, name) == PickleMode.Global
 
     @staticmethod
     def reduce_property(obj: property):
@@ -134,7 +131,8 @@ class PortablePickler(Pickler):
         else:
             return self.reduce_dynamic_function(obj)
 
-    def reduce_dynamic_function(self, func):
+    @staticmethod
+    def reduce_dynamic_function(func):
         if is_tornado_coroutine(func):
             return _rebuild_tornado_coroutine, (func.__wrapped__,)
 
@@ -143,7 +141,7 @@ class PortablePickler(Pickler):
         #  2. __qualname__, __module__ - only used for debug
         #  3. __annotations__, __doc__ - not used at runtime
 
-        code, f_globals, defaults, closure_values, dct, _ = extract_func_data(func)
+        code, f_globals, defaults, closure_values, dct = extract_func_data(func)
         f_globals, dct = map(sort_dict, [f_globals, dct])
 
         # args
@@ -157,25 +155,9 @@ class PortablePickler(Pickler):
         )
         name = func.__name__
         kw_defaults = getattr(func, '__kwdefaults__', None)
-        if self.version >= 1:
-            if kw_defaults is not None:
-                kw_defaults = sort_dict(kw_defaults)
-            slot_state = f_globals, defaults, dct, closure_values, name, submodules, kw_defaults
-
-        else:
-            # TODO: deprecated
-            slot_state = {
-                'globals': f_globals,
-                'defaults': defaults,
-                'dict': dct,
-                'closure_values': closure_values,
-                'name': name,
-                '_cloudpickle_submodules': submodules
-            }
-            if getattr(func, '__kwdefaults__', False):
-                slot_state['kwdefaults'] = func.__kwdefaults__
-            slot_state = sort_dict(slot_state)
-
+        if kw_defaults is not None:
+            kw_defaults = sort_dict(kw_defaults)
+        slot_state = f_globals, defaults, dct, closure_values, name, submodules, kw_defaults
         return types.FunctionType, args, (slot_state, func.__dict__)
 
     # for now we'll use the old `save_function`
@@ -186,29 +168,9 @@ class PortablePickler(Pickler):
         elif PYPY and isinstance(obj.__code__, builtin_code_type):
             return self.save_pypy_builtin_func(obj)
         else:
-            return self.save_dynamic_function(obj)
+            return self._save_reduce(*self.reduce_dynamic_function(obj), obj=obj)
 
     dispatch[types.FunctionType] = save_function
-
-    def save_dynamic_function(self, func):
-        """ Reproducible function tuple """
-        reducer, *args = self.reduce_dynamic_function(func)
-        if self.version >= 1 or is_tornado_coroutine(func):
-            self.save_reduce(reducer, *args, obj=func)
-            return
-
-        args, (state, _) = args
-        self.save(_fill_function)
-        self.write(pickle.MARK)
-
-        self.save(_make_skel_func)
-        self.save(args)
-        self.write(pickle.REDUCE)
-        self.memoize(func)
-
-        self.save(state)
-        self.write(pickle.TUPLE)
-        self.write(pickle.REDUCE)
 
     @staticmethod
     def _get_cls_params(obj):
@@ -268,22 +230,8 @@ class PortablePickler(Pickler):
         return reducer, args, state
 
     def save_dynamic_class(self, obj):
-        if isinstance(obj, Enum):
-            reducer, args, state = self.reduce_dynamic_enum(obj)
-        else:
-            reducer, args, state = self.reduce_dynamic_class(obj)
-
-        if self.version >= 1:
-            return self.save_reduce(reducer, args, state, obj=obj)
-
-        save = self.save
-        write = self.write
-
-        save(reducer)
-        save(args)
-        save(state)
-        write(pickle.TUPLE2)
-        write(pickle.REDUCE)
+        method = self.reduce_dynamic_enum if isinstance(obj, Enum) else self.reduce_dynamic_class
+        return self._save_reduce(*method(obj), obj=obj)
 
     def save_global(self, obj, name=None):
         """ Save a "global" which is not under __development__ """

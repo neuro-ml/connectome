@@ -1,18 +1,14 @@
 import logging
-from typing import Callable
+from typing import Callable, Dict, Type
 
 from .compat import SafeMeta
 from ..containers.transform import InheritType
 from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals
+from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals, GraphFactory
 
 logger = logging.getLogger(__name__)
 
-
-def _check_duplicates(namespace):
-    duplicates = {name for name, values in namespace.groups() if len(values) > 1}
-    if duplicates:
-        raise TypeError(f'Duplicated methods found: {duplicates}')
+BASES: Dict[Type[FactoryLayer], GraphFactory] = {}
 
 
 class APIMeta(SafeMeta):
@@ -21,17 +17,21 @@ class APIMeta(SafeMeta):
         return MultiDict()
 
     def __new__(mcs, class_name, bases, namespace, **flags):
-        if flags.pop('__root', False):
+        if '__factory' in flags:
+            factory = flags.pop('__factory')
             assert bases == (FactoryLayer,)
             scope = namespace.to_dict()
-            return super().__new__(mcs, class_name, bases, scope, **flags)
+            base = super().__new__(mcs, class_name, bases, scope, **flags)
+            BASES[base] = factory
+            return base
 
         bases = set(bases)
-        intersection = {Transform, Source, Mixin} & bases
+        intersection = set(BASES) & bases
         if len(intersection) != 1:
-            raise TypeError('Layers must inherit from either Source, Transform or Mixin.')
+            raise TypeError(f'Layers must inherit from on of ' + ', '.join(x.__name__ for x in BASES))
 
         main, = intersection
+        factory = BASES[main]
         bases -= intersection
         base_name = main.__name__
         for base in bases:
@@ -43,20 +43,16 @@ class APIMeta(SafeMeta):
         if main == Mixin:
             add_from_mixins(namespace, bases)
             scope = add_quals({'__methods__': namespace}, namespace)
-        elif main == Transform:
-            add_from_mixins(namespace, bases)
-            scope = TransformFactory.make_scope(namespace)
-        elif main == Source:
-            _check_duplicates(namespace)
-            add_from_mixins(namespace, bases)
-            scope = SourceFactory.make_scope(namespace)
+
         else:
-            assert False, main
+            factory.validate_before_mixins(namespace)
+            add_from_mixins(namespace, bases)
+            scope = factory.make_scope(namespace)
 
         return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 
-class Source(FactoryLayer, metaclass=APIMeta, __root=True):
+class Source(FactoryLayer, metaclass=APIMeta, __factory=SourceFactory):
     """
     Base class for all sources.
     """
@@ -65,7 +61,7 @@ class Source(FactoryLayer, metaclass=APIMeta, __root=True):
         raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
 
 
-class Transform(FactoryLayer, metaclass=APIMeta, __root=True):
+class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
     """
     Base class for all transforms.
 
@@ -103,7 +99,7 @@ class Transform(FactoryLayer, metaclass=APIMeta, __root=True):
         return f"{self.__class__.__name__}({', '.join(self._methods.methods)})"
 
 
-class Mixin(FactoryLayer, metaclass=APIMeta, __root=True):
+class Mixin(FactoryLayer, metaclass=APIMeta, __factory=None):
     """
     Base class for all Mixins.
     """
