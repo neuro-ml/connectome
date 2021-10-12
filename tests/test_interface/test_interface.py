@@ -1,6 +1,6 @@
 from collections import Counter
 
-from connectome import positional, Local, Source, Chain, Transform, Merge, meta
+from connectome import positional, Source, Chain, Transform, Merge, meta, Output
 
 
 def test_single_with_params():
@@ -185,8 +185,8 @@ def test_instance(block_maker):
         assert loader(i) == instance['id', 'lungs']
 
 
-def test_locals(block_maker):
-    class NoLocal(Transform):
+def test_input_spec(block_maker):
+    class NoOutput(Transform):
         def _shape(image):
             return len(image)
 
@@ -196,16 +196,16 @@ def test_locals(block_maker):
         def image(image, _shape):
             return f'{image} shape: {_shape}'
 
-    class WithLocal(Transform):
+    class WithOutput(Transform):
         def shape(image):
             return len(image)
 
-        def image(image, shape: Local):
+        def image(image, shape: Output):
             return f'{image} shape: {shape}'
 
     ds = block_maker.first_ds(first_constant=2, ids_arg=15)
-    one = ds >> NoLocal()
-    two = ds >> WithLocal()
+    one = ds >> NoOutput()
+    two = ds >> WithOutput()
 
     for i in ds.ids:
         assert one.image(i) == two.image(i)

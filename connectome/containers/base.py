@@ -3,10 +3,11 @@ from abc import ABC, abstractmethod
 from operator import itemgetter
 from typing import Tuple, Optional, Union, Sequence
 
-from ..engine.edges import FunctionEdge, ProductEdge
+from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..engine import Backend, DefaultBackend
+from ..exceptions import GraphError
 from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
@@ -42,10 +43,9 @@ class NoContext(Context):
 class EdgesBag(Wrapper):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
                  virtual_nodes: Union[bool, Sequence[str]] = (), persistent_nodes: Sequence[str] = ()):
-        self.inputs = tuple(inputs)
-        self.outputs = tuple(outputs)
-        self.edges = tuple(edges)
-        self.virtual_nodes = virtual_nodes
+        self.inputs, self.outputs, self.edges, self.virtual_nodes = normalize_bag(
+            inputs, outputs, edges, virtual_nodes, persistent_nodes)
+
         self.persistent_nodes = persistent_nodes
         self.context = context if context is not None else NoContext()
         self.backend = DefaultBackend
@@ -57,7 +57,7 @@ class EdgesBag(Wrapper):
 
         for edge in self.edges:
             inputs = update_map(edge.inputs, node_map)
-            output = update_map([edge.output], node_map)[0]
+            output, = update_map([edge.output], node_map)
             edges_copy.append(BoundEdge(edge.edge, inputs, output))
 
         return EdgesBag(
@@ -144,3 +144,64 @@ class GraphContainer:
 
     def _compile(self, node):
         return Graph(self.inputs, node, self.backend).call
+
+
+ALL_VIRTUAL = True
+
+
+def all_virtual(names):
+    result = isinstance(names, bool)
+    if result:
+        assert names
+    return result
+
+
+def get_parents(node: TreeNode):
+    if node.is_leaf:
+        return
+
+    for parent in node.parents:
+        yield from get_parents(parent)
+
+
+def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_nodes, persistent_nodes):
+    # 1. outputs must only depend on inputs
+    # 1a. inputs must have no dependencies
+    # 2. each node can only have a single incoming edge
+    # 2a. the intersection between outputs and virtual nodes must be empty
+    # 3. virtual edges with a present input node become non-virtual
+    inputs, outputs = node_to_dict(inputs), node_to_dict(outputs)
+    edges = list(edges)
+
+    if all_virtual(virtual_nodes):
+        add = set(inputs) - set(outputs)
+    else:
+        virtual_nodes = set(virtual_nodes)
+        # 2a:
+        intersection = virtual_nodes & set(outputs)
+        if intersection:
+            raise GraphError(f'The nodes {intersection} are both inherited and have defined edges')
+
+        add = (virtual_nodes | set(persistent_nodes)) & set(inputs) - set(outputs)
+        virtual_nodes -= add
+
+    # 3:
+    for name in add:
+        outputs[name] = Node(name)
+        edges.append(IdentityEdge().bind(inputs[name], outputs[name]))
+
+    # 2:
+    product = Node('$product')
+    # this call already has the check
+    mapping = TreeNode.from_edges(edges + [ProductEdge(len(outputs)).bind(tuple(outputs.values()), product)])
+    # 1a:
+    tree_inputs = {mapping[node] for node in inputs.values()}
+    not_leaves = {node.output.name for node in tree_inputs if not node.is_leaf}
+    if not_leaves:
+        raise GraphError(f'The inputs {not_leaves} are not actual inputs - they have dependencies')
+    # 1:
+    missing = {node.output.name for node in set(get_parents(mapping[product])) - tree_inputs}
+    if missing:
+        raise GraphError(f'The nodes {missing} are missing from the inputs')
+
+    return tuple(inputs.values()), tuple(outputs.values()), tuple(edges), virtual_nodes

@@ -18,6 +18,14 @@ class StorageError(Exception):
     pass
 
 
+class StoreError(StorageError):
+    pass
+
+
+class QueryError(StorageError):
+    pass
+
+
 class Storage:
     def __init__(self, local: Sequence[Disk], remote: Sequence[RemoteLocation] = ()):
         if not local:
@@ -93,7 +101,7 @@ class Storage:
             for storage in self.local:
                 storage.release_write(key)
 
-        raise StorageError('The file could not be written to any storage.')
+        raise StoreError('The file could not be written to any storage.')
 
     def _find_storage(self, key: Key, fetch: bool):
         # find in local
@@ -120,4 +128,4 @@ class Storage:
         else:
             message = f'Key {key} is not present locally'
 
-        raise KeyError(message)
+        raise QueryError(message)

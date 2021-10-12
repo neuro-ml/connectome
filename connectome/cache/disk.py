@@ -151,10 +151,9 @@ def key_to_digest(algorithm, key, version=None):
 
 
 def check_consistency(hash_path, pickled, check_existence: bool = False):
-    if check_existence and not hash_path.exists():
-        raise StorageCorruption(f'The pickled graph is missing. You may want to delete the {hash_path.parent} folder.')
-
     suggestion = f'You may want to delete the {hash_path.parent} folder.'
+    if check_existence and not hash_path.exists():
+        raise StorageCorruption(f'The pickled graph is missing. {suggestion}')
     try:
         with gzip.GzipFile(hash_path, 'rb') as file:
             dumped = file.read()

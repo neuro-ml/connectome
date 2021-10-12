@@ -77,6 +77,7 @@ class TreeNode:
         bridges = {}
         # each edge is represented by its output
         for edge in edges:
+            # TODO: replace by exception
             assert edge.output not in bridges, edge
             bridges[edge.output] = edge
             nodes.add(edge.output)
