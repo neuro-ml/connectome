@@ -188,12 +188,19 @@ def test_lazy(tmpdir, storage_factory):
         assert ds.g(1) == 1
 
 
+@pytest.mark.xfail
 def test_missing_ids(block_maker):
     ds = block_maker.first_ds(first_constant=2, ids_arg=15)
     for source in [ds, Merge(ds)]:
         ids = source.ids
         for block in [block_maker.crop(), CacheToRam(), Transform(image=lambda image: image)]:
             assert (source >> block).ids == ids
+
+    class A(Transform):
+        def image(image):
+            pass
+
+    assert 'ids' in dir(ds >> A() >> A())
 
 
 def test_dir_duplicates():

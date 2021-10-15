@@ -41,6 +41,7 @@ def test_corrupted_error(temp_dir):
         ds.x(1)
 
 
+@pytest.mark.skipif(LATEST_VERSION == 0, reason='Current pickler has a single version')
 def test_versioning(monkeypatch, temp_dir):
     def f(x):
         nonlocal count

@@ -1,3 +1,4 @@
+from functools import partial
 from hashlib import sha256
 
 import pytest
@@ -6,6 +7,7 @@ from pickler_test_helpers import functions2
 from pickler_test_helpers import classes
 from pickler_test_helpers import classes2
 
+from connectome.cache import is_stable, is_unstable
 from connectome.cache.pickler import dumps, AVAILABLE_VERSIONS
 
 
@@ -20,50 +22,52 @@ def assert_same_hash(reference, version, obj, references):
 
 @pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
 def test_equal_functions(pickle_references, version):
-    reference = dumps(functions.identity, version=version)
+    dumper = partial(dumps, version=version)
+
+    reference = dumper(functions.identity)
     assert_same_hash(reference, version, functions.identity, pickle_references)
 
-    assert dumps(functions2.identity, version=version) == reference
+    assert dumper(functions2.identity) == reference
 
     # FIXME: can't use functions.identity because the flag NESTED is different
-    reference = dumps(functions.nested_identity, version=version)
+    reference = dumper(functions.nested_identity)
     assert_same_hash(reference, version, functions.nested_identity, pickle_references)
 
     def identity(x: int) -> int:
         return x
 
-    assert dumps(identity, version=version) == reference
+    assert dumper(identity) == reference
 
     def identity(x: float):
         return x
 
-    assert dumps(identity, version=version) == reference
+    assert dumper(identity) == reference
 
     def identity(x):
         """Doc"""
         return x
 
-    assert dumps(identity, version=version) == reference
+    assert dumper(identity) == reference
 
     def identity(x):
         """Doc2"""
         return x
 
-    assert dumps(identity, version=version) == reference
+    assert dumper(identity) == reference
 
     def identity(x):
         return x
 
     identity.__doc__ = 'Doc3'
 
-    assert dumps(identity, version=version) == reference
+    assert dumper(identity) == reference
 
     class A:
         @staticmethod
         def identity(x):
             return x
 
-    assert dumps(A.identity, version=version) == reference
+    assert dumper(A.identity) == reference
     # TODO: do we need to enforce this?
     # assert dumps(lambda x: 1 + 1) == dumps(lambda x: 2)
 
@@ -99,17 +103,34 @@ def test_different_functions(version):
 
 @pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
 def test_class(version, pickle_references):
-    reference = dumps(classes.One, version=version)
-    assert_same_hash(reference, version, classes.One, pickle_references)
-    assert reference == dumps(classes2.One, version=version)
+    dumper = partial(dumps, version=version)
 
-    reference = dumps(classes.A, version=version)
+    reference = dumper(classes.One)
+    assert_same_hash(reference, version, classes.One, pickle_references)
+    assert reference == dumper(classes2.One)
+
+    reference = dumper(classes.A)
     assert_same_hash(reference, version, classes.A, pickle_references)
-    assert reference != dumps(classes.B, version=version)
+    assert reference != dumper(classes.B)
 
     classes.A.y = 2
-    assert reference == dumps(classes.A, version=version)
+    assert reference == dumper(classes.A)
     old = classes.A.x
     classes.A.x = 2
-    assert reference != dumps(classes.A, version=version)
+    assert reference != dumper(classes.A)
     classes.A.x = old
+
+
+@pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
+def test_stable(version, pickle_references):
+    dumper = partial(dumps, version=version)
+
+    not_stable = dumper(functions.identity)
+    is_stable(functions.identity)
+    stable = dumper(functions.identity)
+    assert stable != not_stable
+
+    is_unstable(functions.identity)
+    assert dumper(functions.identity) == not_stable
+    is_stable(functions.identity)
+    assert dumper(functions.identity) == stable

@@ -38,10 +38,6 @@ class TransformContainer(EdgesBag):
 
         forward_virtual, valid = normalize_inherit(forward_virtual)
         assert valid
-        # if it's a tuple - it must be empty
-        if isinstance(forward_virtual, tuple):
-            assert not forward_virtual
-
         backward_virtual, valid = normalize_inherit(backward_virtual)
         assert valid
 

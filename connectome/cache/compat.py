@@ -36,13 +36,16 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 import importlib
 import sys
-from _weakrefset import WeakSet
+import warnings
+from weakref import WeakSet
 from collections import ChainMap
-from pickle import _getattribute, _Pickler as Pickler
-from importlib._bootstrap import _find_spec
+from enum import Enum
+from pickle import _Pickler as Pickler
+from types import ModuleType
+from typing import Union, Set
 
 from cloudpickle import CloudPickler
-from cloudpickle.cloudpickle import _whichmodule, _extract_code_globals, _get_cell_contents
+from cloudpickle.cloudpickle import _whichmodule, _extract_code_globals, _get_cell_contents, _lookup_module_and_qualname
 
 try:
     from gzip import BadGzipFile
@@ -50,60 +53,36 @@ except ImportError:
     BadGzipFile = OSError
 
 
-def _is_global(obj, name=None):
-    if name is None:
-        name = getattr(obj, '__qualname__', None)
-    if name is None:
-        name = getattr(obj, '__name__', None)
-
-    module_name = _whichmodule(obj, name)
-
-    if module_name is None:
-        return False
-
-    if module_name == "__main__":
-        return False
-
-    module = sys.modules.get(module_name, None)
-    if module is None:
-        return False
-
-    if _is_dynamic(module):
-        return False
-
-    try:
-        obj2, parent = _getattribute(module, name)
-    except AttributeError:
-        return False
-    return obj2 is obj
+class PickleMode(Enum):
+    Global, Deep = range(2)
 
 
-def _is_dynamic(module):
-    if hasattr(module, '__file__'):
-        return False
+def get_pickle_mode(obj, name=None):
+    if obj in STABLE_OBJECTS:
+        return PickleMode.Global
+    if obj in UNSTABLE_OBJECTS:
+        return PickleMode.Deep
 
-    if module.__spec__ is not None:
-        return False
+    pair = _lookup_module_and_qualname(obj, name)
+    if pair is None:
+        return PickleMode.Deep
+    module, _ = pair
+    module = module.__name__
 
-    parent_name = module.__name__.rpartition('.')[0]
-    if parent_name:
-        try:
-            parent = sys.modules[parent_name]
-        except KeyError:
-            msg = "parent {!r} not in sys.modules"
-            raise ImportError(msg.format(parent_name))
-        else:
-            pkgpath = parent.__path__
-    else:
-        pkgpath = None
-    return _find_spec(module.__name__, pkgpath, module) is None
+    while True:
+        if module in UNSTABLE_MODULES:
+            return PickleMode.Deep
+
+        split = module.rsplit(".", 1)
+        if len(split) == 1:
+            break
+        module, _ = split
+
+    _check_is_under_development(obj, name)
+    return PickleMode.Global
 
 
-def _is_under_development(obj, name):
-    # the user opted out this function/class
-    if obj in NO_PICKLE_SET:
-        return False
-
+def _check_is_under_development(obj, name):
     if name is None:
         name = getattr(obj, '__qualname__', None)
     if name is None:
@@ -114,15 +93,14 @@ def _is_under_development(obj, name):
     if base is None:
         base = importlib.import_module(base_module)
 
-    return getattr(base, '__development__', False)
-
-
-def _is_truly_global(obj, name):
-    return _is_global(obj, name=name) and not _is_under_development(obj, name)
+    if hasattr(base, '__development__'):
+        raise RuntimeError('You are relying on an old cache invalidation machinery: '
+                           'use `unstable_module(__name__)` instead')
 
 
 def extract_func_data(func):
     """A simplified version of the same function from cloudpickle"""
+    # `base globals` are not used - they are only needed for unpickling
     code = func.__code__
     func_global_refs = _extract_code_globals(code)
     f_globals = {}
@@ -139,9 +117,7 @@ def extract_func_data(func):
     )
     # save the dict
     dct = func.__dict__
-    # base globals - only needed for unpickling
-    base_globals = None
-    return code, f_globals, defaults, closure, dct, base_globals
+    return code, f_globals, defaults, closure, dct
 
 
 DISPATCH, DISPATCH_TABLE = Pickler.dispatch.copy(), {}
@@ -163,4 +139,32 @@ def to_dispatch(func):
 
 DISPATCH.update({k: to_dispatch(v) for k, v in DISPATCH_TABLE.items()})
 # we use a set of weak refs, because we don't want to cause memory leaks
-NO_PICKLE_SET = WeakSet()
+STABLE_OBJECTS = WeakSet()
+UNSTABLE_OBJECTS = WeakSet()
+UNSTABLE_MODULES: Set[str] = set()
+
+
+def is_stable(obj):
+    """
+    Decorator that opts out a function or class from being pickled during node hash calculation.
+    Use it if you are sure that your function/class will never change in a way that might affect its behaviour.
+    """
+    if obj in UNSTABLE_OBJECTS:
+        warnings.warn('The object was already marked as unstable')
+        UNSTABLE_OBJECTS.remove(obj)
+    STABLE_OBJECTS.add(obj)
+    return obj
+
+
+def is_unstable(obj):
+    if obj in STABLE_OBJECTS:
+        warnings.warn('The object was already marked as stable')
+        STABLE_OBJECTS.remove(obj)
+    UNSTABLE_OBJECTS.add(obj)
+    return obj
+
+
+def unstable_module(module: Union[str, ModuleType]):
+    if not isinstance(module, str):
+        module = module.__name__
+    UNSTABLE_MODULES.add(module)

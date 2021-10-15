@@ -1,5 +1,5 @@
 numpy
-cloudpickle>=1.2<2.0
+cloudpickle==2.0.*
 pylru
 paramiko==2.*
 scp

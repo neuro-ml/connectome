@@ -117,6 +117,32 @@ class GraphFactory:
         for x in [self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
             x.freeze()
 
+    @classmethod
+    def make_scope(cls, namespace: MultiDict) -> dict:
+        factory = cls(namespace)
+        signature = factory.get_init_signature()
+
+        def __init__(*args, **kwargs):
+            assert args
+            if len(args) > 1:
+                raise TypeError('This constructor accepts only keyword arguments.')
+            self = args[0]
+
+            arguments = signature.bind_partial(**kwargs)
+            arguments.apply_defaults()
+            FactoryLayer.__init__(self, factory.build(arguments.arguments), factory.property_names)
+
+        __init__.__signature__ = signature
+        scope = {
+            '__init__': __init__, '__signature__': signature,
+            DOC_MAGIC: factory.docstring,
+        }
+        return add_quals(scope, namespace)
+
+    @staticmethod
+    def validate_before_mixins(namespace: MultiDict):
+        pass
+
     def _before_collect(self):
         pass
 
@@ -238,28 +264,6 @@ class GraphFactory:
             for name, value in self.defaults.items()
         ])
 
-    @classmethod
-    def make_scope(cls, namespace: MultiDict) -> dict:
-        factory = cls(namespace)
-        signature = factory.get_init_signature()
-
-        def __init__(*args, **kwargs):
-            assert args
-            if len(args) > 1:
-                raise TypeError('This constructor accepts only keyword arguments.')
-            self = args[0]
-
-            arguments = signature.bind_partial(**kwargs)
-            arguments.apply_defaults()
-            FactoryLayer.__init__(self, factory.build(arguments.arguments), factory.property_names)
-
-        __init__.__signature__ = signature
-        scope = {
-            '__init__': __init__, '__signature__': signature,
-            DOC_MAGIC: factory.docstring,
-        }
-        return add_quals(scope, namespace)
-
     def build(self, arguments: dict) -> TransformContainer:
         diff = list(set(self.arguments) - set(arguments))
         if diff:
@@ -279,6 +283,12 @@ class GraphFactory:
 
 
 class SourceFactory(GraphFactory):
+    @staticmethod
+    def validate_before_mixins(namespace: MultiDict):
+        duplicates = {name for name, values in namespace.groups() if len(values) > 1}
+        if duplicates:
+            raise TypeError(f'Duplicated methods found: {duplicates}')
+
     def _before_collect(self):
         self._key_name = 'id'
         if self._key_name in self.scope:
@@ -321,17 +331,7 @@ class TransformFactory(GraphFactory):
         if not valid:
             raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
 
-        self.backward_inherit = value
-        if isinstance(value, tuple):
-            self.forward_inherit = ()
-
-            for name in value:
-                # we only need inheritance if the output value is not defined
-                if name not in self.outputs:
-                    self.edges.append(IdentityEdge().bind(self.inputs[name], self.outputs[name]))
-
-        else:
-            self.forward_inherit = value
+        self.backward_inherit = self.forward_inherit = value
 
     def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
         return inputs
