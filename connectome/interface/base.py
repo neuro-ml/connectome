@@ -110,17 +110,20 @@ class Chain(CallableLayer):
 
         raise ValueError('The index can be either an int or slice.')
 
+    def _filter(self, func, *args, **kwargs):
+        filtered = []
+        for layer in self._layers:
+            if isinstance(layer, Chain):
+                layer = layer._filter(func, *args, **kwargs)
+            if not func(layer, *args, **kwargs):
+                filtered.append(layer)
+
+        return Chain(*filtered)
+
     def _drop_cache(self):
         from .blocks import CacheLayer
 
-        not_cache = []
-        for layer in self._layers:
-            if isinstance(layer, Chain):
-                layer = layer._drop_cache()
-            if not isinstance(layer, CacheLayer):
-                not_cache.append(layer)
-
-        return Chain(*not_cache)
+        return self._filter(isinstance, CacheLayer)
 
     def __repr__(self):
         if len(self._layers) == 2:
