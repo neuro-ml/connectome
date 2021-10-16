@@ -1,4 +1,6 @@
-from typing import Union, Dict
+from abc import ABC, abstractmethod
+from functools import partial
+from typing import Union, Dict, Callable
 
 from contextlib import suppress
 from gzip import GzipFile
@@ -9,21 +11,31 @@ import json
 import pickle
 import numpy as np
 
+from .storage import Storage
+
 
 class SerializerError(Exception):
     pass
 
 
-class Serializer:
+class Serializer(ABC):
+    @abstractmethod
     def save(self, value, folder: Path):
-        """
-        Saves the ``value`` to ``folder``.
-        """
-        raise NotImplementedError
+        """ Saves the ``value`` to ``folder`` """
 
-    def load(self, folder: Path):
-        """Loads the value from ``folder``."""
-        raise NotImplementedError
+    @abstractmethod
+    def load(self, folder: Path, storage: Storage):
+        """ Loads the value from ``folder`` """
+
+    @staticmethod
+    def _load_file(storage: Storage, loader: Callable, path: Path, *args, **kwargs):
+        """ Useful function for loading files from storage """
+        # it's simpler to wait for old caches to expire, than to convert them
+        if path.is_symlink():
+            return loader(path, *args, **kwargs)
+
+        with open(path, 'r') as key:
+            return storage.load(loader, key.read(), *args, **kwargs)
 
 
 class ChainSerializer(Serializer):
@@ -37,10 +49,10 @@ class ChainSerializer(Serializer):
 
         raise SerializerError(f'No serializer was able to save to {folder}.')
 
-    def load(self, folder: Path):
+    def load(self, folder: Path, storage: Storage):
         for serializer in self.serializers:
             with suppress(SerializerError):
-                return serializer.load(folder)
+                return serializer.load(folder, storage)
 
         raise SerializerError(f'No serializer was able to load from {folder}.')
 
@@ -55,7 +67,7 @@ class JsonSerializer(Serializer):
         with open(folder / 'value.json', 'w') as file:
             file.write(value)
 
-    def load(self, folder: Path):
+    def load(self, folder: Path, storage: Storage):
         paths = list(folder.iterdir())
         if len(paths) != 1:
             raise SerializerError
@@ -64,8 +76,11 @@ class JsonSerializer(Serializer):
         if path.name != 'value.json':
             raise SerializerError
 
-        with open(folder / 'value.json', 'r') as file:
-            return json.load(file)
+        def loader(x):
+            with open(x, 'r') as file:
+                return json.load(file)
+
+        return self._load_file(storage, loader, folder / 'value.json')
 
 
 class PickleSerializer(Serializer):
@@ -74,11 +89,11 @@ class PickleSerializer(Serializer):
             value = pickle.dumps(value)
         except TypeError as e:
             raise SerializerError from e
-        
+
         with open(folder / 'value.pkl', 'wb') as file:
             file.write(value)
 
-    def load(self, folder):
+    def load(self, folder: Path, storage: Storage):
         paths = list(folder.iterdir())
         if len(paths) != 1:
             raise SerializerError
@@ -87,8 +102,11 @@ class PickleSerializer(Serializer):
         if path.name != 'value.pkl':
             raise SerializerError
 
-        with open(folder / 'value.pkl', 'rb') as file:
-            return pickle.load(file)
+        def loader(x):
+            with open(x, 'rb') as file:
+                return pickle.load(file)
+
+        return self._load_file(storage, loader, folder / 'value.pkl')
 
 
 class NumpySerializer(Serializer):
@@ -115,20 +133,22 @@ class NumpySerializer(Serializer):
         else:
             np.save(folder / 'value.npy', value)
 
-    def load(self, folder: Path):
+    def load(self, folder: Path, storage: Storage):
         paths = list(folder.iterdir())
         if len(paths) != 1:
             raise SerializerError
 
         path, = paths
         if path.name == 'value.npy':
-            return np.load(folder / 'value.npy', allow_pickle=True)
+            loader = partial(np.load, allow_pickle=True)
+        elif path.name == 'value.npy.gz':
+            def loader(x):
+                with GzipFile(x, 'rb') as file:
+                    return np.load(file, allow_pickle=True)
+        else:
+            raise SerializerError
 
-        if path.name == 'value.npy.gz':
-            with GzipFile(folder / 'value.npy.gz', 'rb') as file:
-                return np.load(file, allow_pickle=True)
-
-        raise SerializerError
+        return self._load_file(storage, loader, path)
 
 
 class DictSerializer(Serializer):
@@ -150,15 +170,17 @@ class DictSerializer(Serializer):
         with open(folder / self.keys_filename, 'w+') as f:
             json.dump(keys_to_folder, f)
 
-    def load(self, folder: Path):
+    def load(self, folder: Path, storage: Storage):
         keys = folder / self.keys_filename
         if not keys.exists():
             raise SerializerError
 
-        with open(keys, 'r') as f:
-            keys_map = json.load(f)
+        def loader(x):
+            with open(x, 'r') as f:
+                return json.load(f)
 
+        keys_map = self._load_file(storage, loader, keys)
         data = {}
         for sub_folder, key in keys_map.items():
-            data[key] = self.serializer.load(folder / sub_folder)
+            data[key] = self.serializer.load(folder / sub_folder, storage)
         return data
