@@ -50,7 +50,6 @@ class Locker(ABC):
     @abstractmethod
     def stop_reading(self, key: Key):
         """ Release a read operation. """
-        pass
 
     @abstractmethod
     def start_writing(self, key: Key) -> bool:

@@ -20,6 +20,7 @@ from .compat import BadGzipFile
 logger = logging.getLogger(__name__)
 
 DATA_FOLDER = 'data'
+TEMP_FOLDER = 'temp'
 HASH_FILENAME = 'hash.bin'
 TIME_FILENAME = 'time'
 GZIP_COMPRESSION = 1
@@ -77,10 +78,9 @@ class DiskCache(Cache):
             hash_path, time_path = base / HASH_FILENAME, base / TIME_FILENAME
             # we either have a valid folder
             if hash_path.exists() and time_path.exists():
-                # TODO: how slow is this?
                 check_consistency(hash_path, pickled)
                 touch(time_path)
-                return self.serializer.load(base / DATA_FOLDER), True
+                return self.serializer.load(base / DATA_FOLDER, self.storage), True
 
         # or it is corrupted, in which case we can remove it
         with self.locker.write(digest):
@@ -95,14 +95,15 @@ class DiskCache(Cache):
                 # TODO: also compare the raw bytes of `value` and dumped value?
                 return
 
-            # TODO: need a temp data folder
             data_folder = base / DATA_FOLDER
+            temp_folder = base / TEMP_FOLDER
             create_folders(data_folder, self.permissions, self.group)
+            create_folders(temp_folder, self.permissions, self.group)
 
             try:
                 # data
-                self.serializer.save(value, data_folder)
-                self._mirror_to_storage(data_folder)
+                self.serializer.save(value, temp_folder)
+                self._mirror_to_storage(temp_folder, data_folder)
                 # meta
                 size = self._save_meta(base, pickled)
                 if self.locker.track_size:
@@ -124,20 +125,19 @@ class DiskCache(Cache):
         to_read_only(hash_path, self.permissions, self.group)
         return get_size(hash_path)
 
-    def _mirror_to_storage(self, folder: Path):
-        for file in folder.glob('**/*'):
+    def _mirror_to_storage(self, source: Path, destination: Path):
+        for file in source.glob('**/*'):
+            target = destination / file.relative_to(source)
             if file.is_dir():
-                continue
+                target.mkdir(parents=True)
 
-            # FIXME
-            path = self.storage.get_path(self.storage.store(file))
-            # TODO: this might be incorrect if the user changes the cwd
-            if not path.is_absolute():
-                path = Path(os.getcwd()) / path
+            else:
+                with open(target, 'w') as fd:
+                    fd.write(self.storage.store(file))
+                os.remove(file)
+                to_read_only(target, self.permissions, self.group)
 
-            assert path.exists(), path
-            os.remove(file)
-            file.symlink_to(path)
+        shutil.rmtree(source)
 
     def _cleanup_corrupted(self, folder, digest):
         warnings.warn(f'Corrupted storage at {self.root} for key {digest}. Cleaning up.', RuntimeWarning)
