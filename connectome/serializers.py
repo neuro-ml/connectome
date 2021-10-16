@@ -175,9 +175,11 @@ class DictSerializer(Serializer):
         if not keys.exists():
             raise SerializerError
 
-        with open(keys, 'r') as f:
-            keys_map = json.load(f)
+        def loader(x):
+            with open(x, 'r') as f:
+                return json.load(f)
 
+        keys_map = self._load_file(storage, loader, keys)
         data = {}
         for sub_folder, key in keys_map.items():
             data[key] = self.serializer.load(folder / sub_folder, storage)

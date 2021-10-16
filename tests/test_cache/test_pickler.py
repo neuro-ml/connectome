@@ -1,6 +1,7 @@
 from functools import partial
 from hashlib import sha256
 
+import numpy as np
 import pytest
 from pickler_test_helpers import functions
 from pickler_test_helpers import functions2
@@ -134,3 +135,9 @@ def test_stable(version, pickle_references):
     assert dumper(functions.identity) == not_stable
     is_stable(functions.identity)
     assert dumper(functions.identity) == stable
+
+
+@pytest.mark.parametrize('version', AVAILABLE_VERSIONS)
+def test_special_cases(version):
+    dumper = partial(dumps, version=version)
+    dumper(np.dtype)

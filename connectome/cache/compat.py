@@ -134,7 +134,14 @@ else:
 
 
 def to_dispatch(func):
-    return lambda self, obj: self.save_reduce(*func(obj), obj=obj)
+    def save(self, obj):
+        args = func(obj)
+        if isinstance(args, str):
+            self.save_global(obj, args)
+        else:
+            self.save_reduce(*args, obj=obj)
+
+    return save
 
 
 DISPATCH.update({k: to_dispatch(v) for k, v in DISPATCH_TABLE.items()})
