@@ -112,18 +112,25 @@ class Chain(CallableLayer):
 
     def _filter(self, func, *args, **kwargs):
         filtered = []
+
         for layer in self._layers:
             if isinstance(layer, Chain):
-                layer = layer._filter(func, *args, **kwargs)
-            if not func(layer, *args, **kwargs):
+                filtered.append(layer._filter(func, *args, **kwargs))
+            elif func(layer, *args, **kwargs):
                 filtered.append(layer)
 
         return Chain(*filtered)
 
+    def _filterfalse(self, func, *args, **kwargs):
+        def not_func(x, *a, **kw):
+            return not func(x, *a, **kw)
+
+        return self._filter(not_func, *args, **kwargs)
+
     def _drop_cache(self):
         from .blocks import CacheLayer
 
-        return self._filter(isinstance, CacheLayer)
+        return self._filterfalse(isinstance, CacheLayer)
 
     def __repr__(self):
         if len(self._layers) == 2:
