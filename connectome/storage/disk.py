@@ -92,7 +92,6 @@ class Disk:
             shutil.rmtree(folder)
             raise RuntimeError('An error occurred while copying the file') from e
 
-        # TODO: need a final cache check
         # make file read-only
         to_read_only(temporary, self.permissions, self.group)
         temporary.rename(stored)
