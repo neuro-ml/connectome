@@ -73,7 +73,7 @@ def test_filter_removal(block_maker):
     cropped = one >> two
     filtered = cropped._filterfalse(isinstance, Transform)
 
-    assert len(filtered) == 1
+    assert len(filtered._layers) == 1
     assert filtered[0] == one
 
 
