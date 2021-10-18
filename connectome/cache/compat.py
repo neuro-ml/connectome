@@ -94,7 +94,7 @@ def _check_is_under_development(obj, name):
         base = importlib.import_module(base_module)
 
     if hasattr(base, '__development__'):
-        raise RuntimeError('You are relying on an old cache invalidation machinery: '
+        raise RuntimeError(f'Error in "{base_module}": you are relying on an old cache invalidation machinery: '
                            'use `unstable_module(__name__)` instead')
 
 
