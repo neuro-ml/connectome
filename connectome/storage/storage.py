@@ -37,8 +37,9 @@ class Storage:
             if loc.config['hash'] != reference:
                 raise ValueError('Local storage locations have inconsistent hash algorithms')
 
+        self.digest_size = sum(self.local[0].levels)
         # FIXME
-        self._hasher = self.local[0]._hasher
+        self._hasher = self.local[0].algorithm
 
     def store(self, file: PathLike) -> Key:
         file = Path(file)
