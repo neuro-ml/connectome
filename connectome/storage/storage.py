@@ -5,7 +5,7 @@ from typing import Sequence, Iterable, Callable, Any
 
 from tqdm import tqdm
 
-from .digest import digest_file
+from .digest import digest_file, get_digest_size
 from .disk import Disk
 from .interface import RemoteLocation
 from ..utils import PathLike
@@ -37,9 +37,11 @@ class Storage:
             if loc.config['hash'] != reference:
                 raise ValueError('Local storage locations have inconsistent hash algorithms')
 
-        self.digest_size = sum(self.local[0].levels)
         # FIXME
         self._hasher = self.local[0].algorithm
+
+    def get_digest_size(self, string: bool):
+        return get_digest_size(self.local[0].levels, string)
 
     def store(self, file: PathLike) -> Key:
         file = Path(file)

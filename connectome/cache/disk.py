@@ -10,7 +10,7 @@ from typing import Any, Tuple, Union, Set
 from ..exceptions import StorageCorruption
 from ..storage import Storage
 from ..storage.config import root_params, make_algorithm, load_config, make_locker
-from ..storage.digest import digest_to_relative
+from ..storage.digest import digest_to_relative, get_digest_size
 from ..engine import NodeHash
 from ..serializers import Serializer
 from ..storage.utils import touch, create_folders, to_read_only, get_size, Reason
@@ -145,10 +145,11 @@ class DiskCache(Cache):
         shutil.rmtree(folder)
 
     def inspect_entry(self, key: str, last_used: Union[float, datetime] = None) -> Union[Reason, Set[str]]:
-        digest_size = sum(self.levels)
+        digest_size = get_digest_size(self.levels, string=True)
         if len(key) != digest_size:
             return Reason.WrongDigestSize
 
+        data_digest_size = self.storage.get_digest_size(True)
         base = self.root / digest_to_relative(key, self.levels)
         with self.locker.read(key):
             if {x.name for x in base.iterdir()} != {HASH_FILENAME, DATA_FOLDER, TIME_FILENAME}:
@@ -180,8 +181,12 @@ class DiskCache(Cache):
                     return Reason.CorruptedData
 
                 with open(file, 'r') as content:
-                    data = content.read().strip()
-                    if len(data) != self.storage.digest_size:
+                    try:
+                        data = content.read().strip()
+                    except UnicodeDecodeError:
+                        return Reason.CorruptedData
+
+                    if len(data) != data_digest_size:
                         return Reason.CorruptedData
 
                     hashes.add(data)

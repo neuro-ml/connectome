@@ -11,7 +11,7 @@ import humanfriendly
 from tqdm import tqdm
 
 from .config import root_params, load_config, make_locker, make_algorithm
-from .digest import digest_to_relative, digest_file
+from .digest import digest_to_relative, digest_file, get_digest_size
 from .utils import get_size, create_folders, to_read_only, Reason
 from ..utils import PathLike
 
@@ -163,7 +163,7 @@ class Disk:
         self.locker.set_size(size)
 
     def inspect_entry(self, key: Key, allowed_keys: Set[Key] = None, created: Union[float, datetime] = None):
-        if len(key) != sum(self.levels):
+        if len(key) != get_digest_size(self.levels, string=True):
             return Reason.WrongDigestSize
 
         base = self.root / digest_to_relative(key, self.levels)
