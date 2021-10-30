@@ -144,7 +144,6 @@ def test_inheritance():
         FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll()
 
 
-@pytest.mark.xfail
 def test_all_inherit():
     class A(Transform):
         __inherit__ = 'x'
@@ -153,7 +152,8 @@ def test_all_inherit():
         def x(x):
             return x
 
-    assert set(dir(A() >> A() >> B())) == {'x'}
+    d = Chain(A(), A(), B())
+    assert set(dir(d)) == {'x'}
 
 
 def test_lazy(tmpdir, storage_factory):
@@ -188,7 +188,6 @@ def test_lazy(tmpdir, storage_factory):
         assert ds.g(1) == 1
 
 
-@pytest.mark.xfail
 def test_missing_ids(block_maker):
     ds = block_maker.first_ds(first_constant=2, ids_arg=15)
     for source in [ds, Merge(ds)]:
@@ -200,7 +199,8 @@ def test_missing_ids(block_maker):
         def image(image):
             pass
 
-    assert 'ids' in dir(ds >> A() >> A())
+    d = Chain(ds, A(), A())
+    assert 'ids' in dir(d)
 
 
 def test_dir_duplicates():

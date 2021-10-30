@@ -8,7 +8,7 @@ from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..engine import Backend, DefaultBackend
 from ..exceptions import GraphError
-from ..utils import node_to_dict
+from ..utils import AntiSet, node_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class NoContext(Context):
 
 class EdgesBag(Wrapper):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: Union[bool, Sequence[str]] = (), persistent_nodes: Sequence[str] = ()):
+                 virtual_nodes: Union[bool, Sequence[str], set] = (), persistent_nodes: Sequence[str] = ()):
         self.inputs, self.outputs, self.edges, self.virtual_nodes = normalize_bag(
             inputs, outputs, edges, virtual_nodes, persistent_nodes)
 
@@ -65,7 +65,7 @@ class EdgesBag(Wrapper):
             update_map(self.outputs, node_map),
             edges_copy,
             self.context.update(node_map),
-            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
+            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes
         )
 
     def compile(self) -> 'GraphContainer':
@@ -175,6 +175,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
 
     if all_virtual(virtual_nodes):
         add = set(inputs) - set(outputs)
+        virtual_nodes = AntiSet(set(list(outputs.keys())))
     else:
         virtual_nodes = set(virtual_nodes)
         # 2a:

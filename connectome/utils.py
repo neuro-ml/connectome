@@ -37,6 +37,36 @@ class MultiDict(Dict[str, List]):
         raise ValueError("Can't delete names from this scope")
 
 
+class AntiSet(set):
+    def __init__(self, excluded: Union[Sequence, set], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.excluded = set(excluded)
+
+    def __contains__(self, item):
+        return not self.excluded.__contains__(item)
+
+    def __repr__(self):
+        return f'All elements except for {self.excluded.__repr__()}'
+
+    def intersection(self, other: set) -> set:
+        if isinstance(other, AntiSet):
+            return AntiSet(self.excluded.union(other.excluded))
+
+        return other.difference(self.excluded)
+
+    def difference(self, other: set) -> set:
+        if isinstance(other, AntiSet):
+            return self.excluded.difference(other.excluded)
+
+        return AntiSet(self.excluded.union(other))
+
+    def union(self, other: set) -> set:
+        if isinstance(other, AntiSet):
+            return AntiSet(self.excluded.intersection(other.excluded))
+
+        return AntiSet(self.excluded.difference(other))
+
+
 def extract_signature(func):
     names = []
     annotations = {}
