@@ -1,6 +1,7 @@
 import inspect
 from collections import Counter
 from pathlib import Path
+from collections.abc import Set
 from typing import Union, Dict, List, Sequence
 
 PathLike = Union[Path, str]
@@ -37,10 +38,16 @@ class MultiDict(Dict[str, List]):
         raise ValueError("Can't delete names from this scope")
 
 
-class AntiSet(set):
+class AntiSet(Set):
     def __init__(self, excluded: Union[Sequence, set], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.excluded = set(excluded)
+
+    def __iter__(self):
+        raise RuntimeError(f'Cannot iterate over {self.__class__.__name__}')
+
+    def __len__(self):
+        raise RuntimeError(f'{self.__class__.__name__} does not have length')
 
     def __contains__(self, item):
         return not self.excluded.__contains__(item)
@@ -48,19 +55,19 @@ class AntiSet(set):
     def __repr__(self):
         return f'All elements except for {self.excluded.__repr__()}'
 
-    def intersection(self, other: set) -> set:
+    def intersection(self, other: set) -> Set:
         if isinstance(other, AntiSet):
             return AntiSet(self.excluded.union(other.excluded))
 
         return other.difference(self.excluded)
 
-    def difference(self, other: set) -> set:
+    def difference(self, other: set) -> Set:
         if isinstance(other, AntiSet):
-            return self.excluded.difference(other.excluded)
+            return self.excluded.intersection(other.excluded)
 
         return AntiSet(self.excluded.union(other))
 
-    def union(self, other: set) -> set:
+    def union(self, other: set) -> Set:
         if isinstance(other, AntiSet):
             return AntiSet(self.excluded.intersection(other.excluded))
 

@@ -149,11 +149,12 @@ class GraphContainer:
 ALL_VIRTUAL = True
 
 
-def all_virtual(names):
-    result = isinstance(names, bool)
-    if result:
+def not_fixed_virtual(names):
+    if isinstance(names, bool):
         assert names
-    return result
+        return True
+    else:
+        return isinstance(names, AntiSet)
 
 
 def get_parents(node: TreeNode):
@@ -173,9 +174,10 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
     inputs, outputs = node_to_dict(inputs), node_to_dict(outputs)
     edges = list(edges)
 
-    if all_virtual(virtual_nodes):
+    if not_fixed_virtual(virtual_nodes):
         add = set(inputs) - set(outputs)
-        virtual_nodes = AntiSet(set(list(outputs.keys())))
+        if isinstance(virtual_nodes, bool):
+            virtual_nodes = AntiSet(set(list(outputs.keys())))
     else:
         virtual_nodes = set(virtual_nodes)
         # 2a:

@@ -1,11 +1,11 @@
-from typing import Tuple, Sequence, Union, Iterable, NamedTuple, List, Set, Dict
+from typing import Tuple, Sequence, Union, Iterable, NamedTuple, List, Dict
 
 from .base import Context, EdgesBag, update_map
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
 from ..engine.edges import IdentityEdge
 from ..engine.graph import count_entries
 from ..exceptions import DependencyError
-from ..utils import check_for_duplicates, node_to_dict
+from ..utils import AntiSet, check_for_duplicates, node_to_dict
 
 INHERIT_ALL = True
 InheritType = Union[str, Iterable[str], bool]
@@ -130,7 +130,10 @@ class TransformContainer(EdgesBag):
     def _merge_virtual_nodes(state: LayerConnectionState):
         unused_cur_virtual = state.cur_virtual.difference(state.cur_used_virtual)
         unused_prev_virtual = state.prev_virtual.difference(state.prev_used_virtual)
-        return unused_prev_virtual.intersection(unused_cur_virtual)
+        if isinstance(unused_prev_virtual, AntiSet):
+            return unused_prev_virtual.intersection(unused_cur_virtual)
+
+        return unused_cur_virtual.intersection(unused_prev_virtual)
 
     @staticmethod
     def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: BoundEdges):

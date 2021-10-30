@@ -152,8 +152,7 @@ def test_all_inherit():
         def x(x):
             return x
 
-    d = Chain(A(), A(), B())
-    assert set(dir(d)) == {'x'}
+    assert set(dir(A() >> A() >> A() >> B())) == {'x'}
 
 
 def test_lazy(tmpdir, storage_factory):
@@ -199,8 +198,7 @@ def test_missing_ids(block_maker):
         def image(image):
             pass
 
-    d = Chain(ds, A(), A())
-    assert 'ids' in dir(d)
+    assert 'ids' in dir(ds >> A() >> A())
 
 
 def test_dir_duplicates():
