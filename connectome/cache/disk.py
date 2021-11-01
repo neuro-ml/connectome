@@ -13,6 +13,7 @@ from ..storage.config import root_params, make_algorithm, load_config, make_lock
 from ..storage.digest import digest_to_relative, get_digest_size
 from ..engine import NodeHash
 from ..serializers import Serializer
+from ..storage.storage import QueryError
 from ..storage.utils import touch, create_folders, to_read_only, get_size, Reason
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS
@@ -81,7 +82,11 @@ class DiskCache(Cache):
             if hash_path.exists() and time_path.exists():
                 check_consistency(hash_path, pickled)
                 touch(time_path)
-                return self.serializer.load(base / DATA_FOLDER, self.storage), True
+                try:
+                    # if couldn't find the hash - the cache is corrupted
+                    return self.serializer.load(base / DATA_FOLDER, self.storage), True
+                except QueryError:
+                    pass
 
         # or it is corrupted, in which case we can remove it
         with self.locker.write(digest):
