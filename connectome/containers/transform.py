@@ -1,4 +1,4 @@
-from typing import Tuple, Sequence, Union, Iterable, NamedTuple, List, Dict
+from typing import Tuple, Sequence, NamedTuple, List, Dict, Set
 
 from .base import Context, EdgesBag, update_map
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
@@ -6,9 +6,6 @@ from ..engine.edges import IdentityEdge
 from ..engine.graph import count_entries
 from ..exceptions import DependencyError
 from ..utils import AntiSet, check_for_duplicates, node_to_dict
-
-INHERIT_ALL = True
-InheritType = Union[str, Iterable[str], bool]
 
 
 class LayerConnectionState(NamedTuple):
@@ -22,38 +19,38 @@ class LayerConnectionState(NamedTuple):
     cur_used_virtual: set
     prev_used_virtual: set
     # elements of current/previous layer
-    cur_virtual: set
+    cur_virtual: Set[str]
     cur_inputs: Dict[str, Node]
-    cur_optional: Sequence
+    cur_optional: Set[str]
     prev_virtual: set
-    prev_persistent: List
+    prev_persistent: Set[str]
     prev_outputs: Dict[str, Node]
 
 
 class TransformContainer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
-                 backward_outputs: Nodes = (), *, optional_nodes: Sequence[str] = (),
-                 forward_virtual: InheritType, backward_virtual: InheritType,
-                 persistent_nodes: Sequence[str] = ()):
+                 backward_outputs: Nodes = (), *, optional_nodes: Set[str] = None,
+                 forward_virtual: Set[str], backward_virtual: Set[str],
+                 persistent_nodes: Set[str] = None):
 
-        forward_virtual, valid = normalize_inherit(forward_virtual)
+        forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
         assert valid
-        backward_virtual, valid = normalize_inherit(backward_virtual)
+        backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(outputs))
         assert valid
 
         check_for_duplicates(inputs)
         super().__init__(
             inputs, outputs, edges,
             BagContext(backward_inputs, backward_outputs, backward_virtual),
-            virtual_nodes=forward_virtual, persistent_nodes=tuple(persistent_nodes)
+            virtual_nodes=forward_virtual, persistent_nodes=persistent_nodes
         )
-        self.optional_nodes = tuple(optional_nodes)
+        self.optional_nodes = optional_nodes if optional_nodes is not None else set()
 
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         current = self.freeze()
         previous = container.freeze()
         all_edges = list(previous.edges) + list(current.edges)
-        persistent_nodes = tuple(set.union(set(previous.persistent_nodes), set(self.persistent_nodes)))
+        persistent_nodes = set.union(set(previous.persistent_nodes), set(self.persistent_nodes))
         state = LayerConnectionState(
             edges=all_edges,
             cur_used_virtual=set(),
@@ -161,14 +158,17 @@ def is_reachable(inputs: TreeNodes, output: TreeNode):
     return reachable(output)
 
 
-def normalize_inherit(value):
+def normalize_inherit(value, outputs) -> Tuple[Set[str], bool]:
     if isinstance(value, str):
         value = [value]
 
     if isinstance(value, bool):
         valid = value
+        value = AntiSet(set(outputs))
+    elif isinstance(value, AntiSet):
+        valid = True
     else:
-        value = tuple(value)
+        value = set(value)
         valid = all(isinstance(node_name, str) for node_name in value)
 
     return value, valid
@@ -189,7 +189,7 @@ class PipelineContext(Context):
 
 
 class BagContext(Context):
-    def __init__(self, inputs: Nodes, outputs: Nodes, inherit: InheritType):
+    def __init__(self, inputs: Nodes, outputs: Nodes, inherit: Set[str]):
         self.inputs = inputs
         self.outputs = outputs
         self.inherit = inherit
@@ -212,10 +212,10 @@ class BagContext(Context):
                 actual.append(node)
 
         # add inheritance
-        output_names = node_to_dict(actual)
+        add = self.inherit - set(node_to_dict(actual))
         for name, node in outputs.items():
             name = node.name
-            if name not in output_names and (self.inherit == INHERIT_ALL or name in self.inherit):
+            if name in add:
                 out = Node(name)
                 edges.append(IdentityEdge().bind(node, out))
                 actual.append(out)

@@ -39,8 +39,8 @@ class MultiDict(Dict[str, List]):
 
 
 class AntiSet(Set):
-    def __init__(self, excluded: Union[Sequence, set], *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, excluded: Union[Sequence, set]):
+        super().__init__()
         self.excluded = set(excluded)
 
     def __iter__(self):
@@ -50,10 +50,13 @@ class AntiSet(Set):
         raise RuntimeError(f'{self.__class__.__name__} does not have length')
 
     def __contains__(self, item):
-        return not self.excluded.__contains__(item)
+        return item not in self.excluded
 
     def __repr__(self):
-        return f'All elements except for {self.excluded.__repr__()}'
+        return f'All elements except for {self.excluded}'
+
+    def __bool__(self):
+        return not self.excluded
 
     def intersection(self, other: set) -> Set:
         if isinstance(other, AntiSet):

@@ -1,14 +1,14 @@
 import logging
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Tuple, Optional, Union, Sequence
+from typing import Tuple, Optional, Set
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..engine import Backend, DefaultBackend
 from ..exceptions import GraphError
-from ..utils import AntiSet, node_to_dict
+from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +42,19 @@ class NoContext(Context):
 
 class EdgesBag(Wrapper):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: Union[bool, Sequence[str], set] = (), persistent_nodes: Sequence[str] = ()):
+                 virtual_nodes: Set[str] = None, persistent_nodes: Set[str] = None):
+        if virtual_nodes is None:
+            virtual_nodes = set()
+        if persistent_nodes is None:
+            persistent_nodes = set()
+        if context is None:
+            context = NoContext()
+
         self.inputs, self.outputs, self.edges, self.virtual_nodes = normalize_bag(
             inputs, outputs, edges, virtual_nodes, persistent_nodes)
 
         self.persistent_nodes = persistent_nodes
-        self.context = context if context is not None else NoContext()
+        self.context = context
         self.backend = DefaultBackend
 
     def freeze(self) -> 'EdgesBag':
@@ -146,17 +153,6 @@ class GraphContainer:
         return Graph(self.inputs, node, self.backend).call
 
 
-ALL_VIRTUAL = True
-
-
-def not_fixed_virtual(names):
-    if isinstance(names, bool):
-        assert names
-        return True
-    else:
-        return isinstance(names, AntiSet)
-
-
 def get_parents(node: TreeNode):
     if node.is_leaf:
         return
@@ -165,7 +161,7 @@ def get_parents(node: TreeNode):
         yield from get_parents(parent)
 
 
-def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_nodes, persistent_nodes):
+def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_nodes: Set[str], persistent_nodes):
     # 1. outputs must only depend on inputs
     # 1a. inputs must have no dependencies
     # 2. each node can only have a single incoming edge
@@ -174,21 +170,14 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
     inputs, outputs = node_to_dict(inputs), node_to_dict(outputs)
     edges = list(edges)
 
-    if not_fixed_virtual(virtual_nodes):
-        add = set(inputs) - set(outputs)
-        if isinstance(virtual_nodes, bool):
-            virtual_nodes = AntiSet(set(list(outputs.keys())))
-    else:
-        virtual_nodes = set(virtual_nodes)
-        # 2a:
-        intersection = virtual_nodes & set(outputs)
-        if intersection:
-            raise GraphError(f'The nodes {intersection} are both inherited and have defined edges')
-
-        add = (virtual_nodes | set(persistent_nodes)) & set(inputs) - set(outputs)
-        virtual_nodes -= add
+    # 2a:
+    intersection = virtual_nodes & set(outputs)
+    if intersection:
+        raise GraphError(f'The nodes {intersection} are both inherited and have defined edges')
 
     # 3:
+    add = (virtual_nodes | persistent_nodes) & set(inputs) - set(outputs)
+    virtual_nodes = virtual_nodes - add
     for name in add:
         outputs[name] = Node(name)
         edges.append(IdentityEdge().bind(inputs[name], outputs[name]))
