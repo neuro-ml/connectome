@@ -28,6 +28,7 @@ jobs:
           sudo systemctl enable --now ssh
           ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa
           cp tests/assets/ssh_config ~/.ssh/config
+          echo ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
       - name: Install dependencies
         run: |
           pip install -e .
