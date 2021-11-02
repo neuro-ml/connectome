@@ -25,6 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Create ssh key
         run: |
+          systemctl enable --now ssh
           ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa
           cp tests/assets/ssh_config ~/.ssh/config
       - name: Install dependencies
