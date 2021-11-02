@@ -1,7 +1,12 @@
 import os
 import shutil
+from enum import Enum
 from pathlib import Path
 from typing import Union
+
+
+class Reason(Enum):
+    WrongDigestSize, WrongHash, CorruptedHash, WrongFolderStructure, CorruptedData, Expired, Filtered = range(7)
 
 
 def size_to_human(num, suffix='B'):

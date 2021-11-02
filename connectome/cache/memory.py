@@ -25,3 +25,6 @@ class MemoryCache(Cache):
         key = param.value
         with self.locker.write(key):
             self._cache[key] = value
+
+    def clear(self):
+        self._cache = {}

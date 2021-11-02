@@ -62,6 +62,20 @@ def test_cache_removal(block_maker):
     for i in one.ids:
         assert simple.image(i) == cached.image(i) == nested.image(i)
 
+    assert type(cached[-1]) == type(two)
+    assert type(nested[-1]) == type(simple)
+
+
+def test_filter_removal(block_maker):
+    one = block_maker.first_ds(first_constant=2, ids_arg=15)
+    two = block_maker.crop()
+
+    cropped = one >> two
+    filtered = cropped._filterfalse(isinstance, Transform)
+
+    assert len(filtered._layers) == 1
+    assert type(filtered[0]) == type(one)
+
 
 def test_inheritance():
     class FirstInheritAll(Transform):

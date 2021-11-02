@@ -1,4 +1,5 @@
 import operator
+import weakref
 from pathlib import Path
 from typing import Union, Sequence, Callable, Iterable
 
@@ -139,8 +140,14 @@ class CacheLayer(BaseLayer):
 class CacheToRam(CacheLayer):
     """ Caches the fields from ``names`` to RAM. """
 
-    def __init__(self, names: StringsLike = None, size: int = None, impure: bool = False):
-        super().__init__(MemoryCacheContainer(names, size, impure))
+    def __init__(self, names: StringsLike = None, impure: bool = False):
+        self._cache_instances = weakref.WeakSet()
+        super().__init__(MemoryCacheContainer(names, None, impure, self._cache_instances))
+
+    def _clear(self):
+        """ Clears all the values cached by this layer. """
+        for cache in self._cache_instances:
+            cache.clear()
 
 
 class CacheToDisk(CacheLayer):
