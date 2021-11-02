@@ -45,7 +45,7 @@ class SwitchContainer(EdgesBag):
         outputs.append(ids)
         edges.append(ConstantEdge(tuple(sorted(id_to_index))).bind([], ids))
 
-        super().__init__([inp], outputs, edges, context=None, persistent_nodes=persistent_names)
+        super().__init__([inp], outputs, edges, context=None, persistent_nodes=set(persistent_names))
         self.layers = layers
 
 
