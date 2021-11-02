@@ -7,10 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set, Union
 
-import humanfriendly
 from tqdm import tqdm
 
-from .config import root_params, load_config, make_locker, make_algorithm
+from .config import root_params, load_config, make_locker, make_algorithm, StorageDiskConfig
 from .digest import digest_to_relative, digest_file, get_digest_size
 from .utils import get_size, create_folders, to_read_only, Reason
 from ..utils import PathLike
@@ -27,17 +26,17 @@ class Disk:
     def __init__(self, root: PathLike):
         self.root = Path(root)
         self.permissions, self.group = root_params(self.root)
-        self.config = config = load_config(self.root)
-        assert set(config) <= {'hash', 'levels', 'max_size', 'free_disk_size', 'locker'}
+        config: StorageDiskConfig = load_config(self.root, StorageDiskConfig)
 
-        self.locker = make_locker(config)
-        self._min_free_size = parse_size(config.get('free_disk_size', 0))
-        self._max_size = parse_size(config.get('max_size'))
+        self.config = config
+        self.locker = make_locker(config.locker)
+        self.algorithm = make_algorithm(config.hash)
+        self.levels = config.levels
+        self._min_free_size = config.free_disk_size
+        self._max_size = config.max_size
 
         if not self.locker.track_size:
             assert self._max_size is None or self._max_size == float('inf'), self._max_size
-
-        self.algorithm, self.levels = make_algorithm(config)
 
     def _key_to_path(self, key: Key, temp: bool = False):
         name = TEMPFILE if temp else FILENAME
@@ -201,12 +200,3 @@ def copy_file(source, destination):
 def match_files(first: Path, second: Path):
     if not filecmp.cmp(first, second, shallow=False):
         raise ValueError(f'Files do not match: {first} vs {second}')
-
-
-def parse_size(x):
-    if isinstance(x, int):
-        return x
-    if isinstance(x, str):
-        return humanfriendly.parse_size(x)
-    if x is not None:
-        raise ValueError(f"Couldn't understand the size format: {x}")

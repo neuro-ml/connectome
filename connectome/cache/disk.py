@@ -9,7 +9,7 @@ from typing import Any, Tuple, Union, Set
 
 from ..exceptions import StorageCorruption
 from ..storage import Storage
-from ..storage.config import root_params, make_algorithm, load_config, make_locker
+from ..storage.config import root_params, make_algorithm, load_config, make_locker, DiskConfig
 from ..storage.digest import digest_to_relative, get_digest_size
 from ..engine import NodeHash
 from ..serializers import Serializer
@@ -37,11 +37,10 @@ class DiskCache(Cache):
         self.serializer = serializer
         self.storage = storage
 
-        config = load_config(self.root)
-        assert set(config) <= {'hash', 'levels', 'locker'}
-
-        self.algorithm, self.levels = make_algorithm(config)
-        self.locker = make_locker(config)
+        config = load_config(self.root, DiskConfig)
+        self.algorithm = make_algorithm(config.hash)
+        self.levels = config.levels
+        self.locker = make_locker(config.locker)
 
     def get(self, param: NodeHash) -> Tuple[Any, bool]:
         key = param.value

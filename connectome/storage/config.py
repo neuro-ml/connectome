@@ -1,8 +1,10 @@
 import hashlib
 from functools import partial
 from pathlib import Path
-from typing import Union
+from typing import Union, Sequence, Dict, Any, Tuple
 
+import humanfriendly
+from pydantic import BaseModel, Extra, validator
 from yaml import safe_load, safe_dump
 
 from .locker import Locker, DummyLocker
@@ -12,16 +14,79 @@ from ..utils import PathLike
 FILENAME = 'config.yml'
 
 
+class HashConfig(BaseModel):
+    name: str
+    kwargs: Dict[str, Any] = None
+
+    @validator('kwargs', always=True)
+    def normalize_kwargs(cls, v):
+        if v is None:
+            return {}
+        return v
+
+
+class LockerConfig(BaseModel):
+    name: str
+    args: Sequence = ()
+    kwargs: Dict[str, Any] = None
+
+    @validator('name')
+    def name_exists(cls, name):
+        for kls in Locker.__subclasses__():
+            if kls.__name__ == name:
+                return name
+
+        raise ValueError(f'Could not find a locker named {name}')
+
+    @validator('kwargs', always=True)
+    def normalize_kwargs(cls, v):
+        if v is None:
+            return {}
+        return v
+
+    class Config:
+        extra = Extra.forbid
+
+
+class DiskConfig(BaseModel):
+    hash: Union[str, HashConfig]
+    levels: Tuple[int, ...]
+    locker: Union[str, LockerConfig] = None
+
+    @validator('hash', pre=True)
+    def normalize_hash(cls, v):
+        if isinstance(v, str):
+            v = {'name': v}
+        return v
+
+    @validator('locker', pre=True)
+    def normalize_locker(cls, v):
+        if isinstance(v, str):
+            v = {'name': v}
+        return v
+
+    class Config:
+        extra = Extra.forbid
+
+
+class StorageDiskConfig(DiskConfig):
+    free_disk_size: int = 0
+    max_size: int = None
+
+    @validator('free_disk_size', 'max_size')
+    def to_size(cls, v):
+        return parse_size(v)
+
+
 def root_params(root: Path):
     stat = root.stat()
     return stat.st_mode & 0o777, stat.st_gid
 
 
-def load_config(root: PathLike):
+def load_config(root: PathLike, cls) -> DiskConfig:
     with open(Path(root) / FILENAME) as file:
         # TODO: assert read-only
-        # TODO: require algorithm, levels
-        return safe_load(file)
+        return cls(**safe_load(file))
 
 
 def init_storage(root: PathLike, *, permissions: Union[int, None] = None, group: Union[str, int, None] = None,
@@ -40,29 +105,29 @@ def init_storage(root: PathLike, *, permissions: Union[int, None] = None, group:
         safe_dump(config, file)
 
 
-def make_locker(config) -> Locker:
-    config = config.get('locker')
+def make_locker(config: LockerConfig) -> Locker:
     if config is None:
         return DummyLocker()
 
-    assert set(config) <= {'name', 'args', 'kwargs'}
-    name = config['name']
-
+    name = config.name
     for cls in Locker.__subclasses__():
         if cls.__name__ == name:
-            args = config.get('args', ())
-            if not isinstance(args, (list, tuple)):
-                raise ValueError(f'"args" must be a list or tuple, got {type(args)}')
-
-            return cls(*args, **config.get('kwargs', {}))
+            return cls(*config.args, **config.kwargs)
 
     raise ValueError(f'Could not find a locker named {name}')
 
 
-def make_algorithm(config):
-    algorithm = config['hash'].copy()
-    hasher = getattr(hashlib, algorithm.pop('name'))
-    if algorithm:
-        hasher = partial(hasher, **algorithm)
+def make_algorithm(config: HashConfig):
+    cls = getattr(hashlib, config.name)
+    if config.kwargs:
+        cls = partial(cls, **config.kwargs)
+    return cls
 
-    return hasher, config['levels']
+
+def parse_size(x):
+    if isinstance(x, int):
+        return x
+    if isinstance(x, str):
+        return humanfriendly.parse_size(x)
+    if x is not None:
+        raise ValueError(f"Couldn't understand the size format: {x}")

@@ -9,7 +9,7 @@ from paramiko import SSHClient, AuthenticationException, SSHException
 from paramiko.config import SSH_PORT, SSHConfig
 from scp import SCPClient, SCPException
 
-from .config import load_config
+from .config import load_config, StorageDiskConfig
 from .disk import digest_to_relative, FILENAME
 from .interface import RemoteLocation
 from ..utils import PathLike
@@ -78,7 +78,7 @@ class SSHLocation(RemoteLocation):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir) / 'config.yml'
             scp.get(str(self.root / 'config.yml'), str(temp))
-            self._levels = load_config(temp_dir)['levels']
+            self._levels = load_config(temp_dir, StorageDiskConfig).levels
 
     def __enter__(self):
         try:
