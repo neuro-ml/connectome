@@ -1,8 +1,7 @@
 import inspect
 from collections import Counter
 from pathlib import Path
-from collections.abc import Set
-from typing import Union, Dict, List, Sequence
+from typing import Union, Dict, List, Sequence, AbstractSet, Iterable
 
 PathLike = Union[Path, str]
 Strings = Sequence[str]
@@ -38,43 +37,68 @@ class MultiDict(Dict[str, List]):
         raise ValueError("Can't delete names from this scope")
 
 
-class AntiSet(Set):
-    def __init__(self, excluded: Union[Sequence, set]):
+class AntiSet(AbstractSet):
+    def __init__(self, excluded: Iterable = ()):
         super().__init__()
+        assert not isinstance(excluded, AntiSet)
         self.excluded = set(excluded)
 
     def __iter__(self):
-        raise RuntimeError(f'Cannot iterate over {self.__class__.__name__}')
+        raise TypeError("Can't iterate over infinite sets")
 
     def __len__(self):
-        raise RuntimeError(f'{self.__class__.__name__} does not have length')
+        raise TypeError("Infinite sets don't have length")
 
-    def __contains__(self, item):
+    def __contains__(self, item) -> bool:
         return item not in self.excluded
 
     def __repr__(self):
-        return f'All elements except for {self.excluded}'
+        return f'{{*}} - {self.excluded}'
 
-    def __bool__(self):
-        return not self.excluded
+    def __bool__(self) -> bool:
+        return True
 
-    def intersection(self, other: set) -> Set:
+    # operations
+    def __and__(self, other) -> AbstractSet:
         if isinstance(other, AntiSet):
-            return AntiSet(self.excluded.union(other.excluded))
+            return AntiSet(self.excluded | other.excluded)
 
-        return other.difference(self.excluded)
+        return other - self.excluded
 
-    def difference(self, other: set) -> Set:
+    __rand__ = __and__
+
+    def __sub__(self, other: set) -> AbstractSet:
         if isinstance(other, AntiSet):
-            return self.excluded.intersection(other.excluded)
+            return other.excluded - self.excluded
 
-        return AntiSet(self.excluded.union(other))
+        return AntiSet(self.excluded | other)
 
-    def union(self, other: set) -> Set:
+    def __rsub__(self, other):
         if isinstance(other, AntiSet):
-            return AntiSet(self.excluded.intersection(other.excluded))
+            return other - self
 
-        return AntiSet(self.excluded.difference(other))
+        return self.excluded & other
+
+    def __or__(self, other: set) -> AbstractSet:
+        if isinstance(other, AntiSet):
+            return AntiSet(self.excluded & other.excluded)
+
+        return AntiSet(self.excluded - other)
+
+    __ror__ = __or__
+
+    def __eq__(self, other: set) -> bool:
+        return isinstance(other, AntiSet) and self.excluded == other.excluded
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    # safety first
+    def __iand__(self, other):
+        raise NotImplementedError
+
+    __ge__ = __gt__ = __ixor__ = __le__ = __lt__ = \
+        __ior__ = __isub__ = __rxor__ = __xor__ = __iand__
 
 
 def extract_signature(func):

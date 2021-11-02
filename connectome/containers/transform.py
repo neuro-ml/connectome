@@ -125,12 +125,9 @@ class TransformContainer(EdgesBag):
 
     @staticmethod
     def _merge_virtual_nodes(state: LayerConnectionState):
-        unused_cur_virtual = state.cur_virtual.difference(state.cur_used_virtual)
-        unused_prev_virtual = state.prev_virtual.difference(state.prev_used_virtual)
-        if isinstance(unused_prev_virtual, AntiSet):
-            return unused_prev_virtual.intersection(unused_cur_virtual)
-
-        return unused_cur_virtual.intersection(unused_prev_virtual)
+        unused_cur_virtual = state.cur_virtual - state.cur_used_virtual
+        unused_prev_virtual = state.prev_virtual - state.prev_used_virtual
+        return unused_cur_virtual & unused_prev_virtual
 
     @staticmethod
     def get_essential_input_names(inputs: Sequence[Node], outputs: Sequence[Node], edges: BoundEdges):
