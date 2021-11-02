@@ -1,7 +1,7 @@
 import hashlib
 from functools import partial
 from pathlib import Path
-from typing import Union, Sequence, Dict, Any, Tuple
+from typing import Union, Dict, Any, Tuple
 
 import humanfriendly
 from pydantic import BaseModel, Extra, validator
@@ -27,7 +27,7 @@ class HashConfig(BaseModel):
 
 class LockerConfig(BaseModel):
     name: str
-    args: Sequence = ()
+    args: Tuple = ()
     kwargs: Dict[str, Any] = None
 
     @validator('name')
