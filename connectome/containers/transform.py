@@ -1,6 +1,6 @@
 from typing import Tuple, Sequence, NamedTuple, List, Dict, Set
 
-from .base import Context, EdgesBag, update_map
+from .base import Context, EdgesBag, update_map, NameSet
 from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode, TreeNodes
 from ..engine.edges import IdentityEdge
 from ..engine.graph import count_entries
@@ -29,9 +29,8 @@ class LayerConnectionState(NamedTuple):
 
 class TransformContainer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
-                 backward_outputs: Nodes = (), *, optional_nodes: Set[str] = None,
-                 forward_virtual: Set[str], backward_virtual: Set[str],
-                 persistent_nodes: Set[str] = None):
+                 backward_outputs: Nodes = (), *, optional_nodes: NameSet = None,
+                 forward_virtual: NameSet, backward_virtual: NameSet, persistent_nodes: NameSet = None):
 
         forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
         assert valid

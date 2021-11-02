@@ -12,6 +12,8 @@ from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
 
+NameSet = Set[str]
+
 
 class Container:
     pass
@@ -42,7 +44,7 @@ class NoContext(Context):
 
 class EdgesBag(Wrapper):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: Set[str] = None, persistent_nodes: Set[str] = None):
+                 virtual_nodes: NameSet = None, persistent_nodes: NameSet = None):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:
@@ -76,7 +78,7 @@ class EdgesBag(Wrapper):
         )
 
     def compile(self) -> 'GraphContainer':
-        return GraphContainer(self.inputs, self.outputs, self.edges, self.backend)
+        return GraphContainer(self.inputs, self.outputs, self.edges, self.virtual_nodes, self.backend)
 
     def loopback(self, func, inputs, output):
         state = self.freeze()
@@ -92,14 +94,25 @@ class EdgesBag(Wrapper):
         if len(set(inputs)) != len(inputs):
             raise ValueError(f'The inputs contain duplicates: {inputs}')
 
-        inputs = [current[name] for name in inputs]
-        edge = FunctionEdge(func, len(inputs))
+        input_nodes, all_inputs = [], list(state.inputs)
+        for name in inputs:
+            if name not in current:
+                if name not in state.virtual_nodes:
+                    raise GraphError(f'Node "{name}" is not defined')
+                node = Node(name)
+                all_inputs.append(node)
+            else:
+                node = current[name]
+
+            input_nodes.append(node)
+
+        edge = FunctionEdge(func, len(input_nodes))
 
         # single output
         if isinstance(output, str):
             output = Node(output)
 
-            edges.append(edge.bind(inputs, output))
+            edges.append(edge.bind(input_nodes, output))
             outputs.append(output)
 
         # multiple outputs
@@ -107,14 +120,14 @@ class EdgesBag(Wrapper):
             assert len(set(outputs)) == len(outputs)
 
             aux = Node('$aux')
-            edges.append(edge.bind(inputs, aux))
+            edges.append(edge.bind(input_nodes, aux))
             for idx, out in enumerate(output):
                 out = Node(out)
                 edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
                 outputs.append(out)
 
-        outputs, edges = state.context.reverse(state.inputs, outputs, edges)
-        return GraphContainer(state.inputs, outputs, edges, self.backend)
+        outputs, edges = state.context.reverse(all_inputs, outputs, edges)
+        return GraphContainer(all_inputs, outputs, edges, set(), self.backend)
 
 
 def update_map(nodes, node_map):
@@ -124,28 +137,40 @@ def update_map(nodes, node_map):
     return [node_map[x] for x in nodes]
 
 
+def identity(x):
+    return x
+
+
 class GraphContainer:
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backend: Backend):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, backend: Backend):
         tree_node_map = TreeNode.from_edges(edges)
         self._edges = edges
         self.inputs = [tree_node_map[x] for x in inputs]
         self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
         self.backend = backend
+        self.virtuals = virtuals
         self.methods = {node.name: self._compile(node) for node in self.outputs.values()}
 
     def __getitem__(self, item):
         if item not in self.methods:
-            if not isinstance(item, tuple):
+            if isinstance(item, str) and item in self.virtuals:
+                # TODO: signature
+                value = identity
+
+            elif isinstance(item, tuple):
+                outputs = []
+                for name in item:
+                    if name not in self.outputs:
+                        raise ValueError(f'"{name}" is not an available output: {tuple(self.outputs)}')
+                    outputs.append(self.outputs[name])
+
+                product = TreeNode('$product', (ProductEdge(len(item)), outputs))
+                value = self._compile(product)
+
+            else:
                 raise AttributeError(item)
 
-            outputs = []
-            for name in item:
-                if name not in self.outputs:
-                    raise ValueError(f'"{name}" is not an available output: {tuple(self.outputs)}')
-                outputs.append(self.outputs[name])
-
-            product = TreeNode('$product', (ProductEdge(len(item)), outputs))
-            self.methods[item] = self._compile(product)
+            self.methods[item] = value
 
         return self.methods[item]
 

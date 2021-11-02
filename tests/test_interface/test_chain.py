@@ -101,6 +101,7 @@ def test_inheritance():
             return h, g, f
 
     ds = FirstInheritAll() >> SecondInheritPart()
+    assert set(dir(ds)) == {'g', 'h'}
     assert ds.g('hello') == 'hello'
     assert ds.h(g='input') == ('A.f', 'input')
 
