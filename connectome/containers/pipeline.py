@@ -8,7 +8,8 @@ class PipelineContainer(EdgesBag):
             head = layer.wrap(head)
 
         state = head.freeze()
-        super().__init__(state.inputs, state.outputs, state.edges, state.context)
+        super().__init__(state.inputs, state.outputs, state.edges, state.context, virtual_nodes=state.virtual_nodes,
+                         persistent_nodes=state.persistent_nodes)
 
     def wrap(self, container: EdgesBag) -> EdgesBag:
         return PipelineContainer(container, *self.containers)

@@ -1,7 +1,7 @@
 import inspect
 from collections import Counter
 from pathlib import Path
-from typing import Union, Dict, List, Sequence
+from typing import Union, Dict, List, Sequence, AbstractSet, Iterable
 
 PathLike = Union[Path, str]
 Strings = Sequence[str]
@@ -35,6 +35,70 @@ class MultiDict(Dict[str, List]):
 
     def __delitem__(self, key):
         raise ValueError("Can't delete names from this scope")
+
+
+class AntiSet(AbstractSet):
+    def __init__(self, excluded: Iterable = ()):
+        super().__init__()
+        assert not isinstance(excluded, AntiSet)
+        self.excluded = set(excluded)
+
+    def __iter__(self):
+        raise TypeError("Can't iterate over infinite sets")
+
+    def __len__(self):
+        raise TypeError("Infinite sets don't have length")
+
+    def __contains__(self, item) -> bool:
+        return item not in self.excluded
+
+    def __repr__(self):
+        return f'{{*}} - {self.excluded}'
+
+    def __bool__(self) -> bool:
+        return True
+
+    # operations
+    def __and__(self, other) -> AbstractSet:
+        if isinstance(other, AntiSet):
+            return AntiSet(self.excluded | other.excluded)
+
+        return other - self.excluded
+
+    __rand__ = __and__
+
+    def __sub__(self, other: set) -> AbstractSet:
+        if isinstance(other, AntiSet):
+            return other.excluded - self.excluded
+
+        return AntiSet(self.excluded | other)
+
+    def __rsub__(self, other):
+        if isinstance(other, AntiSet):
+            return other - self
+
+        return self.excluded & other
+
+    def __or__(self, other: set) -> AbstractSet:
+        if isinstance(other, AntiSet):
+            return AntiSet(self.excluded & other.excluded)
+
+        return AntiSet(self.excluded - other)
+
+    __ror__ = __or__
+
+    def __eq__(self, other: set) -> bool:
+        return isinstance(other, AntiSet) and self.excluded == other.excluded
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    # safety first
+    def __iand__(self, other):
+        raise NotImplementedError
+
+    __ge__ = __gt__ = __ixor__ = __le__ = __lt__ = \
+        __ior__ = __isub__ = __rxor__ = __xor__ = __iand__
 
 
 def extract_signature(func):

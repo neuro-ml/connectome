@@ -277,7 +277,7 @@ class GraphFactory:
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            optional_nodes=tuple(self.optional_names), persistent_nodes=tuple(self.persistent_names),
+            optional_nodes=self.optional_names, persistent_nodes=self.persistent_names,
             forward_virtual=self.forward_inherit, backward_virtual=self.backward_inherit,
         )
 
@@ -327,7 +327,7 @@ class TransformFactory(GraphFactory):
         self.magic_dispatch['__inherit__'] = self._process_inherit
 
     def _after_collect(self):
-        value, valid = normalize_inherit(self.forward_inherit)
+        value, valid = normalize_inherit(self.forward_inherit, self.outputs)
         if not valid:
             raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
 
