@@ -26,7 +26,7 @@ jobs:
       - name: Create ssh key
         run: |
           sudo systemctl enable --now ssh
-          ssh-keygen -N '' -f ~/.ssh/id_rsa
+          ssh-keygen -N '' -f ~/.ssh/id_rsa -b 1024
           cp tests/assets/ssh_config ~/.ssh/config
           echo ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
       - name: Install dependencies
