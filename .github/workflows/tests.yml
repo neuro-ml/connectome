@@ -38,7 +38,7 @@ jobs:
           pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch -m "not ssh"
       - name: Generate coverage report
         run: |
-          - coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
+          coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
       - name: Upload pytest results
         uses: actions/upload-artifact@v2
         with:
