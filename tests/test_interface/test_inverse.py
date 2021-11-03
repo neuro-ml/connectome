@@ -1,6 +1,8 @@
 import pytest
 
 from connectome import Transform, inverse
+from connectome.containers.base import identity
+from connectome.exceptions import GraphError
 
 
 def test_different_inputs():
@@ -31,7 +33,6 @@ def test_different_inputs():
     assert func(x=1, y=2) == 3
 
 
-@pytest.mark.xfail
 def test_inherit():
     class A(Transform):
         __inherit__ = 'image'
@@ -40,10 +41,14 @@ def test_inherit():
         def image(image):
             return image
 
-    dec = (A() >> Transform(__inherit__=True))._decorate('image')
+    ds = A() >> Transform(__inherit__=True)
+    dec = ds._decorate('image')
 
     @dec
     def func(x):
         return x
 
     assert func(1) == 1
+
+    with pytest.raises(GraphError):
+        ds._wrap(identity, 'some-other-name')

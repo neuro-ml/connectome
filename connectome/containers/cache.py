@@ -67,12 +67,15 @@ class CacheContainer(CacheBase):
 
 
 class MemoryCacheContainer(CacheContainer):
-    def __init__(self, names, size, allow_impure):
+    def __init__(self, names, size, allow_impure, cache_instances):
         super().__init__(names, allow_impure)
+        self.cache_instances = cache_instances
         self.size = size
 
     def get_storage(self):
-        return MemoryCache(self.size)
+        cache = MemoryCache(self.size)
+        self.cache_instances.add(cache)
+        return cache
 
 
 class DiskCacheContainer(CacheContainer):

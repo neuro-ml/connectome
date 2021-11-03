@@ -23,13 +23,22 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Create ssh key
+        run: |
+          sudo systemctl enable --now ssh
+          ssh-keygen -N '' -f ~/.ssh/id_dsa -b 1024 -t dsa
+          cp tests/assets/ssh_config ~/.ssh/config
+          echo ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
       - name: Install dependencies
         run: |
           pip install -e .
           pip install -r tests/requirements.txt
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch -m "not ssh"
+      - name: Generate coverage report
+        run: |
+          coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
       - name: Upload pytest results
         uses: actions/upload-artifact@v2
         with:
@@ -37,7 +46,8 @@ jobs:
           path: reports/junit-${{ matrix.python-version }}.xml
         if: ${{ always() }}
       - name: Upload coverage results
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2
         with:
           fail_ci_if_error: true
+          files: reports/coverage-${{ matrix.python-version }}.xml
           verbose: true

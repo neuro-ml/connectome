@@ -62,6 +62,20 @@ def test_cache_removal(block_maker):
     for i in one.ids:
         assert simple.image(i) == cached.image(i) == nested.image(i)
 
+    assert type(cached[-1]) == type(two)
+    assert type(nested[-1]) == type(simple)
+
+
+def test_filter_removal(block_maker):
+    one = block_maker.first_ds(first_constant=2, ids_arg=15)
+    two = block_maker.crop()
+
+    cropped = one >> two
+    filtered = cropped._filterfalse(isinstance, Transform)
+
+    assert len(filtered._layers) == 1
+    assert type(filtered[0]) == type(one)
+
 
 def test_inheritance():
     class FirstInheritAll(Transform):
@@ -101,6 +115,7 @@ def test_inheritance():
             return h, g, f
 
     ds = FirstInheritAll() >> SecondInheritPart()
+    assert set(dir(ds)) == {'g', 'h'}
     assert ds.g('hello') == 'hello'
     assert ds.h(g='input') == ('A.f', 'input')
 
@@ -144,7 +159,6 @@ def test_inheritance():
         FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll()
 
 
-@pytest.mark.xfail
 def test_all_inherit():
     class A(Transform):
         __inherit__ = 'x'
@@ -153,7 +167,7 @@ def test_all_inherit():
         def x(x):
             return x
 
-    assert set(dir(A() >> A() >> B())) == {'x'}
+    assert set(dir(A() >> A() >> A() >> B())) == {'x'}
 
 
 def test_lazy(tmpdir, storage_factory):
@@ -188,7 +202,6 @@ def test_lazy(tmpdir, storage_factory):
         assert ds.g(1) == 1
 
 
-@pytest.mark.xfail
 def test_missing_ids(block_maker):
     ds = block_maker.first_ds(first_constant=2, ids_arg=15)
     for source in [ds, Merge(ds)]:

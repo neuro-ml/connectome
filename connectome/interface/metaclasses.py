@@ -1,8 +1,7 @@
 import logging
-from typing import Callable, Dict, Type
+from typing import Callable, Dict, Type, Union, Iterable
 
 from .compat import SafeMeta
-from ..containers.transform import InheritType
 from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals, GraphFactory
 
@@ -76,7 +75,7 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
     # inplace transforms
     >>> Transform(image=lambda image: zoom(image, scale_factor=2))
     """
-    __inherit__: InheritType = ()
+    __inherit__: Union[str, Iterable[str], bool] = ()
 
     def __init__(*args, __inherit__=(), **kwargs: Callable):
         assert args

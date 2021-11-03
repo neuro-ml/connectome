@@ -1,18 +1,20 @@
+from datetime import datetime
 import gzip
 import logging
 import os
 import shutil
 import warnings
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Tuple, Union, Set
 
 from ..exceptions import StorageCorruption
 from ..storage import Storage
-from ..storage.config import root_params, make_algorithm, load_config, make_locker
-from ..storage.digest import digest_to_relative
+from ..storage.config import root_params, make_algorithm, load_config, make_locker, DiskConfig
+from ..storage.digest import digest_to_relative, get_digest_size
 from ..engine import NodeHash
 from ..serializers import Serializer
-from ..storage.utils import touch, create_folders, to_read_only, get_size
+from ..storage.storage import QueryError
+from ..storage.utils import touch, create_folders, to_read_only, get_size, Reason
 from .base import Cache
 from .pickler import dumps, PREVIOUS_VERSIONS
 from .compat import BadGzipFile
@@ -35,11 +37,10 @@ class DiskCache(Cache):
         self.serializer = serializer
         self.storage = storage
 
-        config = load_config(self.root)
-        assert set(config) <= {'hash', 'levels', 'locker'}
-
-        self.algorithm, self.levels = make_algorithm(config)
-        self.locker = make_locker(config)
+        config = load_config(self.root, DiskConfig)
+        self.algorithm = make_algorithm(config.hash)
+        self.levels = config.levels
+        self.locker = make_locker(config.locker)
 
     def get(self, param: NodeHash) -> Tuple[Any, bool]:
         key = param.value
@@ -80,7 +81,11 @@ class DiskCache(Cache):
             if hash_path.exists() and time_path.exists():
                 check_consistency(hash_path, pickled)
                 touch(time_path)
-                return self.serializer.load(base / DATA_FOLDER, self.storage), True
+                try:
+                    # if couldn't find the hash - the cache is corrupted
+                    return self.serializer.load(base / DATA_FOLDER, self.storage), True
+                except QueryError:
+                    pass
 
         # or it is corrupted, in which case we can remove it
         with self.locker.write(digest):
@@ -142,6 +147,55 @@ class DiskCache(Cache):
     def _cleanup_corrupted(self, folder, digest):
         warnings.warn(f'Corrupted storage at {self.root} for key {digest}. Cleaning up.', RuntimeWarning)
         shutil.rmtree(folder)
+
+    def inspect_entry(self, key: str, last_used: Union[float, datetime] = None) -> Union[Reason, Set[str]]:
+        digest_size = get_digest_size(self.levels, string=True)
+        if len(key) != digest_size:
+            return Reason.WrongDigestSize
+
+        data_digest_size = self.storage.get_digest_size(True)
+        base = self.root / digest_to_relative(key, self.levels)
+        with self.locker.read(key):
+            if {x.name for x in base.iterdir()} != {HASH_FILENAME, DATA_FOLDER, TIME_FILENAME}:
+                return Reason.WrongFolderStructure
+
+            if last_used is not None:
+                if isinstance(last_used, datetime):
+                    last_used = last_used.timestamp()
+                if (base / TIME_FILENAME).stat().st_mtime < last_used:
+                    return Reason.Expired
+
+            try:
+                with gzip.GzipFile(base / HASH_FILENAME, 'rb') as file:
+                    hash_bytes = file.read()
+
+            except BadGzipFile:
+                return Reason.CorruptedHash
+
+            real_digest = self.algorithm(hash_bytes).hexdigest()
+            if key != real_digest:
+                return Reason.WrongHash
+
+            hashes = set()
+            for file in (base / DATA_FOLDER).glob('**/*'):
+                if file.is_dir():
+                    continue
+
+                if not file.is_file():
+                    return Reason.CorruptedData
+
+                with open(file, 'r') as content:
+                    try:
+                        data = content.read().strip()
+                    except UnicodeDecodeError:
+                        return Reason.CorruptedData
+
+                    if len(data) != data_digest_size:
+                        return Reason.CorruptedData
+
+                    hashes.add(data)
+
+            return hashes
 
 
 def key_to_digest(algorithm, key, version=None):

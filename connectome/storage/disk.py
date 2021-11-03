@@ -3,15 +3,15 @@ import logging
 import os
 import errno
 import shutil
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set, Union
 
-import humanfriendly
 from tqdm import tqdm
 
-from .config import root_params, load_config, make_locker, make_algorithm
-from .digest import digest_to_relative, digest_file
-from .utils import get_size, create_folders, to_read_only
+from .config import root_params, load_config, make_locker, make_algorithm, StorageDiskConfig
+from .digest import digest_to_relative, digest_file, get_digest_size
+from .utils import get_size, create_folders, to_read_only, Reason
 from ..utils import PathLike
 
 Key = str
@@ -26,21 +26,21 @@ class Disk:
     def __init__(self, root: PathLike):
         self.root = Path(root)
         self.permissions, self.group = root_params(self.root)
-        self.config = config = load_config(self.root)
-        assert set(config) <= {'hash', 'levels', 'max_size', 'free_disk_size', 'locker'}
+        config: StorageDiskConfig = load_config(self.root, StorageDiskConfig)
 
-        self.locker = make_locker(config)
-        self._min_free_size = parse_size(config.get('free_disk_size', 0))
-        self._max_size = parse_size(config.get('max_size'))
+        self.config = config
+        self.locker = make_locker(config.locker)
+        self.algorithm = make_algorithm(config.hash)
+        self.levels = config.levels
+        self._min_free_size = config.free_disk_size
+        self._max_size = config.max_size
 
         if not self.locker.track_size:
             assert self._max_size is None or self._max_size == float('inf'), self._max_size
 
-        self._hasher, self._folder_levels = make_algorithm(config)
-
     def _key_to_path(self, key: Key, temp: bool = False):
         name = TEMPFILE if temp else FILENAME
-        return self.root / digest_to_relative(key, self._folder_levels) / name
+        return self.root / digest_to_relative(key, self.levels) / name
 
     def _writeable(self):
         result = True
@@ -95,7 +95,7 @@ class Disk:
         # make file read-only
         to_read_only(temporary, self.permissions, self.group)
         temporary.rename(stored)
-        digest = digest_file(stored, self._hasher)
+        digest = digest_file(stored, self.algorithm)
         if digest != key:
             shutil.rmtree(folder)
             raise ValueError(f'The stored file has a wrong hash: expected {key} got {digest}. '
@@ -161,6 +161,28 @@ class Disk:
 
         self.locker.set_size(size)
 
+    def inspect_entry(self, key: Key, allowed_keys: Set[Key] = None, created: Union[float, datetime] = None):
+        if len(key) != get_digest_size(self.levels, string=True):
+            return Reason.WrongDigestSize
+
+        base = self.root / digest_to_relative(key, self.levels)
+
+        # we remove missing hashes only if they are older than a given age
+        if allowed_keys and key not in allowed_keys:
+            if created is None:
+                return Reason.Filtered
+            if isinstance(created, datetime):
+                created = created.timestamp()
+            if base.stat().st_mtime < created:
+                return Reason.Filtered
+
+        with self.locker.read(key):
+            if not (base / FILENAME).exists():
+                return Reason.CorruptedData
+
+            if digest_file(base / FILENAME, self.algorithm) != key:
+                return Reason.WrongHash
+
 
 def copy_file(source, destination):
     # in Python>=3.8 the sendfile call is used, which apparently may fail
@@ -178,12 +200,3 @@ def copy_file(source, destination):
 def match_files(first: Path, second: Path):
     if not filecmp.cmp(first, second, shallow=False):
         raise ValueError(f'Files do not match: {first} vs {second}')
-
-
-def parse_size(x):
-    if isinstance(x, int):
-        return x
-    if isinstance(x, str):
-        return humanfriendly.parse_size(x)
-    if x is not None:
-        raise ValueError(f"Couldn't understand the size format: {x}")
