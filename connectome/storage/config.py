@@ -70,8 +70,8 @@ class DiskConfig(BaseModel):
 
 
 class StorageDiskConfig(DiskConfig):
-    free_disk_size: int = 0
-    max_size: int = None
+    free_disk_size: Union[int, str] = 0
+    max_size: Union[int, str] = None
 
     @validator('free_disk_size', 'max_size')
     def to_size(cls, v):
