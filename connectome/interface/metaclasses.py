@@ -92,7 +92,9 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
             local[name] = value
 
         factory = TransformFactory(local)
-        super(Transform, self).__init__(factory.build({}), factory.property_names)
+        if factory.special_methods:
+            raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
+        super(Transform, self).__init__(factory.build({}), factory.property_names, ())
 
     def __repr__(self):
         return f"{self.__class__.__name__}({', '.join(self._methods.methods)})"

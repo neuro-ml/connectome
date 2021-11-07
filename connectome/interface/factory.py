@@ -1,6 +1,7 @@
-from typing import Dict, Any
+from typing import Dict, Any, Iterable
 
 from .base import CallableLayer
+from ..containers.base import EdgesBag
 from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
 from ..exceptions import GraphError, FieldError
 from ..containers.transform import TransformContainer, normalize_inherit
@@ -69,6 +70,16 @@ BUILTIN_DECORATORS = staticmethod, classmethod, property
 
 
 class FactoryLayer(CallableLayer):
+    def __init__(self, container: EdgesBag, properties: Iterable[str], special_methods: Iterable[str]):
+        self._special_methods = set(special_methods)
+        super().__init__(container, properties)
+
+    def __getattribute__(self, name):
+        if name in super().__getattribute__('_special_methods'):
+            raise AttributeError(f'"{name}" is accessible only through the class object, not its instance')
+
+        return super().__getattribute__(name)
+
     def __repr__(self):
         kls = type(self)
         if hasattr(kls, '__qualname__'):
@@ -100,6 +111,7 @@ class GraphFactory:
         self.backward_inherit = set()
         # metadata
         self.property_names = set()
+        self.special_methods = {}
         # names of persistent nodes
         # TODO move it somewhere
         self.persistent_names = set()
@@ -130,12 +142,16 @@ class GraphFactory:
 
             arguments = signature.bind_partial(**kwargs)
             arguments.apply_defaults()
-            FactoryLayer.__init__(self, factory.build(arguments.arguments), factory.property_names)
+            FactoryLayer.__init__(
+                self, factory.build(arguments.arguments),
+                factory.property_names, factory.special_methods
+            )
 
         __init__.__signature__ = signature
         scope = {
             '__init__': __init__, '__signature__': signature,
             DOC_MAGIC: factory.docstring,
+            **factory.special_methods,
         }
         return add_quals(scope, namespace)
 
@@ -224,11 +240,17 @@ class GraphFactory:
                 self.edges.extend(self.prepared_dispatch[kind](name, value))
                 continue
 
-            if isinstance(value, BUILTIN_DECORATORS):
-                raise FieldError(f"{type(value).__name__} objects are not currently supported ({name}).")
+            if isinstance(value, (classmethod, staticmethod)):
+                if name in self.special_methods:
+                    raise FieldError(f'"{name}" is already used')
+                self.special_methods[name] = value
+                continue
+            if isinstance(value, property):
+                raise FieldError(f'{name}: "property" objects are not supported, use the "meta" decorator instead')
 
+            assert not isinstance(value, BUILTIN_DECORATORS)
             if not is_callable(value):
-                raise FieldError(f'The type of the "{name}" field cannot be determined.')
+                raise FieldError(f'The type of the "{name}" field cannot be determined')
 
             func, decorators = unwrap_transform(value)
             inputs, output, decorators = infer_nodes(name, func, decorators)
