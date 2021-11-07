@@ -138,7 +138,8 @@ class CacheEdge(StaticGraph, StaticHash):
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         output = yield Command.CurrentHash,
-        value, exists = self.cache.get(output)
+        key, context = self.cache.prepare(output)
+        value, exists = self.cache.get(key, context)
         if exists:
             return value
 
@@ -147,7 +148,7 @@ class CacheEdge(StaticGraph, StaticHash):
         #   overwrite?
         #   add consistency check?
         #   get the value from cache?
-        self.cache.set(output, value)
+        self.cache.set(key, value, context)
         return value
 
 

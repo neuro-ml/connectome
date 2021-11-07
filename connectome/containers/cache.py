@@ -154,7 +154,7 @@ class CachedColumn(Edge):
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         output = yield Command.CurrentHash,
-        value, exists = self.ram.get(output)
+        value, exists = self.ram.raw_get(output)
         if exists:
             return value
 
@@ -173,15 +173,16 @@ class CachedColumn(Edge):
         # TODO: hash the graph?
         compound = TupleHash(*hashes)
 
-        values, exists = self.disk.get(compound)
+        digest, context = self.disk.prepare(compound)
+        values, exists = self.disk.get(digest, context)
         if not exists:
             values = tuple(starmap(self.graph.get_value, tqdm(
                 states, desc='Generating the columns cache', disable=not self.verbose,
             )))
-            self.disk.set(compound, values)
+            self.disk.set(digest, values, context)
 
         for k, h, value in zip(keys, hashes, values):
-            self.ram.set(h, value)
+            self.ram.raw_set(h, value)
             if k == key:
                 result = value
 

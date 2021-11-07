@@ -42,37 +42,41 @@ class DiskCache(Cache):
         self.levels = config.levels
         self.locker = make_locker(config.locker)
 
-    def get(self, param: NodeHash) -> Tuple[Any, bool]:
-        key = param.value
-        pickled, digest = key_to_digest(self.algorithm, key)
-        logger.info('Writing %s', digest)
+    def prepare(self, param: NodeHash) -> Tuple[Key, Any]:
+        raw = param.value
+        pickled, key = key_to_digest(self.algorithm, raw)
+        return key, (raw, pickled)
+
+    def get(self, key: Key, context) -> Tuple[Any, bool]:
+        raw, pickled = context
+        logger.info('Reading %s', key)
 
         # try to load
-        value, exists = self._load(digest, pickled)
+        value, exists = self._load(key, pickled)
         if exists:
             return value, exists
 
         # the cache is empty, but we can try an restore it from an old version
         for version in reversed(PREVIOUS_VERSIONS):
-            local_pickled, local_digest = key_to_digest(self.algorithm, key, version)
+            local_pickled, local_digest = key_to_digest(self.algorithm, raw, version)
 
             # we can simply load the previous version, because nothing really changed
             value, exists = self._load(local_digest, local_pickled)
             if exists:
                 # and store it for faster access next time
-                self._save(digest, value, pickled)
+                self._save(key, value, pickled)
                 return value, exists
 
         return None, False
 
-    def set(self, param: NodeHash, value: Any):
-        pickled, digest = key_to_digest(self.algorithm, param.value)
-        logger.info('Reading %s', digest)
-        self._save(digest, value, pickled)
+    def set(self, key: Key, value: Any, context):
+        raw, pickled = context
+        logger.info('Saving %s', key)
+        self._save(key, value, pickled)
 
-    def _load(self, digest, pickled):
-        with self.locker.read(digest):
-            base = self.root / digest_to_relative(digest, self.levels)
+    def _load(self, key, pickled):
+        with self.locker.read(key):
+            base = self.root / digest_to_relative(key, self.levels)
             if not base.exists():
                 return None, False
 
@@ -88,13 +92,13 @@ class DiskCache(Cache):
                     pass
 
         # or it is corrupted, in which case we can remove it
-        with self.locker.write(digest):
-            self._cleanup_corrupted(base, digest)
+        with self.locker.write(key):
+            self._cleanup_corrupted(base, key)
             return None, False
 
-    def _save(self, digest: str, value, pickled):
-        with self.locker.write(digest):
-            base = self.root / digest_to_relative(digest, self.levels)
+    def _save(self, key: Key, value, pickled):
+        with self.locker.write(key):
+            base = self.root / digest_to_relative(key, self.levels)
             if base.exists():
                 check_consistency(base / HASH_FILENAME, pickled, check_existence=True)
                 # TODO: also compare the raw bytes of `value` and dumped value?
