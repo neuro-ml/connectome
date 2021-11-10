@@ -133,14 +133,15 @@ class GraphFactory:
     def make_scope(cls, namespace: MultiDict) -> dict:
         factory = cls(namespace)
         signature = factory.get_init_signature()
+        allow_positional = len(signature.parameters)
 
         def __init__(*args, **kwargs):
             assert args
-            if len(args) > 1:
+            self, *args = args
+            if (allow_positional and len(args) > 2) or (not allow_positional and len(args) > 1):
                 raise TypeError('This constructor accepts only keyword arguments.')
-            self = args[0]
 
-            arguments = signature.bind_partial(**kwargs)
+            arguments = signature.bind_partial(*args, **kwargs)
             arguments.apply_defaults()
             FactoryLayer.__init__(
                 self, factory.build(arguments.arguments),
@@ -281,15 +282,16 @@ class GraphFactory:
             yield ConstantEdge(value).bind([], self.arguments[name])
 
     def get_init_signature(self):
+        kind = inspect.Parameter.POSITIONAL_OR_KEYWORD if len(self.defaults) == 1 else inspect.Parameter.KEYWORD_ONLY
         return inspect.Signature([
-            inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=value)
+            inspect.Parameter(name, kind, default=value)
             for name, value in self.defaults.items()
         ])
 
     def build(self, arguments: dict) -> TransformContainer:
         diff = list(set(self.arguments) - set(arguments))
         if diff:
-            raise ValueError(f'Missing required arguments: {diff}.')
+            raise TypeError(f'Missing required arguments: {diff}.')
 
         logger.info(
             'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
@@ -351,7 +353,7 @@ class TransformFactory(GraphFactory):
     def _after_collect(self):
         value, valid = normalize_inherit(self.forward_inherit, self.outputs)
         if not valid:
-            raise ValueError(f'"__inherit__" can be either True, or a sequence of strings, got {value}')
+            raise ValueError(f'"__inherit__" can be either True, a string, or a sequence of strings, but got {value}')
 
         self.backward_inherit = self.forward_inherit = value
 
