@@ -56,7 +56,7 @@ class DiskCache(Cache):
         if exists:
             return value, exists
 
-        # the cache is empty, but we can try an restore it from an old version
+        # the cache is empty, but we can try and restore it from an older version
         for version in reversed(PREVIOUS_VERSIONS):
             local_pickled, local_digest = key_to_digest(self.algorithm, raw, version)
 
