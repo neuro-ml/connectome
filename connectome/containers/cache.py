@@ -51,7 +51,7 @@ class CacheContainer(CacheBase):
             else:
                 edges.append(IdentityEdge().bind(forward_outputs[node.name], node))
 
-        return EdgesBag(state.inputs, outputs, edges, IdentityContext())
+        return EdgesBag(state.inputs, outputs, edges, IdentityContext(), persistent_nodes=state.persistent_nodes)
 
     @staticmethod
     def _detect_impure(node: TreeNode, name: str):
@@ -128,7 +128,7 @@ class CacheColumnsContainer(CacheBase):
                 edges.append(CachedColumn(self.disk, self.ram, graph, self.verbose).bind([output, key, keys], local))
                 outputs.append(local)
 
-        return EdgesBag([key], outputs, edges, IdentityContext())
+        return EdgesBag([key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes)
 
 
 class CachedColumn(Edge):

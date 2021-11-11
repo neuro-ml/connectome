@@ -214,6 +214,7 @@ def test_missing_ids(block_maker):
             pass
 
     assert 'ids' in dir(ds >> A() >> A())
+    assert 'ids' in dir(ds >> CacheToRam() >> A())
 
 
 def test_dir_duplicates():

@@ -43,8 +43,8 @@ class NoContext(Context):
 
 
 class EdgesBag(Wrapper):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: NameSet = None, persistent_nodes: NameSet = None):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
+                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet]):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:
