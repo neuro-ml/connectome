@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Tuple, Optional, Set
+from typing import Tuple, Optional, Set, AbstractSet
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
@@ -12,7 +12,7 @@ from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
 
-NameSet = Set[str]
+NameSet = AbstractSet[str]
 
 
 class Container:

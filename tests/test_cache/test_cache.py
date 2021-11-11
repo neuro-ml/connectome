@@ -1,13 +1,15 @@
 import tempfile
 import time
+from math import ceil
 from multiprocessing.context import Process
 from pathlib import Path
 from threading import Thread
 
 import pytest
 
-from connectome import CacheToRam, Apply, CacheToDisk
+from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns
 from connectome.cache import MemoryCache, DiskCache
+from connectome.containers.cache import CachedColumn
 from connectome.engine.edges import CacheEdge
 from connectome.serializers import JsonSerializer
 from connectome.storage.config import init_storage
@@ -27,16 +29,19 @@ def assert_empty_state(block):
         for edge in block._container.edges:
             edge = edge.edge
             if isinstance(edge, CacheEdge):
-                return edge.cache
+                yield edge.cache
+            if isinstance(edge, CachedColumn):
+                yield edge.disk
+                yield edge.ram
 
-        assert False
-
-    cache = find_cache()
-    assert isinstance(cache, (MemoryCache, DiskCache))
-    assert isinstance(cache.locker, ThreadLocker)
-    # the state must be cleaned up
-    assert not cache.locker._reading
-    assert not cache.locker._writing
+    caches = list(find_cache())
+    assert caches
+    for cache in caches:
+        assert isinstance(cache, (MemoryCache, DiskCache))
+        assert isinstance(cache.locker, ThreadLocker)
+        # the state must be cleaned up
+        assert not cache.locker._reading
+        assert not cache.locker._writing
 
 
 def test_memory_locking(block_maker):
@@ -71,23 +76,52 @@ def test_errors_handling(block_maker, disk_cache_factory):
     i = ds.ids[0]
 
     with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}) as disk_cache:
-        for layer in [CacheToRam(), disk_cache]:
-            # one thread
-            cached = ds >> Apply(image=throw) >> layer
-            with pytest.raises(LocalException):
-                cached.image(i)
+        with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}, cls=CacheColumns) as cols_cache:
+            for layer in [CacheToRam(), disk_cache, cols_cache]:
+                # one thread
+                cached = ds >> Apply(image=throw) >> layer
+                with pytest.raises(LocalException):
+                    cached.image(i)
 
-            assert_empty_state(cached)
+                assert_empty_state(cached)
 
-            # many threads
-            cached = ds >> Apply(image=sleeper(0.1)) >> Apply(image=throw) >> layer
-            th = Thread(target=visit, args=(cached,))
-            th.start()
-            with pytest.raises(LocalException):
-                cached.image(i)
-            th.join()
+                # many threads
+                cached = ds >> Apply(image=sleeper(0.1)) >> Apply(image=throw) >> layer
+                th = Thread(target=visit, args=(cached,))
+                th.start()
+                with pytest.raises(LocalException):
+                    cached.image(i)
+                th.join()
 
-            assert_empty_state(cached)
+                assert_empty_state(cached)
+
+
+def test_columns_cache_sharding(block_maker, disk_cache_factory):
+    total = 500
+    ds = block_maker.first_ds(first_constant=2, ids_arg=total)
+    i = sorted(ds.ids)[0]
+
+    for size in [100, 200, 10, 0.5, 0.1, 0.99, None]:
+        with disk_cache_factory(
+                'image', JsonSerializer(), {'name': 'ThreadLocker'}, shard_size=size, cls=CacheColumns
+        ) as cache:
+            cached = ds >> cache
+            cached.image(i)
+
+            if size is None:
+                size = total
+            if isinstance(size, float):
+                size = ceil(size * total)
+
+            c = cache._container.ram
+            # just one shard must be populated
+            assert len(c._cache) == size
+
+            for key in ds.ids:
+                cached.image(key)
+
+            # the shards must cover all keys
+            assert len(c._cache) == total
 
 
 @pytest.mark.redis

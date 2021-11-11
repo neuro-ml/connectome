@@ -1,5 +1,6 @@
 from itertools import starmap
-from typing import Any, Generator
+from math import ceil
+from typing import Any, Generator, Union
 
 from tqdm import tqdm
 
@@ -92,7 +93,8 @@ class CacheColumnsContainer(CacheBase):
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
 
-    def __init__(self, names, root, storage, serializer, verbose):
+    def __init__(self, names, root, storage, serializer, verbose, shard_size):
+        self.shard_size = shard_size
         self.verbose = verbose
         self.cache_names = names
         self.disk = DiskCache(root, storage, serializer)
@@ -125,7 +127,8 @@ class CacheColumnsContainer(CacheBase):
                 local = Node(name)
                 # build a graph for each node
                 graph = Graph(graph_inputs, mapping[outputs_copy[name]])
-                edges.append(CachedColumn(self.disk, self.ram, graph, self.verbose).bind([output, key, keys], local))
+                edges.append(CachedColumn(
+                    self.disk, self.ram, graph, self.verbose, self.shard_size).bind([output, key, keys], local))
                 outputs.append(local)
 
         return EdgesBag([key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes)
@@ -140,28 +143,45 @@ class CachedColumn(Edge):
     keys: all available keys
     """
 
-    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph, verbose: bool):
+    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph, verbose: bool,
+                 shard_size: Union[int, float, None]):
         super().__init__(arity=3)
         self.graph = graph
         self.disk = disk
         self.ram = ram
         self.verbose = verbose
+        self.shard_size = shard_size
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         # propagate the first value
         value = yield Command.ParentHash, 0
         return value, None
 
+    def _get_shard(self, key, keys):
+        keys = sorted(keys)
+        assert key in keys
+
+        size = self.shard_size
+        if size is None:
+            return keys
+        if isinstance(size, float):
+            size = ceil(size * len(keys))
+
+        assert size > 0
+        start = (keys.index(key) // size) * size
+        keys = keys[start:start + size]
+        assert key in keys
+        return keys
+
     def evaluate(self) -> Generator[Request, Response, Any]:
         output = yield Command.CurrentHash,
-        value, exists = self.ram.get(output)
+        value, exists = self.ram.raw_get(output)
         if exists:
             return value
 
         key = yield Command.ParentValue, 1
         keys = yield Command.ParentValue, 2
-        keys = sorted(keys)
-        assert key in keys
+        keys = self._get_shard(key, keys)
 
         hashes, states = [], []
         for k in keys:
@@ -173,15 +193,16 @@ class CachedColumn(Edge):
         # TODO: hash the graph?
         compound = TupleHash(*hashes)
 
-        values, exists = self.disk.get(compound)
+        digest, context = self.disk.prepare(compound)
+        values, exists = self.disk.get(digest, context)
         if not exists:
             values = tuple(starmap(self.graph.get_value, tqdm(
                 states, desc='Generating the columns cache', disable=not self.verbose,
             )))
-            self.disk.set(compound, values)
+            self.disk.set(digest, values, context)
 
         for k, h, value in zip(keys, hashes, values):
-            self.ram.set(h, value)
+            self.ram.raw_set(h, value)
             if k == key:
                 result = value
 

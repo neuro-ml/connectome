@@ -205,12 +205,7 @@ class PortablePickler(Pickler):
 
         args = type(obj), obj.__name__, obj.__bases__, type_kwargs
         state = sort_dict(clsdict)
-        if hasattr(types, 'ClassType') and self.version == 0:
-            reducer = types.ClassType
-        else:
-            reducer = type
-
-        return reducer, args, state
+        return type, args, state
 
     def reduce_dynamic_enum(self, obj):
         clsdict, type_kwargs = self._get_cls_params(obj)
@@ -222,12 +217,7 @@ class PortablePickler(Pickler):
 
         args = obj.__bases__, obj.__name__, sort_dict(members), obj.__module__
         state = sort_dict(clsdict)
-        if hasattr(types, 'ClassType') and self.version == 0:
-            reducer = types.ClassType
-        else:
-            reducer = type
-
-        return reducer, args, state
+        return type, args, state
 
     def save_dynamic_class(self, obj):
         method = self.reduce_dynamic_enum if isinstance(obj, Enum) else self.reduce_dynamic_class
