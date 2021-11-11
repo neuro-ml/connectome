@@ -52,7 +52,7 @@ class CacheContainer(CacheBase):
             else:
                 edges.append(IdentityEdge().bind(forward_outputs[node.name], node))
 
-        return EdgesBag(state.inputs, outputs, edges, IdentityContext())
+        return EdgesBag(state.inputs, outputs, edges, IdentityContext(), persistent_nodes=state.persistent_nodes)
 
     @staticmethod
     def _detect_impure(node: TreeNode, name: str):
@@ -131,7 +131,7 @@ class CacheColumnsContainer(CacheBase):
                     self.disk, self.ram, graph, self.verbose, self.shard_size).bind([output, key, keys], local))
                 outputs.append(local)
 
-        return EdgesBag([key], outputs, edges, IdentityContext())
+        return EdgesBag([key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes)
 
 
 class CachedColumn(Edge):
@@ -163,15 +163,17 @@ class CachedColumn(Edge):
 
         size = self.shard_size
         if size is None:
-            return keys
+            return keys, 1, 0
         if isinstance(size, float):
             size = ceil(size * len(keys))
 
         assert size > 0
-        start = (keys.index(key) // size) * size
+        idx = keys.index(key) // size
+        count = ceil(len(keys) / size)
+        start = idx * size
         keys = keys[start:start + size]
         assert key in keys
-        return keys
+        return keys, count, idx
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         output = yield Command.CurrentHash,
@@ -181,7 +183,7 @@ class CachedColumn(Edge):
 
         key = yield Command.ParentValue, 1
         keys = yield Command.ParentValue, 2
-        keys = self._get_shard(key, keys)
+        keys, shards_count, shard_idx = self._get_shard(key, keys)
 
         hashes, states = [], []
         for k in keys:
@@ -196,8 +198,9 @@ class CachedColumn(Edge):
         digest, context = self.disk.prepare(compound)
         values, exists = self.disk.get(digest, context)
         if not exists:
+            suffix = '' if shards_count == 1 else f' ({shard_idx}/{shards_count})'
             values = tuple(starmap(self.graph.get_value, tqdm(
-                states, desc='Generating the columns cache', disable=not self.verbose,
+                states, desc=f'Generating the columns cache{suffix}', disable=not self.verbose,
             )))
             self.disk.set(digest, values, context)
 

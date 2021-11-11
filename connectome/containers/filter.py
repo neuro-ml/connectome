@@ -56,7 +56,7 @@ class FilterContainer(Wrapper):
         # filter
         graph = self._make_graph(container)
         edges.append(FilterEdge(graph, self.verbose).bind(keys, out))
-        return EdgesBag(main.inputs, outputs, edges, IdentityContext())
+        return EdgesBag(main.inputs, outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes)
 
 
 class FilterEdge(StaticGraph, StaticEdge):
