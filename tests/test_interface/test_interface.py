@@ -1,5 +1,7 @@
 from collections import Counter
 
+import pytest
+
 from connectome import positional, Source, Chain, Transform, Merge, meta, Output
 
 
@@ -210,3 +212,21 @@ def test_input_spec(block_maker):
     for i in ds.ids:
         assert one.image(i) == two.image(i)
         assert one.shape(i) == two.shape(i)
+
+
+def test_constructor():
+    class A(Transform):
+        _a: int
+        _b: int = 1
+
+    class B(Transform):
+        _a: int
+
+    with pytest.raises(TypeError):
+        A(a=1, c=2)
+    with pytest.raises(TypeError):
+        A()
+    with pytest.raises(TypeError):
+        A(1)
+
+    B(1)

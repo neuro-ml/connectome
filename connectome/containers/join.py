@@ -56,7 +56,7 @@ class JoinContainer(EdgesBag):
         # no_conflict = set(outputs_left) | set(outputs_right) - intersection
         outputs.extend(outputs_left.values())
         outputs.extend(outputs_right[x] for x in set(outputs_right) - set(outputs_left))
-        super().__init__([inp], outputs, edges, None)
+        super().__init__([inp], outputs, edges, None, persistent_nodes=left.persistent_nodes & right.persistent_nodes)
 
     @staticmethod
     def _make_graph(inputs, outputs, edges, on):

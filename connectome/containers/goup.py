@@ -56,7 +56,7 @@ class GroupContainer(Wrapper):
         outputs.append(output_ids)
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
-        return EdgesBag([changed_input], outputs, edges, NoContext())
+        return EdgesBag([changed_input], outputs, edges, NoContext(), persistent_nodes=main.persistent_nodes)
 
 
 class MappingEdge(StaticGraph, StaticHash):
@@ -167,7 +167,7 @@ class MultiGroupLayer(Wrapper):
         outputs.append(output_ids)
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
-        return EdgesBag([changed_input], outputs, edges, NoContext())
+        return EdgesBag([changed_input], outputs, edges, NoContext(), persistent_nodes=main.persistent_nodes)
 
 
 class HashMappingEdge(StaticGraph, StaticHash):

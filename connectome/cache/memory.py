@@ -14,15 +14,15 @@ class MemoryCache(Cache):
         self._cache = {}
         self.locker = ThreadLocker()
 
-    def get(self, param: NodeHash) -> Tuple[Any, bool]:
-        key = param.value
+    def get(self, key: NodeHash, context) -> Tuple[Any, bool]:
+        key = key.value
         with self.locker.read(key):
             if key in self._cache:
                 return self._cache[key], True
             return None, False
 
-    def set(self, param: NodeHash, value: Any):
-        key = param.value
+    def set(self, key: NodeHash, value: Any, context):
+        key = key.value
         with self.locker.write(key):
             self._cache[key] = value
 

@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Tuple, Optional, Set
+from typing import Tuple, Optional, Set, AbstractSet
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
@@ -12,7 +12,7 @@ from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
 
-NameSet = Set[str]
+NameSet = AbstractSet[str]
 
 
 class Container:
@@ -43,8 +43,8 @@ class NoContext(Context):
 
 
 class EdgesBag(Wrapper):
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context],
-                 virtual_nodes: NameSet = None, persistent_nodes: NameSet = None):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
+                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet]):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:

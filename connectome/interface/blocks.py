@@ -213,9 +213,13 @@ class CacheToDisk(CacheLayer):
 class CacheColumns(CacheLayer):
     def __init__(self, root: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
-                 names: StringsLike, verbose: bool = False):
+                 names: StringsLike, verbose: bool = False, shard_size: Union[int, float, None] = None):
         names = to_seq(names)
-        super().__init__(CacheColumnsContainer(names, root, storage, _resolve_serializer(serializer), verbose=verbose))
+        if shard_size == 1:
+            raise ValueError(f'Shard size of 1 is ambiguous. Use None if you want to have a single shard')
+
+        super().__init__(CacheColumnsContainer(
+            names, root, storage, _resolve_serializer(serializer), verbose=verbose, shard_size=shard_size))
 
 
 class HashDigest(BaseLayer):
