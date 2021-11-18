@@ -6,6 +6,7 @@ from typing import Union, Sequence, Callable, Iterable
 import numpy as np
 
 from .base import BaseLayer, CallableLayer
+from ..cache.disk.index import CacheIndex
 from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, CacheColumnsContainer
 from ..containers.debug import HashDigestContainer
 from ..containers.filter import FilterContainer
@@ -167,9 +168,13 @@ class CacheToDisk(CacheLayer):
     """
 
     def __init__(self, index: PathLike, storage: Storage, serializer: Union[Serializer, Sequence[Serializer]],
-                 names: StringsLike, impure: bool = False):
+                 names: StringsLike, impure: bool = False, fetch: bool = False):
         names = to_seq(names)
-        super().__init__(DiskCacheContainer(names, index, storage, _resolve_serializer(serializer), impure))
+        serializer = _resolve_serializer(serializer)
+        if isinstance(index, (str, Path)):
+            index = index,
+        local = [CacheIndex(root, storage, serializer) for root in index]
+        super().__init__(DiskCacheContainer(names, local, [], impure, fetch))
 
     @classmethod
     def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None):
@@ -211,15 +216,19 @@ class CacheToDisk(CacheLayer):
 
 
 class CacheColumns(CacheLayer):
-    def __init__(self, root: PathLike, storage: Storage,
+    def __init__(self, index: PathLike, storage: Storage,
                  serializer: Union[Serializer, Sequence[Serializer]],
                  names: StringsLike, verbose: bool = False, shard_size: Union[int, float, None] = None):
-        names = to_seq(names)
         if shard_size == 1:
             raise ValueError(f'Shard size of 1 is ambiguous. Use None if you want to have a single shard')
-
+        names = to_seq(names)
+        serializer = _resolve_serializer(serializer)
+        if isinstance(index, (str, Path)):
+            index = index,
+        local = [CacheIndex(root, storage, serializer) for root in index]
         super().__init__(CacheColumnsContainer(
-            names, root, storage, _resolve_serializer(serializer), verbose=verbose, shard_size=shard_size))
+            names, local, [], verbose=verbose, shard_size=shard_size, fetch=False
+        ))
 
 
 class HashDigest(BaseLayer):

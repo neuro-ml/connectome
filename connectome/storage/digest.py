@@ -15,7 +15,7 @@ def digest_file(path: Path, algorithm, block_size=2 ** 20) -> str:
     return hasher.hexdigest()
 
 
-def digest_to_relative(key: str, levels: Sequence[int]):
+def key_to_relative(key: str, levels: Sequence[int]):
     # TODO: too expensive?
     assert len(key) == get_digest_size(levels, string=True), len(key)
 
@@ -27,6 +27,9 @@ def digest_to_relative(key: str, levels: Sequence[int]):
         start = stop
 
     return Path(*parts)
+
+
+digest_to_relative = key_to_relative
 
 
 def get_digest_size(levels, string: bool):

@@ -1,7 +1,6 @@
 import pytest
 
-from connectome.storage import SSHLocation
-from connectome.storage.storage import QueryError
+from connectome.storage import SSHLocation, ReadError
 
 
 def load_text(path):
@@ -13,7 +12,7 @@ def load_text(path):
 def test_ssh(storage_factory):
     with storage_factory() as local, storage_factory() as remote:
         key = remote.store(__file__)
-        with pytest.raises(QueryError):
+        with pytest.raises(ReadError):
             local.get_path(key)
 
         # add a remote

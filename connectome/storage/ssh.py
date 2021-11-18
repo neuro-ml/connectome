@@ -1,17 +1,17 @@
-import os
+import shutil
 import socket
 import tempfile
 from pathlib import Path
-from typing import Union, Sequence, Callable, Any
+from typing import Union, Sequence, Callable, Any, Tuple
 
 import paramiko
 from paramiko import SSHClient, AuthenticationException, SSHException
 from paramiko.config import SSH_PORT, SSHConfig
 from scp import SCPClient, SCPException
 
-from .config import load_config, StorageDiskConfig
-from .disk import digest_to_relative, FILENAME
-from .interface import RemoteLocation
+from .config import load_config, HashConfig
+from .digest import key_to_relative
+from .interface import RemoteStorage, Key
 from ..utils import PathLike
 
 
@@ -19,7 +19,7 @@ class UnknownHostException(SSHException):
     pass
 
 
-class SSHLocation(RemoteLocation):
+class SSHLocation(RemoteStorage):
     def __init__(self, hostname: str, root: PathLike, port: int = SSH_PORT, username: str = None, password: str = None,
                  key: Union[Path, Sequence[Path]] = ()):
         ssh = SSHClient()
@@ -42,55 +42,44 @@ class SSHLocation(RemoteLocation):
         self.hostname, self.port, self.username, self.password, self.key = hostname, port, username, password, key
         self.root = Path(root)
         self.ssh = ssh
-        self._levels = None
+        self.levels = self.hash = None
 
-    def fetch(self, keys: Sequence[str], store: Callable[[str, Path], Any]) -> Sequence[str]:
-        visited = set()
-        with self:
-            with SCPClient(self.ssh.get_transport()) as scp, tempfile.TemporaryDirectory() as temp_dir:
-                temp = Path(temp_dir) / 'value'
-                for key in keys:
-                    try:
-                        self._get_levels(scp)
-                        scp.get(str(self.root / digest_to_relative(key, self._levels) / FILENAME), str(temp))
-                        store(key, temp)
-                        os.remove(temp)
+    def fetch(self, keys: Sequence[Key], store: Callable[[str, Path], Any],
+              config: HashConfig) -> Sequence[Tuple[Any, bool]]:
 
-                        visited.add(key)
-                    except (SCPException, socket.timeout):
-                        pass
+        results = []
 
-        return list(visited)
-
-    def download(self, key: str, file: Path):
-        with SCPClient(self.ssh.get_transport()) as scp:
-            try:
-                self._get_levels(scp)
-                scp.get(str(self.root / digest_to_relative(key, self._levels) / FILENAME), str(file))
-                return True
-            except (SCPException, socket.timeout):
-                return False
-
-    def _get_levels(self, scp):
-        if self._levels is not None:
-            return
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir) / 'config.yml'
-            scp.get(str(self.root / 'config.yml'), str(temp))
-            self._levels = load_config(temp_dir, StorageDiskConfig).levels
-
-    def __enter__(self):
         try:
-            self.ssh.connect(
-                self.hostname, self.port, self.username, self.password, key_filename=self.key,
-                auth_timeout=10
-            )
-            return self
+            with self.ssh.connect(self.hostname, self.port, self.username, self.password, key_filename=self.key,
+                                  auth_timeout=10):
+
+                with SCPClient(self.ssh.get_transport()) as scp, tempfile.TemporaryDirectory() as temp_dir:
+                    source = Path(temp_dir) / 'source'
+
+                    for key in keys:
+                        try:
+                            self._get_config(scp)
+                            scp.get(str(self.root / key_to_relative(key, self.levels)), str(source), recursive=True)
+                            value = store(key, source)
+                            shutil.rmtree(source)
+
+                            results.append((value, True))
+                        except (SCPException, socket.timeout):
+                            results.append((None, False))
+
         except AuthenticationException:
             raise AuthenticationException(self.hostname) from None
         except socket.gaierror:
             raise UnknownHostException(self.hostname) from None
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.ssh.close()
+        return results
+
+    def _get_config(self, scp):
+        if self.levels is not None:
+            return
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir) / 'config.yml'
+            scp.get(str(self.root / 'config.yml'), str(temp))
+            config = load_config(temp_dir)
+            self.hash, self.levels = config.hash, config.levels
