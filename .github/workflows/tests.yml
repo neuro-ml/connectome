@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Create ssh key
         run: |
-          sudo systemctl enable --now ssh
+          sudo systemctl start --now sshd
           mkdir ~/.ssh/
           cp tests/assets/ssh_config ~/.ssh/config
           cp tests/assets/id_* ~/.ssh
