@@ -16,5 +16,5 @@ def test_ssh(storage_factory, tests_root):
             local.resolve(key)
 
         # add a remote
-        local.remote = [SSHLocation('remote', remote.local[0].root)]
+        local.storage.remote = [SSHLocation('remote', remote.local[0].root)]
         assert local.read(load_text, key) == remote.read(load_text, key) == load_text(__file__)
