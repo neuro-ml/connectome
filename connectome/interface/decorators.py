@@ -1,4 +1,3 @@
-import warnings
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -68,8 +67,3 @@ class Meta(RuntimeAnnotation):
 
 # low case shortcuts
 inverse, optional, positional, meta, impure = Inverse, Optional, Positional, Meta, Impure
-
-
-def insert(x):
-    warnings.warn('The `insert` decorator is deprecated. Currently it has no effect.')
-    return x

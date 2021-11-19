@@ -28,14 +28,14 @@ jobs:
           sudo systemctl enable --now ssh
           ssh-keygen -N '' -f ~/.ssh/id_dsa -b 1024 -t dsa
           cp tests/assets/ssh_config ~/.ssh/config
-          echo ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
+          echo ~/.ssh/id_dsa.pub > ~/.ssh/authorized_keys
       - name: Install dependencies
         run: |
           pip install -e .
           pip install -r tests/requirements.txt
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch -m "not ssh"
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml

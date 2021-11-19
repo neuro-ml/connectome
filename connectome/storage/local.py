@@ -45,7 +45,7 @@ class DiskBase(LocalStorage, ABC):
 
     @staticmethod
     def _get_size(base: Path):
-        return sum(file.stat().st_size for file in base.glob('**/*') if file.is_file())
+        return sum(get_size(file) for file in base.glob('**/*') if file.is_file())
 
     def _protected_write(self, key, value: Any, context, write) -> bool:
         base = self._key_to_base(key)

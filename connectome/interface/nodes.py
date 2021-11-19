@@ -35,6 +35,9 @@ class NodeType:
         self.name = name
 
 
+NodeTypes = Sequence[NodeType]
+
+
 class Input(NodeType):
     pass
 
@@ -53,8 +56,3 @@ class InverseOutput(NodeType):
 
 class Parameter(NodeType):
     pass
-
-
-# TODO: remove this
-Local = Output
-NodeTypes = Sequence[NodeType]
