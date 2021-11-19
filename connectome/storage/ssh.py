@@ -26,6 +26,8 @@ class SSHLocation(RemoteStorage):
         ssh.load_system_host_keys()
         # TODO: not safe
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        if isinstance(key, Path):
+            key = str(key)
 
         config_path = Path('~/.ssh/config').expanduser()
         if config_path.exists():
@@ -44,42 +46,46 @@ class SSHLocation(RemoteStorage):
         self.ssh = ssh
         self.levels = self.hash = None
 
-    def fetch(self, keys: Sequence[Key], store: Callable[[str, Path], Any],
+    def fetch(self, keys: Sequence[Key], store: Callable[[Key, Path], Any],
               config: HashConfig) -> Sequence[Tuple[Any, bool]]:
 
         results = []
-
         try:
-            with self.ssh.connect(self.hostname, self.port, self.username, self.password, key_filename=self.key,
-                                  auth_timeout=10):
-
-                with SCPClient(self.ssh.get_transport()) as scp, tempfile.TemporaryDirectory() as temp_dir:
-                    source = Path(temp_dir) / 'source'
-
-                    for key in keys:
-                        try:
-                            self._get_config(scp)
-                            scp.get(str(self.root / key_to_relative(key, self.levels)), str(source), recursive=True)
-                            value = store(key, source)
-                            shutil.rmtree(source)
-
-                            results.append((value, True))
-                        except (SCPException, socket.timeout):
-                            results.append((None, False))
-
+            self.ssh.connect(
+                self.hostname, self.port, self.username, self.password, key_filename=self.key,
+                auth_timeout=10
+            )
         except AuthenticationException:
             raise AuthenticationException(self.hostname) from None
         except socket.gaierror:
             raise UnknownHostException(self.hostname) from None
 
+        try:
+            with SCPClient(self.ssh.get_transport()) as scp, tempfile.TemporaryDirectory() as temp_dir:
+                source = Path(temp_dir) / 'source'
+
+                for key in keys:
+                    try:
+                        self._get_config(scp, config)
+                        scp.get(str(self.root / key_to_relative(key, self.levels)), str(source), recursive=True)
+                        value = store(key, source)
+                        shutil.rmtree(source)
+
+                        results.append((value, True))
+                    except (SCPException, socket.timeout):
+                        results.append((None, False))
+
+        finally:
+            self.ssh.close()
+
         return results
 
-    def _get_config(self, scp):
-        if self.levels is not None:
-            return
+    def _get_config(self, scp, config):
+        if self.levels is None:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp = Path(temp_dir) / 'config.yml'
+                scp.get(str(self.root / 'config.yml'), str(temp))
+                remote_config = load_config(temp_dir)
+                self.hash, self.levels = remote_config.hash, remote_config.levels
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir) / 'config.yml'
-            scp.get(str(self.root / 'config.yml'), str(temp))
-            config = load_config(temp_dir)
-            self.hash, self.levels = config.hash, config.levels
+        assert self.hash == config, (self.hash, config)

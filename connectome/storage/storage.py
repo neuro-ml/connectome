@@ -26,6 +26,8 @@ class Storage:
         if success:
             return value
 
+        if success is None:
+            raise WriteError(f"The key {key} couldn't be written to any storage")
         if fetch:
             message = f'Key {key} is not present neither locally nor among your {len(self.storage.remote)} remotes'
         else:

@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Iterable, Tuple, Callable, Any, Sequence
+from typing import Iterable, Tuple, Callable, Any, Sequence, Union
 
 from tqdm import tqdm
 
@@ -93,7 +93,7 @@ class HashStorage:
 
         return False
 
-    def read(self, key, context, *, fetch: bool) -> Tuple[Any, bool]:
+    def read(self, key, context, *, fetch: bool) -> Tuple[Any, Union[None, bool]]:
         # try to find locally
         for local in self.local:
             value, success = local.read(key, context)
@@ -101,21 +101,26 @@ class HashStorage:
                 return value, True
 
         # try to fetch from remote
+        status = False
         if fetch:
             for remote in self.remote:
-                [local, success] = remote.fetch([key], lambda k, base: self._replicate(k, base, context), self.hash)
+                (local, success), = remote.fetch([key], lambda k, base: self._replicate(k, base, context), self.hash)
                 if success:
+                    if local is WriteError:
+                        status = None
+                        continue
+
                     value, exists = local.read(key, context)
                     assert exists, exists
                     return value, True
 
-        return None, False
+        return None, status
 
     def fetch(self, keys: Iterable[Key], context, *, verbose: bool) -> Sequence[Key]:
         def store(k, base):
-            self._replicate(k, base, context)
+            status = self._replicate(k, base, context)
             bar.update()
-            return k
+            return status if status is WriteError else k
 
         keys = set(keys)
         bar = tqdm(disable=not verbose, total=len(keys))
@@ -134,13 +139,16 @@ class HashStorage:
                 break
 
             logger.info(f'Trying remote {remote}')
-            keys -= {k for k, success in remote.fetch(list(keys), store, self.hash) if success}
+            keys -= {
+                k for k, success in remote.fetch(list(keys), store, self.hash)
+                if success and k is not WriteError
+            }
 
         return list(keys)
 
     def _replicate(self, key, base, context):
         for local in self.local:
             if local.replicate(key, base, context):
-                return local, True
+                return local
 
-        raise WriteError('The fetched value could not be written to any storage')
+        return WriteError

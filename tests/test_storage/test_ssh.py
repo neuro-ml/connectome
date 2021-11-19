@@ -9,7 +9,7 @@ def load_text(path):
 
 
 @pytest.mark.ssh
-def test_ssh(storage_factory):
+def test_ssh(storage_factory, tests_root):
     with storage_factory() as local, storage_factory() as remote:
         key = remote.write(__file__)
         with pytest.raises(ReadError):
