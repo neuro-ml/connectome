@@ -25,7 +25,7 @@ TIME_FILENAME = 'time'
 GZIP_COMPRESSION = 1
 
 
-class CacheIndex(DiskBase):
+class CacheIndexStorage(DiskBase):
     def __init__(self, root: Path, storage: Storage, serializer: Serializer):
         super().__init__(root)
         self.storage = storage
@@ -66,7 +66,7 @@ class CacheIndex(DiskBase):
 
             else:
                 with open(target, 'w') as fd:
-                    fd.write(self.storage.store(file))
+                    fd.write(self.storage.write(file))
                 os.remove(file)
                 to_read_only(target, self.permissions, self.group)
 

@@ -11,10 +11,10 @@ def load_text(path):
 @pytest.mark.ssh
 def test_ssh(storage_factory):
     with storage_factory() as local, storage_factory() as remote:
-        key = remote.store(__file__)
+        key = remote.write(__file__)
         with pytest.raises(ReadError):
-            local.get_path(key)
+            local.resolve(key)
 
         # add a remote
         local.remote = [SSHLocation('remote', remote.local[0].root)]
-        assert local.load(load_text, key) == remote.load(load_text, key) == load_text(__file__)
+        assert local.read(load_text, key) == remote.read(load_text, key) == load_text(__file__)

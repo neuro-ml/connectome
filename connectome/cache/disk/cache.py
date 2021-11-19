@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Tuple, Sequence
 
-from .index import CacheIndex
+from .index import CacheIndexStorage
 from ...engine import NodeHash
 from ..base import Cache
 from ..pickler import dumps, PREVIOUS_VERSIONS
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class DiskCache(Cache):
-    def __init__(self, local: Sequence[CacheIndex], remote: Sequence[RemoteStorage], fetch: bool):
+    def __init__(self, local: Sequence[CacheIndexStorage], remote: Sequence[RemoteStorage], fetch: bool):
         super().__init__()
         self.cache = HashStorage(local, remote)
         self.algorithm = self.cache.hash.build()

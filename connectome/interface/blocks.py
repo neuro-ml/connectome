@@ -1,12 +1,12 @@
 import operator
 import weakref
 from pathlib import Path
-from typing import Union, Sequence, Callable, Iterable
+from typing import Union, Sequence, Callable, Iterable, NamedTuple
 
 import numpy as np
 
 from .base import BaseLayer, CallableLayer
-from ..cache.disk.index import CacheIndex
+from ..cache.disk.index import CacheIndexStorage
 from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, CacheColumnsContainer
 from ..containers.debug import HashDigestContainer
 from ..containers.filter import FilterContainer
@@ -17,6 +17,7 @@ from ..containers.shortcuts import ApplyContainer
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..storage.config import init_storage
+from ..storage.interface import RemoteStorage
 from ..utils import PathLike, StringsLike
 from .utils import format_arguments
 
@@ -151,6 +152,11 @@ class CacheToRam(CacheLayer):
             cache.clear()
 
 
+class CacheIndex(NamedTuple):
+    local: Sequence[PathLike]
+    remote: Sequence[RemoteStorage] = ()
+
+
 class CacheToDisk(CacheLayer):
     """
     A persistent cache stored on disk.
@@ -172,9 +178,9 @@ class CacheToDisk(CacheLayer):
         names = to_seq(names)
         serializer = _resolve_serializer(serializer)
         if isinstance(index, (str, Path)):
-            index = index,
-        local = [CacheIndex(root, storage, serializer) for root in index]
-        super().__init__(DiskCacheContainer(names, local, [], impure, fetch))
+            index = CacheIndex([index], [])
+        local = [CacheIndexStorage(root, storage, serializer) for root in index.local]
+        super().__init__(DiskCacheContainer(names, local, index.remote, impure, fetch))
 
     @classmethod
     def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None):
@@ -224,10 +230,10 @@ class CacheColumns(CacheLayer):
         names = to_seq(names)
         serializer = _resolve_serializer(serializer)
         if isinstance(index, (str, Path)):
-            index = index,
-        local = [CacheIndex(root, storage, serializer) for root in index]
+            index = CacheIndex([index], [])
+        local = [CacheIndexStorage(root, storage, serializer) for root in index.local]
         super().__init__(CacheColumnsContainer(
-            names, local, [], verbose=verbose, shard_size=shard_size, fetch=False
+            names, local, index.remote, verbose=verbose, shard_size=shard_size, fetch=False
         ))
 
 

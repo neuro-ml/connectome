@@ -50,16 +50,16 @@ class Storage:
 
     # deprecated names
     def get_path(self, key: Key, fetch: bool = True) -> Path:
-        warnings.warn('The method `get_path` was renamed to `resolve`', UserWarning)
-        warnings.warn('The method `get_path` was renamed to `resolve`', DeprecationWarning)
+        warnings.warn('The method `get_path` was renamed to `resolve`', UserWarning, 2)
+        warnings.warn('The method `get_path` was renamed to `resolve`', DeprecationWarning, 2)
         return self.resolve(key, fetch=fetch)
 
     def load(self, func: Callable, key: Key, *args, fetch: bool = True, **kwargs) -> Any:
-        warnings.warn('The method `load` was renamed to `read`', UserWarning)
-        warnings.warn('The method `load` was renamed to `read`', DeprecationWarning)
+        warnings.warn('The method `load` was renamed to `read`', UserWarning, 2)
+        warnings.warn('The method `load` was renamed to `read`', DeprecationWarning, 2)
         return self.read(func, key, *args, fetch=fetch, **kwargs)
 
     def store(self, file: PathLike) -> Key:
-        warnings.warn('The method `store` was renamed to `write`', UserWarning)
-        warnings.warn('The method `store` was renamed to `write`', DeprecationWarning)
+        warnings.warn('The method `store` was renamed to `write`', UserWarning, 2)
+        warnings.warn('The method `store` was renamed to `write`', DeprecationWarning, 2)
         return self.write(file)
