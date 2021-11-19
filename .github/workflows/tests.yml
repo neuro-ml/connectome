@@ -27,7 +27,9 @@ jobs:
         run: |
           sudo systemctl start --now sshd
           sudo systemctl start --now ssh
+          sudo usermod -U runner
           sleep 2s
+          sudo cat /etc/ssh/sshd_config | grep PermitRootLogin
           mkdir ~/.ssh
           chmod 770 ~/.ssh
           cp tests/assets/ssh_config ~/.ssh/config
