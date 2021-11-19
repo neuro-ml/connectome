@@ -26,7 +26,10 @@ jobs:
       - name: Create ssh key
         run: |
           sudo systemctl start --now sshd
-          mkdir ~/.ssh/
+          sudo systemctl start --now ssh
+          sleep 2s
+          mkdir ~/.ssh
+          chmod 770 ~/.ssh
           cp tests/assets/ssh_config ~/.ssh/config
           cp tests/assets/id_* ~/.ssh
           cp tests/assets/id_ed25519.pub ~/.ssh/authorized_keys
