@@ -34,7 +34,7 @@ class TransformContainer(EdgesBag):
 
         forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
         assert valid
-        backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(outputs))
+        backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(backward_outputs))
         assert valid
 
         check_for_duplicates(inputs)

@@ -35,7 +35,7 @@ class Serializer(ABC):
             return loader(path, *args, **kwargs)
 
         with open(path, 'r') as key:
-            return storage.load(loader, key.read(), *args, **kwargs)
+            return storage.read(loader, key.read(), *args, **kwargs)
 
 
 class ChainSerializer(Serializer):

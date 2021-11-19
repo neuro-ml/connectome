@@ -1,6 +1,6 @@
 import pytest
 
-from connectome import Transform, inverse
+from connectome import Transform, Apply, inverse
 from connectome.containers.base import identity
 from connectome.exceptions import GraphError
 
@@ -52,3 +52,11 @@ def test_inherit():
 
     with pytest.raises(GraphError):
         ds._wrap(identity, 'some-other-name')
+
+    dec = (A() >> Apply(image=lambda image: image))._decorate('image', 'image')
+
+    @dec
+    def func(image):
+        return 2 * image
+
+    assert func(image=4) == 8

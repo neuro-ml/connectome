@@ -11,7 +11,7 @@ from .locker import Locker, DummyLocker
 from .utils import mkdir
 from ..utils import PathLike
 
-FILENAME = 'config.yml'
+STORAGE_CONFIG_NAME = 'config.yml'
 
 
 class HashConfig(BaseModel):
@@ -23,6 +23,12 @@ class HashConfig(BaseModel):
         if v is None:
             return {}
         return v
+
+    def build(self):
+        cls = getattr(hashlib, self.name)
+        if self.kwargs:
+            cls = partial(cls, **self.kwargs)
+        return cls
 
 
 class LockerConfig(BaseModel):
@@ -52,6 +58,12 @@ class DiskConfig(BaseModel):
     hash: Union[str, HashConfig]
     levels: Tuple[int, ...]
     locker: Union[str, LockerConfig] = None
+    free_disk_size: Union[int, str] = 0
+    max_size: Union[int, str] = None
+
+    @validator('free_disk_size', 'max_size')
+    def to_size(cls, v):
+        return parse_size(v)
 
     @validator('hash', pre=True)
     def normalize_hash(cls, v):
@@ -69,24 +81,15 @@ class DiskConfig(BaseModel):
         extra = Extra.forbid
 
 
-class StorageDiskConfig(DiskConfig):
-    free_disk_size: Union[int, str] = 0
-    max_size: Union[int, str] = None
-
-    @validator('free_disk_size', 'max_size')
-    def to_size(cls, v):
-        return parse_size(v)
-
-
 def root_params(root: Path):
     stat = root.stat()
     return stat.st_mode & 0o777, stat.st_gid
 
 
-def load_config(root: PathLike, cls) -> DiskConfig:
-    with open(Path(root) / FILENAME) as file:
+def load_config(root: PathLike) -> DiskConfig:
+    with open(Path(root) / STORAGE_CONFIG_NAME) as file:
         # TODO: assert read-only
-        return cls(**safe_load(file))
+        return DiskConfig(**safe_load(file))
 
 
 def init_storage(root: PathLike, *, permissions: Union[int, None] = None, group: Union[str, int, None] = None,
@@ -101,7 +104,7 @@ def init_storage(root: PathLike, *, permissions: Union[int, None] = None, group:
     if locker is not None:
         config['locker'] = locker
 
-    with open(root / FILENAME, 'w') as file:
+    with open(root / STORAGE_CONFIG_NAME, 'w') as file:
         safe_dump(config, file)
 
 
@@ -115,13 +118,6 @@ def make_locker(config: LockerConfig) -> Locker:
             return cls(*config.args, **config.kwargs)
 
     raise ValueError(f'Could not find a locker named {name}')
-
-
-def make_algorithm(config: HashConfig):
-    cls = getattr(hashlib, config.name)
-    if config.kwargs:
-        cls = partial(cls, **config.kwargs)
-    return cls
 
 
 def parse_size(x):

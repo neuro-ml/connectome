@@ -80,9 +80,9 @@ class MemoryCacheContainer(CacheContainer):
 
 
 class DiskCacheContainer(CacheContainer):
-    def __init__(self, names, root, storage, serializer, allow_impure):
+    def __init__(self, names, local, remote, allow_impure, fetch):
         super().__init__(names, allow_impure)
-        self.storage = DiskCache(root, storage, serializer)
+        self.storage = DiskCache(local, remote, fetch=fetch)
 
     def get_storage(self):
         return self.storage
@@ -93,11 +93,11 @@ class CacheColumnsContainer(CacheBase):
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
 
-    def __init__(self, names, root, storage, serializer, verbose, shard_size):
+    def __init__(self, names, local, remote, verbose, shard_size, fetch):
         self.shard_size = shard_size
         self.verbose = verbose
         self.cache_names = names
-        self.disk = DiskCache(root, storage, serializer)
+        self.disk = DiskCache(local, remote, fetch)
         self.ram = MemoryCache(None)
 
     def wrap(self, container: EdgesBag) -> EdgesBag:

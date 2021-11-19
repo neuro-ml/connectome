@@ -91,25 +91,6 @@ class TreeNode:
     def __repr__(self):
         return f'<TreeNode: {self.name}>'
 
-    def visualize(self, path, cache=()):
-        """
-        Useful for visualization during debug. Requires `graphviz` (not the python package) to be installed.
-        """
-        from anytree.exporter import UniqueDotExporter
-        from anytree import Node
-
-        def convert(node):
-            return Node(node.name, original=node, edge=f'label={type(node.edge).__name__}' if not node.is_leaf else '',
-                        children=list(map(convert, node.parents if not node.is_leaf else [])))
-
-        UniqueDotExporter(
-            convert(self),
-            edgeattrfunc=lambda parent, child: (parent.edge,),
-            nodeattrfunc=lambda
-                node: f"shape={'box' if node.original not in cache else 'ellipse'}, label=\"{node.name}\"",
-            nodenamefunc=lambda node: hex(id(node.original))
-        ).to_picture(path)
-
 
 class Node:
     def __init__(self, name: str):

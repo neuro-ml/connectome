@@ -25,10 +25,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Create ssh key
         run: |
-          sudo systemctl enable --now ssh
-          ssh-keygen -N '' -f ~/.ssh/id_dsa -b 1024 -t dsa
+          sudo systemctl start --now sshd
+          mkdir ~/.ssh
+          chmod 770 ~/.ssh
           cp tests/assets/ssh_config ~/.ssh/config
-          echo ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
+          cp tests/assets/id_* ~/.ssh
+          cp tests/assets/id_ed25519.pub ~/.ssh/authorized_keys
+          # make sure we can connect now
+          # ssh -o "StrictHostKeyChecking no" remote echo Ok
+
       - name: Install dependencies
         run: |
           pip install -e .

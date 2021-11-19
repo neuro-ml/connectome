@@ -65,12 +65,6 @@ class CallableLayer(BaseLayer[EdgesBag]):
             inputs = tuple(inputs)
         return self._methods[inputs]
 
-    def _visualize(self, name, path):
-        mapping = TreeNode.from_edges(self._container.edges)
-        for o in self._container.outputs:
-            if o.name == name:
-                mapping[o].visualize(path)
-
 
 class Instance:
     def __init__(self, layer: CallableLayer, args, kwargs):

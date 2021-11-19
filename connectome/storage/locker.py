@@ -7,8 +7,6 @@ from typing import ContextManager, MutableMapping
 
 from redis import Redis
 
-from .utils import size_to_human
-
 Key = str
 logger = logging.getLogger(__name__)
 
@@ -59,10 +57,6 @@ class Locker(ABC):
     def stop_writing(self, key: Key):
         """ Release a write operation. """
 
-    @abstractmethod
-    def describe(self) -> str:
-        """ Returns a report regarding the locker's state. """
-
     # TODO: move this to another interface?
     def get_size(self):
         raise NotImplementedError
@@ -92,9 +86,6 @@ class DummyLocker(Locker):
 
     def stop_writing(self, key: Key):
         pass
-
-    def describe(self) -> str:
-        return ''
 
 
 class DictRegistry:
@@ -151,10 +142,6 @@ class DictRegistry:
             value = self._get_writing(key)
             assert value == 1, value
             self._writing.pop(key)
-
-    def describe(self) -> str:
-        # TODO
-        return ''
 
 
 class ThreadLocker(DictRegistry, Locker):
@@ -231,19 +218,6 @@ class RedisLocker(Locker):
 
     def dec_size(self, size: int):
         self._redis.decrby(self._volume_key, size)
-
-    def describe(self) -> str:
-        lines = [f'{self._prefix}: {size_to_human(self.get_size())}']
-        for name in self._redis.keys():
-            name = name.decode()
-            if name.startswith(self._prefix):
-                value = int(self._redis.get(name))
-                ttl = self._redis.ttl(name)
-                assert value == -1 or value > 0, value
-                value = 'Write' if value == -1 else 'Read'
-                lines.append(f'{name} {value}: {ttl}')
-
-        return '\n'.join(lines)
 
     @classmethod
     def from_url(cls, url: str, prefix: str, expire: int):

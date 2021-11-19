@@ -38,10 +38,12 @@ def assert_empty_state(block):
     assert caches
     for cache in caches:
         assert isinstance(cache, (MemoryCache, DiskCache))
-        assert isinstance(cache.locker, ThreadLocker)
+        locker = cache.locker if isinstance(cache, MemoryCache) else cache.cache.local[0].locker
+
+        assert isinstance(locker, ThreadLocker)
         # the state must be cleaned up
-        assert not cache.locker._reading
-        assert not cache.locker._writing
+        assert not locker._reading
+        assert not locker._writing
 
 
 def test_memory_locking(block_maker):

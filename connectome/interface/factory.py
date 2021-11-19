@@ -1,28 +1,21 @@
-from typing import Dict, Any, Iterable
+import inspect
+import logging
+from typing import Dict, Any, Iterable, Callable
 
-from .base import CallableLayer
+from ..engine.base import Node
 from ..containers.base import EdgesBag
-from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge, ImpureFunctionEdge
+from ..engine.edges import FunctionEdge, IdentityEdge, ConstantEdge, ComputableHashEdge
 from ..exceptions import GraphError, FieldError
 from ..containers.transform import TransformContainer, normalize_inherit
 from ..utils import extract_signature, MultiDict
 from .prepared import ComputableHash, Prepared
-from .decorators import Meta, Optional, RuntimeAnnotation, Impure
-from .nodes import *
+from .nodes import NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes
+from .base import CallableLayer
+from .factory_utils import add_quals, is_private, is_callable, to_argument, unwrap_transform, infer_nodes, \
+    signature_to_types
+from .decorators import Meta, Optional, RuntimeAnnotation, EdgeAnnotation
 
 logger = logging.getLogger(__name__)
-
-
-def unwrap_transform(value):
-    decorators = []
-    while isinstance(value, FactoryAnnotation):
-        decorators.append(type(value))
-        value = value.__func__
-
-    if len(set(decorators)) != len(decorators):
-        raise ValueError('Object has duplicated decorators')
-
-    return value, set(decorators)
 
 
 def add_from_mixins(namespace, mixins):
@@ -50,16 +43,6 @@ def add_from_mixins(namespace, mixins):
 
     if ANN_MAGIC not in namespace:
         namespace[ANN_MAGIC] = annotations
-
-
-def add_quals(scope, namespace):
-    qualname = namespace.get('__qualname__', [None])[0]
-    if qualname is not None:
-        scope['__qualname__'] = qualname
-    module = namespace.get('__module__', [None])[0]
-    if module is not None:
-        scope['__module__'] = module
-    return scope
 
 
 DOC_MAGIC = '__doc__'
@@ -253,6 +236,7 @@ class GraphFactory:
             if not is_callable(value):
                 raise FieldError(f'The type of the "{name}" field cannot be determined')
 
+            # TODO: probably should return the decorators and not just their classes
             func, decorators = unwrap_transform(value)
             inputs, output, decorators = infer_nodes(name, func, decorators)
             inputs = list(map(self._type_to_node, self._validate_inputs(inputs)))
@@ -266,11 +250,16 @@ class GraphFactory:
             if Optional in decorators:
                 self.optional_names.add(name)
                 decorators.remove(Optional)
-            assert not any(issubclass(x, RuntimeAnnotation) for x in decorators)
+            assert not any(issubclass(d, RuntimeAnnotation) for d in decorators)
 
-            if Impure in decorators:
-                edge = ImpureFunctionEdge(func, len(inputs))
-                decorators.remove(Impure)
+            edge_annotations = {d for d in decorators if issubclass(d, EdgeAnnotation)}
+            if len(edge_annotations) > 1:
+                raise FieldError(f'The field "{name}" has too many "EdgeAnnotation" decorators')
+
+            if edge_annotations:
+                ann, = edge_annotations
+                edge = ann.build(func, inputs, output)
+                decorators.remove(ann)
             else:
                 edge = FunctionEdge(func, len(inputs))
 
@@ -336,6 +325,7 @@ class SourceFactory(GraphFactory):
         i, = ids
         return [x if x != i else Input(self._key_name) for x in inputs]
 
+    # TODO: move to class method
     def _process_precomputed(self, name, value: ComputableHash):
         inputs = signature_to_types(list(inspect.signature(value.precompute).parameters.values()), Input, name)
         assert len(extract_signature(value.func)[0]) == 1

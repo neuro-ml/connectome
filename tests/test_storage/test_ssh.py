@@ -1,7 +1,6 @@
 import pytest
 
-from connectome.storage import SSHLocation
-from connectome.storage.storage import QueryError
+from connectome.storage import SSHLocation, ReadError
 
 
 def load_text(path):
@@ -10,12 +9,12 @@ def load_text(path):
 
 
 @pytest.mark.ssh
-def test_ssh(storage_factory):
+def test_ssh(storage_factory, tests_root):
     with storage_factory() as local, storage_factory() as remote:
-        key = remote.store(__file__)
-        with pytest.raises(QueryError):
-            local.get_path(key)
+        key = remote.write(__file__)
+        with pytest.raises(ReadError):
+            local.resolve(key)
 
         # add a remote
-        local.remote = [SSHLocation('remote', remote.local[0].root)]
-        assert local.load(load_text, key) == remote.load(load_text, key) == load_text(__file__)
+        local.storage.remote = [SSHLocation('remote', remote.local[0].root)]
+        assert local.read(load_text, key) == remote.read(load_text, key) == load_text(__file__)

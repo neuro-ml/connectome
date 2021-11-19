@@ -1,5 +1,10 @@
-import warnings
+from abc import ABC, abstractmethod
 from typing import Callable
+
+from .nodes import NodeTypes, NodeType
+from ..engine.base import Edge
+
+from ..engine.edges import ImpureFunctionEdge
 
 
 class FactoryAnnotation:
@@ -16,8 +21,13 @@ class NodeAnnotation(FactoryAnnotation):
     """ Used to alter the behaviour of input/output nodes of an edge. """
 
 
-class EdgeAnnotation(FactoryAnnotation):
+class EdgeAnnotation(ABC, FactoryAnnotation):
     """ Used to customize the edge's behaviour. """
+
+    @staticmethod
+    @abstractmethod
+    def build(func: Callable, inputs: NodeTypes, output: NodeType) -> Edge:
+        """ Returns an edge that will map ``inputs`` to ``output``. """
 
 
 class RuntimeAnnotation(FactoryAnnotation):
@@ -42,7 +52,9 @@ class Positional(NodeAnnotation):
 
 
 class Impure(EdgeAnnotation):
-    pass
+    @staticmethod
+    def build(func: Callable, inputs: NodeTypes, output: NodeType) -> Edge:
+        return ImpureFunctionEdge(func, len(inputs))
 
 
 class Optional(RuntimeAnnotation):
@@ -55,8 +67,3 @@ class Meta(RuntimeAnnotation):
 
 # low case shortcuts
 inverse, optional, positional, meta, impure = Inverse, Optional, Positional, Meta, Impure
-
-
-def insert(x):
-    warnings.warn('The `insert` decorator is deprecated. Currently it has no effect.')
-    return x
