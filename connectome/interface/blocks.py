@@ -13,12 +13,14 @@ from ..containers.filter import FilterContainer
 from ..containers.goup import GroupContainer, MultiGroupLayer
 from ..containers.join import JoinContainer
 from ..containers.merge import SwitchContainer
-from ..containers.shortcuts import ApplyContainer
+from ..containers.transform import TransformContainer
+from ..engine.base import Node
+from ..engine.edges import FunctionEdge
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..storage.config import init_storage
 from ..storage.interface import RemoteStorage
-from ..utils import PathLike, StringsLike
+from ..utils import PathLike, StringsLike, AntiSet
 from .utils import format_arguments
 
 
@@ -112,10 +114,20 @@ class GroupBy(BaseLayer[GroupContainer]):
         return f'GroupBy({repr(self._container.name)})'
 
 
-class Apply(BaseLayer[ApplyContainer]):
+class Apply(CallableLayer):
     def __init__(self, **transform: Callable):
         self.names = sorted(transform)
-        super().__init__(ApplyContainer(transform))
+
+        inputs, outputs, edges = [], [], []
+        for name, func in transform.items():
+            inp, out = Node(name), Node(name)
+            inputs.append(inp)
+            outputs.append(out)
+            edges.append(FunctionEdge(func, arity=1).bind(inp, out))
+
+        super().__init__(TransformContainer(
+            inputs, outputs, edges, forward_virtual=AntiSet(transform), backward_virtual=AntiSet()
+        ), ())
 
     def __repr__(self):
         args = ', '.join(self.names)

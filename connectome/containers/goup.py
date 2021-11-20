@@ -2,7 +2,7 @@ from collections import defaultdict
 from hashlib import sha256
 from typing import Sequence, Any, Generator
 
-from .base import EdgesBag, Wrapper, NoContext
+from .base import EdgesBag, Container, NoContext
 from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, NodeHashes, Command, Request, Response
 from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
@@ -10,7 +10,7 @@ from ..engine.graph import Graph
 from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
 
 
-class GroupContainer(Wrapper):
+class GroupContainer(Container):
     def __init__(self, name: str):
         self.name = name
 
@@ -113,7 +113,7 @@ def extract_keys(d):
 # prototype for multiple groupby
 
 
-class MultiGroupLayer(Wrapper):
+class MultiGroupLayer(Container):
     def __init__(self, comparators: dict):
         self.names = sorted(comparators)
         self.comparators = [comparators[x] for x in self.names]

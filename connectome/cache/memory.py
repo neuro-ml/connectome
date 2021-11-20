@@ -27,4 +27,5 @@ class MemoryCache(Cache):
             self._cache[key] = value
 
     def clear(self):
+        # TODO: need a global lock
         self._cache = {}

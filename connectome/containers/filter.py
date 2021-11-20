@@ -2,7 +2,7 @@ from typing import Callable, Sequence, Any
 
 from tqdm import tqdm
 
-from .base import EdgesBag, Wrapper
+from .base import EdgesBag, Container
 from .cache import IdentityContext
 from ..engine.base import Node, TreeNode
 from ..engine.edges import FunctionEdge, StaticEdge, StaticGraph
@@ -11,7 +11,7 @@ from ..engine.node_hash import FilterHash
 from ..utils import extract_signature, node_to_dict
 
 
-class FilterContainer(Wrapper):
+class FilterContainer(Container):
     """
     Changes only the `keys` attribute.
     """
