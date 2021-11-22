@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from connectome import CacheToDisk, CacheColumns
+from connectome import CacheToDisk
 from connectome.storage import Storage, Disk
 from connectome.storage.config import init_storage
 

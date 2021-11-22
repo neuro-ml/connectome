@@ -1,3 +1,4 @@
 Host remote
+    User remote_user
     HostName localhost
-    IdentityFile ~/.ssh/id_ed25519
+    Port 2222
