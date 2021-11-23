@@ -25,11 +25,12 @@ class DiskCache(Cache):
 
     def get(self, key: Key, context) -> Tuple[Any, bool]:
         raw, pickled = context
-        logger.info('Reading %s', key)
+        logger.info('Looking for key %s', key)
 
         # try to load
         value, exists = self.cache.read(key, pickled, fetch=self.fetch)
         if exists:
+            logger.info('Key %s found', key)
             return value, exists
 
         # the cache is empty, but we can try and restore it from an older version
@@ -39,15 +40,17 @@ class DiskCache(Cache):
             # we can simply load the previous version, because nothing really changed
             value, exists = self.cache.read(local_digest, local_pickled, fetch=self.fetch)
             if exists:
+                logger.info('Key %s found in previous version (%d). Updating', key, version)
                 # and store it for faster access next time
                 self.cache.write(key, value, pickled)
                 return value, exists
 
+        logger.info('Key %s not found', key)
         return None, False
 
     def set(self, key: Key, value: Any, context):
         raw, pickled = context
-        logger.info('Saving %s', key)
+        logger.info('Saving key %s', key)
         self.cache.write(key, value, pickled)
 
 
