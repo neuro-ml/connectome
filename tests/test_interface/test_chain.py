@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from connectome import Source, Transform, Chain, CacheToRam, meta
-from connectome.exceptions import DependencyError
+from connectome.exceptions import DependencyError, FieldError
 from connectome.interface.base import LazyChain
 from connectome.interface.blocks import HashDigest, CacheColumns, Merge
 from connectome.storage.config import init_storage
@@ -168,6 +168,25 @@ def test_all_inherit():
             return x
 
     assert set(dir(A() >> A() >> A() >> B())) == {'x'}
+
+
+def test_end_to_end_inherit():
+    class A(Transform):
+        __inherit__ = True
+
+    ds = A() >> A() >> A()
+    assert ds.x(1) == 1
+    f = ds._compile(['x'])
+
+    class B(Transform):
+        __inherit__ = 'x'
+
+    ds = B() >> B() >> B()
+    assert ds.x(1) == 1
+    with pytest.raises(AttributeError):
+        ds.y
+    with pytest.raises(FieldError):
+        ds._compile(['y', 'z'])
 
 
 def test_lazy(tmpdir, storage_factory):

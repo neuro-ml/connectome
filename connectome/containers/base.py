@@ -7,7 +7,7 @@ from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..engine import Backend, DefaultBackend
-from ..exceptions import GraphError
+from ..exceptions import GraphError, FieldError
 from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class GraphCompiler:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, backend: Backend):
         tree_node_map = TreeNode.from_edges(edges)
         self._edges = edges
-        self.inputs = [tree_node_map[x] for x in inputs]
+        self.inputs = tuple(tree_node_map[x] for x in inputs)
         self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
         self.backend = backend
         self.virtuals = virtuals
@@ -37,24 +37,30 @@ class GraphCompiler:
                 value = identity
 
             elif isinstance(item, tuple):
-                outputs = []
+                inputs, outputs = [], []
                 for name in item:
                     if name not in self.outputs:
-                        raise ValueError(f'"{name}" is not an available output: {tuple(self.outputs)}')
-                    outputs.append(self.outputs[name])
+                        if name in self.virtuals:
+                            output = TreeNode(name, None)
+                            inputs.append(output)
+                        else:
+                            raise FieldError(f'"{name}" is not an available output: {tuple(self.outputs)}')
+                    else:
+                        output = self.outputs[name]
+                    outputs.append(output)
 
                 product = TreeNode('$product', (ProductEdge(len(item)), outputs))
-                value = self._compile(product)
+                value = self._compile(product, tuple(inputs))
 
             else:
-                raise AttributeError(item)
+                raise FieldError(f'"{item}" is not an available output: {tuple(self.outputs)}')
 
             self.methods[item] = value
 
         return self.methods[item]
 
-    def _compile(self, node):
-        return Graph(self.inputs, node, self.backend).call
+    def _compile(self, node, inputs=()):
+        return Graph(self.inputs + inputs, node, self.backend).call
 
 
 class Context(ABC):

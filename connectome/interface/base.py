@@ -3,9 +3,9 @@ from typing import Callable, Iterable, TypeVar
 
 from .compat import Generic
 from .utils import format_arguments
-from ..engine.base import TreeNode
 from ..containers.base import Container, EdgesBag
 from ..containers.pipeline import PipelineContainer, LazyPipelineContainer
+from ..exceptions import FieldError
 from ..utils import StringsLike
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,11 @@ class CallableLayer(BaseLayer[EdgesBag]):
         self._properties = set(properties)
 
     def __getattr__(self, name):
-        method = self._methods[name]
+        try:
+            method = self._methods[name]
+        except FieldError as e:
+            raise AttributeError(name) from e
+
         if name in self._properties:
             return method()
         return method
