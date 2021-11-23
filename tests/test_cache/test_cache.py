@@ -140,7 +140,7 @@ def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
         with tempfile.TemporaryDirectory() as temp, storage_factory() as temp_storage:
             temp = Path(temp) / 'cache'
             init_storage(
-                temp, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32], locker={
+                temp, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 63], locker={
                     'name': 'RedisLocker', 'args': [redis_hostname],
                     'kwargs': {'prefix': 'connectome.tests', 'expire': 10}
                 }

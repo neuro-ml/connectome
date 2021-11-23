@@ -190,7 +190,7 @@ def test_lazy(tmpdir, storage_factory):
 
     with storage_factory() as storage:
         root = Path(tmpdir) / 'cache'
-        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32])
+        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 63])
         cache = CacheColumns(root, storage, [], [])
         A() >> B() >> cache
         with pytest.raises(DependencyError):

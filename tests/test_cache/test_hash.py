@@ -18,7 +18,7 @@ def test_hash(block_maker, storage_factory):
     ram = Chain(pipeline, CacheToRam(['image']), hash_layer)
     with TemporaryDirectory() as root, storage_factory() as storage:
         root = Path(root) / 'cache'
-        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32])
+        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 63])
 
         disk = Chain(pipeline, CacheToDisk(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)
         rows = Chain(pipeline, CacheColumns(root, storage, names=['image'], serializer=JsonSerializer()), hash_layer)

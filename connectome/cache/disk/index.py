@@ -11,7 +11,7 @@ from ...exceptions import StorageCorruption
 from ...storage import Storage
 from ...storage.digest import digest_to_relative, get_digest_size
 from ...serializers import Serializer
-from ...storage.disk import DiskBase
+from ...storage.disk import DiskBase, copy_file
 from ...storage.interface import QueryError, Key
 from ...storage.utils import touch, create_folders, to_read_only, Reason
 from ..compat import BadGzipFile
@@ -44,10 +44,15 @@ class CacheIndexStorage(DiskBase):
         self._save_meta(base, context)
 
     def _replicate(self, base: Path, key: Key, source: Path, context):
-        raise NotImplementedError
+        # data
+        shutil.copytree(source / DATA_FOLDER, base / DATA_FOLDER)
+        # meta
+        copy_file(source / HASH_FILENAME, base / HASH_FILENAME)
+        copy_file(source / TIME_FILENAME, base / TIME_FILENAME)
+        to_read_only(base / HASH_FILENAME, self.permissions, self.group)
 
-    def _save_meta(self, local, pickled):
-        hash_path, time_path = local / HASH_FILENAME, local / TIME_FILENAME
+    def _save_meta(self, base, pickled):
+        hash_path, time_path = base / HASH_FILENAME, base / TIME_FILENAME
         # time
         with open(time_path, 'w'):
             pass
