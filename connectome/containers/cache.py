@@ -36,7 +36,7 @@ class CacheContainer(CacheBase, ABC):
 
     @abstractmethod
     def get_storage(self) -> Cache:
-        pass
+        """ Create a cache storage instance """
 
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         state = container.freeze()
