@@ -2,7 +2,7 @@ import pytest
 
 from connectome import Source, meta, impure, Transform
 from connectome.interface.blocks import HashDigest, CacheToRam, Merge
-from connectome.interface.prepared import ComputableHash
+from connectome.interface.complex_edges import hash_by_value
 
 
 def prepare(i, _length):
@@ -16,7 +16,7 @@ def process(value):
 class Computable(Source):
     _length: int
 
-    field = ComputableHash(prepare, process)
+    field = hash_by_value(prepare=prepare, compute=process)
 
 
 class Stripped(Source):
@@ -105,17 +105,16 @@ def test_missing_impure():
 
 
 def test_hash_graph():
-    def reject_object(x):
-        if not isinstance(x, str):
-            raise ValueError(x)
-        return x
-
     class A(Source):
         @meta
         def ids():
             return '1',
 
-        f = ComputableHash(reject_object, lambda x: x)
+        @hash_by_value(compute=lambda x: x)
+        def f(x):
+            if not isinstance(x, str):
+                raise ValueError(x)
+            return x
 
     a = A()
     assert a.f('1') == '1'

@@ -85,8 +85,8 @@ class Optional(Transform):
     def first_optional(x):
         return x + 1
 
-    @positional
     @optional
+    @positional
     def second_optional(x):
         return str(x)
 

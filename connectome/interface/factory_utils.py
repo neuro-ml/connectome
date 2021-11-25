@@ -1,19 +1,11 @@
 import inspect
-from typing import Set, Type
+from typing import Set, Callable
 
 from .decorators import *
 from .nodes import *
 
 
-def is_private(name: str):
-    return name.startswith('_')
-
-
-def is_callable(value):
-    return callable(value) or isinstance(value, FactoryAnnotation)
-
-
-def infer_nodes(name: str, func: Callable, decorators: Set[Type[FactoryAnnotation]]):
+def infer_nodes(name: str, func: Callable, decorators):
     inputs = []
 
     # direction
@@ -36,16 +28,16 @@ def infer_nodes(name: str, func: Callable, decorators: Set[Type[FactoryAnnotatio
         assert parameter.default == parameter.empty, parameter
         if parameter.kind == parameter.POSITIONAL_ONLY or has_positional:
             signature = signature[1:]
-            inputs.append(default_input(name))
-    else:
-        if has_positional:
-            raise ValueError('The "positional" can\'t be used with a function without arguments')
+            _, modifiers = gather_modifiers(parameter.annotation)
+            inputs.append(NodeDescription(default_input(name), modifiers))
+    elif has_positional:
+        raise ValueError('The "positional" can\'t be used with a function without arguments')
 
     # rest
     inputs.extend(signature_to_types(signature, default_input, name))
 
     assert not any(issubclass(x, NodeAnnotation) for x in decorators)
-    return inputs, output, decorators
+    return inputs, NodeDescription(output, ()), decorators
 
 
 def signature_to_types(signature, default_input, field_name):
@@ -65,7 +57,7 @@ def signature_to_types(signature, default_input, field_name):
         else:
             node = default_input(arg)
 
-        inputs.append(node)
+        inputs.append(NodeDescription(node, modifiers))
 
     return inputs
 

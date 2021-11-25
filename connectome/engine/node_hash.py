@@ -1,4 +1,4 @@
-from typing import Sequence, Callable
+from typing import Sequence, Callable, Tuple
 
 NODE_TYPES = set()
 
@@ -59,10 +59,18 @@ class LeafHash(PrecomputeHash):
 class ApplyHash(PrecomputeHash):
     type = 1
 
-    def __init__(self, func: Callable, *args: NodeHash):
+    def __init__(self, func: Callable, *args: NodeHash, kw_names: Tuple[str, ...]):
+        # TODO: unify this during the next big migration
+        values = tuple(h.value for h in args)
+        kw_names = tuple(kw_names)
+        if kw_names:
+            seq = values, kw_names
+        else:
+            seq = values,
+
         super().__init__(
-            (self.type, func, tuple(h.value for h in args)),
-            (self.type, func, args),
+            (self.type, func, *seq),
+            (self.type, func, args, kw_names),
         )
 
 

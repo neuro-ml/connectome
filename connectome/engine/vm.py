@@ -134,8 +134,8 @@ def execute(cmd, node, hashes, cache, backend: Backend):
 
         elif cmd == Command.Call:
             pop()  # pop the node
-            func, pos = args
-            executor.call(func, pos)
+            func, pos, kw = args
+            executor.call(func, pos, kw)
 
         # utils
         elif cmd == Command.Store:

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Sequence, Callable, Any, Generator
+from typing import Sequence, Callable, Any, Generator, Tuple
 
 from .base import NodeHash, Edge, NodeHashes, HashOutput, HashError, Request, Response
 from .graph import Command
@@ -53,25 +53,46 @@ class StaticEdge(StaticHash):
 
 
 class FunctionEdge(StaticGraph, StaticHash):
-    def __init__(self, function: Callable, arity: int):
-        super().__init__(arity)
+    def __init__(self, function: Callable, n_positional: int, kw_names: Tuple[str, ...] = (),
+                 silent: Tuple[int, ...] = ()):
+        super().__init__(n_positional + len(kw_names))
+        if kw_names:
+            assert kw_names == tuple(sorted(kw_names)), kw_names
+        if silent:
+            assert 0 <= min(silent) and max(silent) < self.arity
+        self.kw_names = kw_names
+        self.silent = silent
         self.function = function
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return ApplyHash(self.function, *inputs)
+        if self.silent:
+            silent_hash = LeafHash(None)
+            inputs = list(inputs)
+            for idx in self.silent:
+                # just overwrite the real hash with a constant
+                inputs[idx] = silent_hash
+
+        return ApplyHash(self.function, *inputs, kw_names=self.kw_names)
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         inputs = yield (Command.Await, *(
             (Command.ParentValue, idx)
             for idx in range(self.arity)
         ))
-        result = yield Command.Call, self.function, inputs
-        return result
+        # TODO: does this speed up anything?
+        if self.kw_names:
+            args = inputs[:-len(self.kw_names)]
+            kwargs = {k: v for k, v in zip(self.kw_names, inputs[-len(self.kw_names):])}
+        else:
+            args, kwargs = inputs, {}
+
+        return (yield Command.Call, self.function, args, kwargs)
 
 
 class ComputableHashBase(Edge, ABC):
-    def __init__(self, function: Callable, arity: int):
-        super().__init__(arity)
+    def __init__(self, function: Callable, n_positional: int, kw_names: Tuple[str, ...] = ()):
+        super().__init__(n_positional)
+        self.kw_names = kw_names
         self.function = function
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
@@ -79,17 +100,22 @@ class ComputableHashBase(Edge, ABC):
             (Command.ParentValue, idx)
             for idx in range(self.arity)
         ))
-        result = self.function(*inputs)
+        if self.kw_names:
+            args = inputs[:-len(self.kw_names)]
+            kwargs = {k: v for k, v in zip(self.kw_names, inputs[-len(self.kw_names):])}
+        else:
+            args, kwargs = inputs, {}
+
+        result = yield Command.Call, self.function, args, kwargs
         return LeafHash(result), result
 
     def evaluate(self) -> Generator[Request, Response, Any]:
-        payload = yield Command.Payload,
-        return payload
+        return (yield Command.Payload,)
 
 
 class ComputableHashEdge(ComputableHashBase):
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return ApplyHash(self.function, *inputs)
+        return ApplyHash(self.function, *inputs, kw_names=self.kw_names)
 
 
 class ImpureFunctionEdge(ComputableHashBase):
