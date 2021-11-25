@@ -7,7 +7,7 @@ from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..engine import Backend, DefaultBackend
-from ..exceptions import GraphError
+from ..exceptions import GraphError, FieldError
 from ..utils import node_to_dict
 
 logger = logging.getLogger(__name__)
@@ -16,12 +16,51 @@ NameSet = AbstractSet[str]
 
 
 class Container:
-    pass
-
-
-class Wrapper(Container):
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         raise NotImplementedError
+
+
+class GraphCompiler:
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, backend: Backend):
+        tree_node_map = TreeNode.from_edges(edges)
+        self._edges = edges
+        self.inputs = tuple(tree_node_map[x] for x in inputs)
+        self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
+        self.backend = backend
+        self.virtuals = virtuals
+        self.methods = {node.name: self._compile(node) for node in self.outputs.values()}
+
+    def __getitem__(self, item):
+        if item not in self.methods:
+            if isinstance(item, str) and item in self.virtuals:
+                # TODO: signature
+                value = identity
+
+            elif isinstance(item, tuple):
+                inputs, outputs = [], []
+                for name in item:
+                    if name not in self.outputs:
+                        if name in self.virtuals:
+                            output = TreeNode(name, None)
+                            inputs.append(output)
+                        else:
+                            raise FieldError(f'"{name}" is not an available output: {tuple(self.outputs)}')
+                    else:
+                        output = self.outputs[name]
+                    outputs.append(output)
+
+                product = TreeNode('$product', (ProductEdge(len(item)), outputs))
+                value = self._compile(product, tuple(inputs))
+
+            else:
+                raise FieldError(f'"{item}" is not an available output: {tuple(self.outputs)}')
+
+            self.methods[item] = value
+
+        return self.methods[item]
+
+    def _compile(self, node, inputs=()):
+        return Graph(self.inputs + inputs, node, self.backend).call
 
 
 class Context(ABC):
@@ -42,7 +81,7 @@ class NoContext(Context):
         return self
 
 
-class EdgesBag(Wrapper):
+class EdgesBag(Container):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
                  virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet]):
         if virtual_nodes is None:
@@ -77,8 +116,8 @@ class EdgesBag(Wrapper):
             virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes
         )
 
-    def compile(self) -> 'GraphContainer':
-        return GraphContainer(self.inputs, self.outputs, self.edges, self.virtual_nodes, self.backend)
+    def compile(self) -> GraphCompiler:
+        return GraphCompiler(self.inputs, self.outputs, self.edges, self.virtual_nodes, self.backend)
 
     def loopback(self, func, inputs, output):
         state = self.freeze()
@@ -127,7 +166,7 @@ class EdgesBag(Wrapper):
                 outputs.append(out)
 
         outputs, edges = state.context.reverse(all_inputs, outputs, edges)
-        return GraphContainer(all_inputs, outputs, edges, set(), self.backend)
+        return GraphCompiler(all_inputs, outputs, edges, set(), self.backend)
 
 
 def update_map(nodes, node_map):
@@ -139,43 +178,6 @@ def update_map(nodes, node_map):
 
 def identity(x):
     return x
-
-
-class GraphContainer:
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, backend: Backend):
-        tree_node_map = TreeNode.from_edges(edges)
-        self._edges = edges
-        self.inputs = [tree_node_map[x] for x in inputs]
-        self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
-        self.backend = backend
-        self.virtuals = virtuals
-        self.methods = {node.name: self._compile(node) for node in self.outputs.values()}
-
-    def __getitem__(self, item):
-        if item not in self.methods:
-            if isinstance(item, str) and item in self.virtuals:
-                # TODO: signature
-                value = identity
-
-            elif isinstance(item, tuple):
-                outputs = []
-                for name in item:
-                    if name not in self.outputs:
-                        raise ValueError(f'"{name}" is not an available output: {tuple(self.outputs)}')
-                    outputs.append(self.outputs[name])
-
-                product = TreeNode('$product', (ProductEdge(len(item)), outputs))
-                value = self._compile(product)
-
-            else:
-                raise AttributeError(item)
-
-            self.methods[item] = value
-
-        return self.methods[item]
-
-    def _compile(self, node):
-        return Graph(self.inputs, node, self.backend).call
 
 
 def get_parents(node: TreeNode):

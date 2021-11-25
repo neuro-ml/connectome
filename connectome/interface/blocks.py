@@ -13,12 +13,14 @@ from ..containers.filter import FilterContainer
 from ..containers.goup import GroupContainer, MultiGroupLayer
 from ..containers.join import JoinContainer
 from ..containers.merge import SwitchContainer
-from ..containers.shortcuts import ApplyContainer
+from ..containers.transform import TransformContainer
+from ..engine.base import Node
+from ..engine.edges import FunctionEdge
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..storage.config import init_storage
 from ..storage.interface import RemoteStorage
-from ..utils import PathLike, StringsLike
+from ..utils import PathLike, StringsLike, AntiSet
 from .utils import format_arguments
 
 
@@ -112,10 +114,20 @@ class GroupBy(BaseLayer[GroupContainer]):
         return f'GroupBy({repr(self._container.name)})'
 
 
-class Apply(BaseLayer[ApplyContainer]):
+class Apply(CallableLayer):
     def __init__(self, **transform: Callable):
         self.names = sorted(transform)
-        super().__init__(ApplyContainer(transform))
+
+        inputs, outputs, edges = [], [], []
+        for name, func in transform.items():
+            inp, out = Node(name), Node(name)
+            inputs.append(inp)
+            outputs.append(out)
+            edges.append(FunctionEdge(func, arity=1).bind(inp, out))
+
+        super().__init__(TransformContainer(
+            inputs, outputs, edges, forward_virtual=AntiSet(transform), backward_virtual=AntiSet()
+        ), ())
 
     def __repr__(self):
         args = ', '.join(self.names)
@@ -157,6 +169,11 @@ class CacheIndex(NamedTuple):
     remote: Sequence[RemoteStorage] = ()
 
 
+PathLikes = Union[PathLike, Sequence[PathLike]]
+RemoteStorageLike = Union[RemoteStorage, Sequence[RemoteStorage]]
+SerializersLike = Union[Serializer, Sequence[Serializer]]
+
+
 class CacheToDisk(CacheLayer):
     """
     A persistent cache stored on disk.
@@ -164,23 +181,23 @@ class CacheToDisk(CacheLayer):
     Parameters
     ----------
     index
-        the folder where the cache index is stored
+        the folder(s) where the cache index is stored
     storage
         the storage which holds the actual data
     serializer
         the serializer used to save and load the data
     names
         field names that will be cached
+    impure
+        whether to allow caching of `impure` functions
+    remote
+        remote locations that are used to fetch the cache from (if available)
     """
 
-    def __init__(self, index: PathLike, storage: Storage, serializer: Union[Serializer, Sequence[Serializer]],
-                 names: StringsLike, impure: bool = False, fetch: bool = False):
-        names = to_seq(names)
-        serializer = _resolve_serializer(serializer)
-        if isinstance(index, (str, Path)):
-            index = CacheIndex([index], [])
-        local = [CacheIndexStorage(root, storage, serializer) for root in index.local]
-        super().__init__(DiskCacheContainer(names, local, index.remote, impure, fetch))
+    def __init__(self, index: PathLikes, storage: Storage, serializer: SerializersLike, names: StringsLike, *,
+                 impure: bool = False, remote: RemoteStorageLike = ()):
+        names, local, remote = _normalize_disk_arguments(index, remote, names, serializer, storage)
+        super().__init__(DiskCacheContainer(names, local, remote, impure))
 
     @classmethod
     def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None):
@@ -222,21 +239,51 @@ class CacheToDisk(CacheLayer):
 
 
 class CacheColumns(CacheLayer):
-    def __init__(self, index: PathLike, storage: Storage,
-                 serializer: Union[Serializer, Sequence[Serializer]],
-                 names: StringsLike, verbose: bool = False, shard_size: Union[int, float, None] = None):
+    """
+    A combination of a persistent cache stored on disk and a memory cache.
+    The entries are stored on disk in shards, which speeds up read/write operations for large numbers of small files.
+
+    Parameters
+    ----------
+    index
+        the folder(s) where the cache index is stored
+    storage
+        the storage which holds the actual data
+    serializer
+        the serializer used to save and load the data
+    names
+        field names that will be cached
+    remote
+        remote locations that are used to fetch the cache from (if available)
+    verbose
+        whether to show a progressbar during cache generation
+    shard_size
+        the size of a disk storage shard. If int - an absolute size value is used,
+        if float - a portion relative to the dataset is used,
+        if None - all the entries are grouped in a single shard
+    """
+
+    def __init__(self, index: PathLikes, storage: Storage, serializer: SerializersLike, names: StringsLike, *,
+                 verbose: bool = False, shard_size: Union[int, float, None] = None, remote: RemoteStorageLike = ()):
         if shard_size == 1:
             raise ValueError(f'Shard size of 1 is ambiguous. Use None if you want to have a single shard')
-        names = to_seq(names)
-        serializer = _resolve_serializer(serializer)
-        if isinstance(index, (str, Path)):
-            index = CacheIndex([index], [])
-        local = [CacheIndexStorage(root, storage, serializer) for root in index.local]
-        super().__init__(CacheColumnsContainer(
-            names, local, index.remote, verbose=verbose, shard_size=shard_size, fetch=False
-        ))
+        names, local, remote = _normalize_disk_arguments(index, remote, names, serializer, storage)
+        super().__init__(CacheColumnsContainer(names, local, remote, verbose=verbose, shard_size=shard_size))
 
 
 class HashDigest(BaseLayer):
     def __init__(self, names: StringsLike):
         super().__init__(HashDigestContainer(to_seq(names)))
+
+
+def _normalize_disk_arguments(local, remote, names, serializer, storage):
+    names = to_seq(names)
+    serializer = _resolve_serializer(serializer)
+    if isinstance(local, CacheIndex):
+        local, remote = local.local, local.remote
+    if isinstance(local, (str, Path)):
+        local = local,
+    if isinstance(remote, RemoteStorage):
+        remote = remote,
+    local = [CacheIndexStorage(root, storage, serializer) for root in local]
+    return names, local, remote

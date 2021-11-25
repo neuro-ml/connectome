@@ -65,7 +65,6 @@ class SwitchEdge(Edge):
         return value, idx
 
     def evaluate(self) -> Generator[Request, Response, Any]:
-        # TODO: replace by dict lookup?
         payload = yield Command.Payload,
         value = yield Command.ParentValue, payload + 1
         return value

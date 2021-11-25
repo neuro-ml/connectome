@@ -17,6 +17,19 @@ jobs:
           - 6379:6379
         options: --entrypoint redis-server
 
+      openssh-server:
+        image: linuxserver/openssh-server
+        ports:
+          - 2222:2222
+        env:
+          PUID: 1001
+          PGID: 1001
+          PASSWORD_ACCESS: 'true'
+          USER_NAME: remote_user
+          USER_PASSWORD: password
+        volumes:
+          - /tmp:/tmp
+
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}
@@ -25,22 +38,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Create ssh key
         run: |
-          sudo systemctl start --now sshd
-          mkdir ~/.ssh
-          chmod 770 ~/.ssh
+          mkdir ~/.ssh && chmod 770 ~/.ssh
           cp tests/assets/ssh_config ~/.ssh/config
-          cp tests/assets/id_* ~/.ssh
-          cp tests/assets/id_ed25519.pub ~/.ssh/authorized_keys
           # make sure we can connect now
-          # ssh -o "StrictHostKeyChecking no" remote echo Ok
-
+          sshpass -p password ssh -o "StrictHostKeyChecking no" remote echo Ok
       - name: Install dependencies
         run: |
           pip install -e .
           pip install -r tests/requirements.txt
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch -m "not ssh"
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml

@@ -1,10 +1,11 @@
+from abc import ABC, abstractmethod
 from itertools import starmap
 from math import ceil
 from typing import Any, Generator, Union
 
 from tqdm import tqdm
 
-from .base import Nodes, Tuple, BoundEdges, EdgesBag, Wrapper, Context
+from .base import Nodes, Tuple, BoundEdges, EdgesBag, Container, Context
 from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, Edge, HashOutput, Request, Response, Command
 from ..engine.edges import CacheEdge, IdentityEdge, ImpureFunctionEdge
@@ -24,17 +25,18 @@ class IdentityContext(Context):
         return self
 
 
-class CacheBase(Wrapper):
+class CacheBase(Container):
     pass
 
 
-class CacheContainer(CacheBase):
+class CacheContainer(CacheBase, ABC):
     def __init__(self, names, allow_impure):
         self.cache_names = names
         self.allow_impure = allow_impure
 
+    @abstractmethod
     def get_storage(self) -> Cache:
-        raise NotImplementedError
+        """ Create a cache storage instance """
 
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         state = container.freeze()
@@ -60,7 +62,7 @@ class CacheContainer(CacheBase):
             return
 
         if isinstance(node.edge, ImpureFunctionEdge):
-            raise ValueError(f'Our are trying to cache the field "{name}", '
+            raise ValueError(f'You are trying to cache the field "{name}", '
                              f'which has an `impure` dependency - "{node.name}"')
 
         for parent in node.parents:
@@ -80,9 +82,9 @@ class MemoryCacheContainer(CacheContainer):
 
 
 class DiskCacheContainer(CacheContainer):
-    def __init__(self, names, local, remote, allow_impure, fetch):
+    def __init__(self, names, local, remote, allow_impure):
         super().__init__(names, allow_impure)
-        self.storage = DiskCache(local, remote, fetch=fetch)
+        self.storage = DiskCache(local, remote, fetch=bool(remote))
 
     def get_storage(self):
         return self.storage
@@ -93,11 +95,11 @@ class CacheColumnsContainer(CacheBase):
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
 
-    def __init__(self, names, local, remote, verbose, shard_size, fetch):
+    def __init__(self, names, local, remote, verbose, shard_size):
         self.shard_size = shard_size
         self.verbose = verbose
         self.cache_names = names
-        self.disk = DiskCache(local, remote, fetch)
+        self.disk = DiskCache(local, remote, bool(remote))
         self.ram = MemoryCache(None)
 
     def wrap(self, container: EdgesBag) -> EdgesBag:
