@@ -54,7 +54,7 @@ class GroupContainer(Container):
         # update ids
         output_ids = Node('ids')
         outputs.append(output_ids)
-        edges.append(FunctionEdge(extract_keys, n_positional=1).bind(mapping_node, output_ids))
+        edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
         return EdgesBag([changed_input], outputs, edges, NoContext(), persistent_nodes=main.persistent_nodes)
 
@@ -165,7 +165,7 @@ class MultiGroupLayer(Container):
         # update ids
         output_ids = Node('ids')
         outputs.append(output_ids)
-        edges.append(FunctionEdge(extract_keys, n_positional=1).bind(mapping_node, output_ids))
+        edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
         return EdgesBag([changed_input], outputs, edges, NoContext(), persistent_nodes=main.persistent_nodes)
 

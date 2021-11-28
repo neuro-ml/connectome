@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from connectome import Transform
+from connectome import Transform, Function
 from connectome.exceptions import FieldError, GraphError
 
 
@@ -67,3 +67,10 @@ def test_builtin_decorators():
         c.add_one(0)
     with pytest.raises(AttributeError):
         c.util(0)
+
+
+def test_explicit_definitions():
+    class A(Transform):
+        x = Function(lambda a, b, c: [a, b, c], 'name1', c='name3', b='name2')
+
+    assert A().x(name1=1, name2=2, name3=3) == [1, 2, 3]

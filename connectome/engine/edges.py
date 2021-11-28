@@ -53,9 +53,10 @@ class StaticEdge(StaticHash):
 
 
 class FunctionEdge(StaticGraph, StaticHash):
-    def __init__(self, function: Callable, n_positional: int, kw_names: Tuple[str, ...] = (),
+    def __init__(self, function: Callable, arity: int, kw_names: Tuple[str, ...] = (),
                  silent: Tuple[int, ...] = ()):
-        super().__init__(n_positional + len(kw_names))
+        super().__init__(arity)
+        assert len(kw_names) <= arity
         if kw_names:
             assert kw_names == tuple(sorted(kw_names)), kw_names
         if silent:

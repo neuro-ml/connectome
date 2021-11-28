@@ -80,8 +80,8 @@ class Function(FunctionBase):
 
     def build(self, name: str) -> Iterable[TypedEdge]:
         kwargs = sorted(self.kwargs.items())
-        args = self.args + tuple(x[0] for x in kwargs)
-        names = tuple(x[1] for x in kwargs)
+        args = self.args + tuple(x[1] for x in kwargs)
+        names = tuple(x[0] for x in kwargs)
 
         silent, inputs = [], []
         for idx, arg in enumerate(args):
