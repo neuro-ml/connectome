@@ -256,30 +256,28 @@ class GraphFactory:
 
             for edge, inputs, output in value.build(name):
                 # factory types
-                inputs = [self._normalize_input(name, node, value.default_input) for node in inputs]
-                output = self._normalize_output(name, output, value.default_output)
+                inputs = [self._normalize_input(name, node) for node in inputs]
+                output = self._normalize_output(name, output)
                 # engine types
                 inputs = list(map(self._type_to_node, self._validate_inputs(inputs)))
                 output = self._type_to_node(output)
                 # finally add a new edge
                 self.edges.append(edge.bind(inputs, output))
 
-    def _normalize_input(self, name, node: NodeType, default: Type[NodeType]):
-        if isinstance(node, AsOutput):
-            node = Default(name)
+    def _normalize_input(self, name, node: NodeType):
         if isinstance(node, Intermediate):
             node = self._get_intermediate(node)
         if isinstance(node, Default):
-            node = Parameter(node.name) if is_private(node.name) else default(node.name)
+            node = Parameter(node.name) if is_private(node.name) else Input(node.name)
         if not isinstance(node, FinalNodeType):
             raise FieldError(f'Input node for "{name}" has incorrect type: {type(node)}')
         return node
 
-    def _normalize_output(self, name, node: NodeType, default: Type[NodeType]):
+    def _normalize_output(self, name, node: NodeType):
         if isinstance(node, Intermediate):
             node = self._get_intermediate(node)
         if isinstance(node, Default):
-            node = Parameter(node.name) if is_private(node.name) else default(node.name)
+            node = Parameter(node.name) if is_private(node.name) else Output(node.name)
         if not isinstance(node, (Output, InverseOutput, Parameter)):
             raise FieldError(f'Output node for "{name}" has incorrect type: {type(node)}')
         return node

@@ -1,20 +1,17 @@
 from typing import Callable, Iterable
 
-from .edges import EdgeFactory, TypedEdge, Function
-from .nodes import Intermediate, Default, Input, Output
-from ..engine.edges import ComputableHashEdge, FunctionEdge
+from .edges import EdgeFactory, TypedEdge, Function, FunctionWrapper, FunctionBase
+from .nodes import Intermediate, Default, Input, Output, NodeTypes, NodeType
+from ..engine.base import Edge
+from ..engine.edges import ComputableHashEdge
 
 
-class HashByValue(EdgeFactory):
+class HashByValue(FunctionWrapper):
     default_input = Input
     default_output = Output
 
-    def __init__(self, func: Callable):
-        self.func = func
-
-    def build(self, name: str) -> Iterable[TypedEdge]:
-        inputs = Function.extract_arguments(self.func)
-        yield TypedEdge(ComputableHashEdge(self.func, len(inputs)), inputs, Default(name))
+    def _wrap(self, edge: Edge, inputs: NodeTypes, output: NodeType) -> Iterable[TypedEdge]:
+        yield TypedEdge(ComputableHashEdge(edge), inputs, output)
 
 
 class CombinedHashByValue(EdgeFactory):
@@ -22,17 +19,24 @@ class CombinedHashByValue(EdgeFactory):
     default_output = Output
 
     def __init__(self, prepare: Callable, compute: Callable):
+        if not isinstance(prepare, FunctionBase):
+            prepare = Function.decorate(prepare)
+        if not isinstance(compute, FunctionBase):
+            compute = Function.decorate(compute)
         self.prepare = prepare
         self.compute = compute
 
     def build(self, name: str) -> Iterable[TypedEdge]:
-        inputs = Function.extract_arguments(self.prepare)
+        # TODO: here `name` doesn't matter, probably should pass Default(name) inside factory
+        (edge, inputs, output), = self.prepare.build(name)
+        assert isinstance(output, Default)
         inter = Intermediate()
-        yield TypedEdge(ComputableHashEdge(self.prepare, len(inputs)), inputs, inter)
+        yield TypedEdge(ComputableHashEdge(edge), inputs, inter)
 
-        inputs = list(Function.extract_arguments(self.compute))
+        (edge, inputs, output), = self.compute.build(name)
+        inputs = list(inputs)
         inputs[0] = inter
-        yield TypedEdge(FunctionEdge(self.prepare, len(inputs)), inputs, Default(name))
+        yield TypedEdge(edge, inputs, output)
 
 
 def hash_by_value(func: Callable = None, *, prepare: Callable = None, compute: Callable = None):

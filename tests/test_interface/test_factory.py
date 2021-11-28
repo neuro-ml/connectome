@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from connectome import Transform
-from connectome.exceptions import FieldError
+from connectome.exceptions import FieldError, GraphError
 
 
 def test_building():
@@ -15,10 +15,12 @@ def test_building():
 
 
 def test_missing_param():
-    with pytest.raises(FieldError):
+    with pytest.raises(GraphError):
         class A(Transform):
             def f(_param):
-                return
+                pass
+
+        A()
 
 
 def test_builtin_decorators():

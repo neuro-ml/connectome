@@ -185,7 +185,10 @@ def get_parents(node: TreeNode):
         return
 
     for parent in node.parents:
-        yield from get_parents(parent)
+        if parent.is_leaf:
+            yield parent
+        else:
+            yield from get_parents(parent)
 
 
 def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_nodes: Set[str], persistent_nodes):
@@ -219,7 +222,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
     if not_leaves:
         raise GraphError(f'The inputs {not_leaves} are not actual inputs - they have dependencies')
     # 1:
-    missing = {node.output.name for node in set(get_parents(mapping[product])) - tree_inputs}
+    missing = {node.name for node in set(get_parents(mapping[product])) - tree_inputs}
     if missing:
         raise GraphError(f'The nodes {missing} are missing from the inputs')
 

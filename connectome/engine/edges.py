@@ -90,24 +90,17 @@ class FunctionEdge(StaticGraph, StaticHash):
 
 
 class ComputableHashBase(Edge, ABC):
-    def __init__(self, function: Callable, n_positional: int, kw_names: Tuple[str, ...] = ()):
-        super().__init__(n_positional)
-        self.kw_names = kw_names
-        self.function = function
+    def __init__(self, edge: Edge):
+        super().__init__(edge.arity)
+        self.edge = edge
 
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
-        inputs = yield (Command.Await, *(
-            (Command.ParentValue, idx)
-            for idx in range(self.arity)
-        ))
-        if self.kw_names:
-            args = inputs[:-len(self.kw_names)]
-            kwargs = {k: v for k, v in zip(self.kw_names, inputs[-len(self.kw_names):])}
-        else:
-            args, kwargs = inputs, {}
-
-        result = yield Command.Call, self.function, args, kwargs
-        return LeafHash(result), result
+        iterator, value = self.edge.evaluate(), None
+        try:
+            while True:
+                value = yield iterator.send(value)
+        except StopIteration as e:
+            return LeafHash(e.value), e.value
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         return (yield Command.Payload,)
@@ -115,7 +108,7 @@ class ComputableHashBase(Edge, ABC):
 
 class ComputableHashEdge(ComputableHashBase):
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return ApplyHash(self.function, *inputs, kw_names=self.kw_names)
+        return self.edge.hash_graph(inputs)
 
 
 class ImpureFunctionEdge(ComputableHashBase):

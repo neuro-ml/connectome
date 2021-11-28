@@ -3,7 +3,8 @@ from typing import Callable, Dict, Type, Union, Iterable
 
 from .compat import SafeMeta
 from ..utils import MultiDict
-from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals, GraphFactory
+from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals, GraphFactory, \
+    is_detectable
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,10 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
         local = MultiDict()
         local['__inherit__'] = __inherit__
         for name, value in kwargs.items():
-            if not callable(value):
-                raise TypeError(f'All arguments for Transform must be callable. "{name}" is not callable')
+            if not is_detectable(value):
+                raise TypeError(
+                    f'All arguments for Transform must be callable. "{name}" is not callable but {type(value)}'
+                )
 
             local[name] = value
 
