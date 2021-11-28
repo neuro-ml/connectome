@@ -56,7 +56,7 @@ class Executor(ABC):
         pass
 
     @abstractmethod
-    def call(self, func, args):
+    def call(self, func, args, kwargs):
         pass
 
 
@@ -83,8 +83,8 @@ class Synchronous(Backend):
         def enqueue_frame(self, x):
             self.frames.put_nowait(x)
 
-        def call(self, func, args):
-            self.push(func(*args))
+        def call(self, func, args, kwargs):
+            self.push(func(*args, **kwargs))
 
     def build(self, frame: Frame) -> Executor:
         return self._Executor(frame)
@@ -107,9 +107,9 @@ class Threads(Backend):
         def enqueue_frame(self, x):
             self.frames.put(x)
 
-        def call(self, func, args):
+        def call(self, func, args, kwargs):
             thunk = Thunk(self.frame)
-            self.requests.put((func, args, thunk, self.frames))
+            self.requests.put((func, args, kwargs, thunk, self.frames))
             self.push_command((Command.AwaitThunk, thunk))
             self.next_frame()
 
@@ -129,9 +129,9 @@ class Threads(Backend):
             if value is None:
                 break
 
-            func, args, thunk, frames = value
+            func, args, kwargs, thunk, frames = value
             try:
-                thunk.value = func(*args)
+                thunk.value = func(*args, **kwargs)
             except BaseException as e:
                 thunk.error = e
 

@@ -123,7 +123,7 @@ class Apply(CallableLayer):
             inp, out = Node(name), Node(name)
             inputs.append(inp)
             outputs.append(out)
-            edges.append(FunctionEdge(func, arity=1).bind(inp, out))
+            edges.append(FunctionEdge(func, n_positional=1).bind(inp, out))
 
         super().__init__(TransformContainer(
             inputs, outputs, edges, forward_virtual=AntiSet(transform), backward_virtual=AntiSet()

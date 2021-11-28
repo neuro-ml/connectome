@@ -1,5 +1,5 @@
 import logging
-from typing import Sequence
+from typing import Sequence, Type, Union
 
 from ..engine.base import Node
 
@@ -34,25 +34,63 @@ class NodeType:
     def __init__(self, name: str):
         self.name = name
 
+    def __repr__(self):
+        return f'<{type(self).__name__}: {self.name}>'
+
 
 NodeTypes = Sequence[NodeType]
 
 
-class Input(NodeType):
+class FinalNodeType(NodeType):
+    """ Eventually the graph factory contains only this type of nodes """
+
+
+class Input(FinalNodeType):
     pass
 
 
-class Output(NodeType):
+class Output(FinalNodeType):
     pass
 
 
-class InverseInput(NodeType):
+class InverseInput(FinalNodeType):
     pass
 
 
-class InverseOutput(NodeType):
+class InverseOutput(FinalNodeType):
     pass
 
 
-class Parameter(NodeType):
+class Parameter(FinalNodeType):
     pass
+
+
+# special types
+
+class Default(NodeType):
+    pass
+
+
+class AsOutput(NodeType):
+    def __init__(self):
+        super().__init__('')
+
+
+class Intermediate(NodeType):
+    def __init__(self):
+        super().__init__('')
+
+
+class NodeModifier:
+    __slots__ = 'node',
+
+    def __init__(self, node: Union[NodeType, 'NodeModifier', Type[NodeType]]):
+        self.node = node
+
+
+class Silent(NodeModifier):
+    pass
+
+
+def is_private(name: str):
+    return name.startswith('_')
