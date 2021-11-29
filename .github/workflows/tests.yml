@@ -56,12 +56,21 @@ jobs:
         run: |
           pip install dist/*
           pip install -r tests/requirements.txt
+
+          cd tests
+          export MODULE_PARENT=$(python -c "import connectome, os; print(os.path.dirname(connectome.__path__[0]))")
+          cd ..
+          echo $MODULE_PARENT
+          echo "MODULE_PARENT=$(echo $MODULE_PARENT)" >> $GITHUB_ENV
+
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov --cov-report=xml --cov-branch
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov="$MODULE_PARENT" --cov-report=xml --cov-branch
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
+          sed -i -e "s|$MODULE_PARENT||g" reports/coverage-${{ matrix.python-version }}.xml
+          sed -i -e "s|$(echo $MODULE_PARENT | tr "/" .)||g" reports/coverage-${{ matrix.python-version }}.xml
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -70,9 +79,9 @@ jobs:
           path: reports/*-${{ matrix.python-version }}.xml
         if: ${{ always() }}
 
-#      - name: Upload coverage results
-#        uses: codecov/codecov-action@v2
-#        with:
-#          fail_ci_if_error: true
-#          files: reports/coverage-${{ matrix.python-version }}.xml
-#          verbose: true
+      - name: Upload coverage results
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          files: reports/coverage-${{ matrix.python-version }}.xml
+          verbose: true
