@@ -7,17 +7,11 @@ from ..engine.edges import ComputableHashEdge
 
 
 class HashByValue(FunctionWrapper):
-    default_input = Input
-    default_output = Output
-
     def _wrap(self, edge: Edge, inputs: NodeTypes, output: NodeType) -> Iterable[TypedEdge]:
         yield TypedEdge(ComputableHashEdge(edge), inputs, output)
 
 
 class CombinedHashByValue(EdgeFactory):
-    default_input = Input
-    default_output = Output
-
     def __init__(self, prepare: Callable, compute: Callable):
         if not isinstance(prepare, FunctionBase):
             prepare = Function.decorate(prepare)
@@ -48,6 +42,7 @@ def hash_by_value(func: Callable = None, *, prepare: Callable = None, compute: C
         return decorator
 
     if prepare is not None:
+        assert func is None
         return CombinedHashByValue(prepare, compute)
 
     assert func is not None
