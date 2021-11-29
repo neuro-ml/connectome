@@ -7,13 +7,15 @@ from threading import Thread
 
 import pytest
 
-from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns
+from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform
 from connectome.cache import MemoryCache, DiskCache
 from connectome.containers.cache import CachedColumn
 from connectome.engine.edges import CacheEdge
+from connectome.interface.nodes import Silent
 from connectome.serializers import JsonSerializer
 from connectome.storage.config import init_storage
 from connectome.storage.locker import ThreadLocker
+from utils import Counter
 
 
 def sleeper(s):
@@ -126,6 +128,26 @@ def test_columns_cache_sharding(block_maker, disk_cache_factory):
             assert len(c._cache) == total
 
 
+def test_lru():
+    def size(layer):
+        c, = layer._container.cache_instances
+        return len(c._cache)
+
+    cache = CacheToRam()
+    ds = Transform(x=lambda x: x) >> cache
+    for i in range(100):
+        ds.x(i)
+
+    assert size(cache) == 100
+
+    cache = CacheToRam(size=5)
+    ds = Transform(x=lambda x: x) >> cache
+    for i in range(100):
+        assert size(cache) <= 5
+        ds.x(i)
+    assert size(cache) == 5
+
+
 @pytest.mark.redis
 def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
     def visit(storage, root):
@@ -196,3 +218,30 @@ def test_relative_root(block_maker, temp_dir, chdir):
         for i in ds.ids:
             assert ds.image(i) == cached.image(i)
             assert ds.image(i) == cached.image(i)
+
+
+def test_silent_arguments():
+    # y invalidates the cache
+    counter = Counter(lambda x, y: x)
+    ds = Transform(x=counter) >> CacheToRam('x')
+
+    assert ds.x(1, 11) == 1
+    assert ds.x(1, 12) == 1
+    assert counter.n == 2
+
+    # and now it doesn't
+    def f(x, y: Silent):
+        return x
+
+    counter = Counter(f)
+    ds = Transform(x=counter) >> CacheToRam('x')
+
+    assert ds.x(1, 11) == 1
+    assert counter.n == 1
+    assert ds.x(1, 12) == 1
+    assert counter.n == 1
+
+    assert ds.x(2, 21) == 2
+    assert counter.n == 2
+    assert ds.x(2, 22) == 2
+    assert counter.n == 2

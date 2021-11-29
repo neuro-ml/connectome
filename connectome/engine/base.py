@@ -39,7 +39,7 @@ class Edge(ABC):
     def bind(self, inputs: Union['Node', 'Nodes'], output: 'Node') -> 'BoundEdge':
         if isinstance(inputs, Node):
             inputs = [inputs]
-        assert len(inputs) == self.arity
+        assert len(inputs) == self.arity, (len(inputs), self.arity)
         return BoundEdge(self, inputs, output)
 
 

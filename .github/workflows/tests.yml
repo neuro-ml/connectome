@@ -36,28 +36,49 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Check the version and build the package
+        run: |
+          VERSION=$(python -c "from pathlib import Path; import runpy; folder, = {d.parent for d in Path().resolve().glob('*/__init__.py') if d.parent.is_dir() and (d.parent / '__version__.py').exists()}; print(runpy.run_path(folder / '__version__.py')['__version__'])")
+          MATCH=$(pip index versions connectome | grep "Available versions:" | grep $VERSION) || echo
+          echo $MATCH
+          if [ "$GITHUB_BASE_REF" = "master" ] && [ "$MATCH" != "" ]; then exit 1; fi
+          python setup.py sdist
+
       - name: Create ssh key
         run: |
           mkdir ~/.ssh && chmod 770 ~/.ssh
           cp tests/assets/ssh_config ~/.ssh/config
           # make sure we can connect now
           sshpass -p password ssh -o "StrictHostKeyChecking no" remote echo Ok
-      - name: Install dependencies
+
+      - name: Install
         run: |
-          pip install -e .
+          pip install dist/*
           pip install -r tests/requirements.txt
+
+          cd tests
+          export MODULE_PARENT=$(python -c "import connectome, os; print(os.path.dirname(connectome.__path__[0]))")
+          cd ..
+          echo $MODULE_PARENT
+          echo "MODULE_PARENT=$(echo $MODULE_PARENT)" >> $GITHUB_ENV
+
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov="$MODULE_PARENT/connectome" --cov-report=xml --cov-branch
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
-      - name: Upload pytest results
+          sed -i -e "s|$MODULE_PARENT||g" reports/coverage-${{ matrix.python-version }}.xml
+          sed -i -e "s|$(echo $MODULE_PARENT | tr "/" .)||g" reports/coverage-${{ matrix.python-version }}.xml
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: pytest-results-${{ matrix.python-version }}
-          path: reports/junit-${{ matrix.python-version }}.xml
+          name: reports-${{ matrix.python-version }}
+          path: reports/*-${{ matrix.python-version }}.xml
         if: ${{ always() }}
+
       - name: Upload coverage results
         uses: codecov/codecov-action@v2
         with:
