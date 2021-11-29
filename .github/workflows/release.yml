@@ -26,7 +26,7 @@ jobs:
           VERSION=$(python -c "from pathlib import Path; import runpy; folder, = {d.parent for d in Path().resolve().glob('*/__init__.py') if d.parent.is_dir() and (d.parent / '__version__.py').exists()}; print(runpy.run_path(folder / '__version__.py')['__version__'])")
           MATCH=$(pip index versions connectome | grep "Available versions:" | grep $VERSION) || echo
           echo $MATCH
-          if [ "$GITHUB_BASE_REF" = "master" ] && [ "$MATCH" != "" ]; then exit 1; fi
+          if [ "$GITHUB_BASE_REF" = "master" ] && [ "$MATCH" != "" ]; then echo "Version $VERSION already present" && exit 1; fi
           if [ "$VERSION" != "$RELEASE" ]; then echo "$VERSION vs $RELEASE" && exit 1; fi
           python setup.py sdist
 
