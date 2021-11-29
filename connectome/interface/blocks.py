@@ -152,11 +152,15 @@ class CacheLayer(BaseLayer):
 
 
 class CacheToRam(CacheLayer):
-    """ Caches the fields from ``names`` to RAM. """
+    """
+    Caches the fields from ``names`` to RAM.
 
-    def __init__(self, names: StringsLike = None, impure: bool = False):
+    If ``size`` is not None - a LRU cache is used.
+    """
+
+    def __init__(self, names: StringsLike = None, *, size: int = None, impure: bool = False):
         self._cache_instances = weakref.WeakSet()
-        super().__init__(MemoryCacheContainer(names, None, impure, self._cache_instances))
+        super().__init__(MemoryCacheContainer(names, size, impure, self._cache_instances))
 
     def _clear(self):
         """ Clears all the values cached by this layer. """

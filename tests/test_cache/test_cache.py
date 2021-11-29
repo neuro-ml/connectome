@@ -128,6 +128,26 @@ def test_columns_cache_sharding(block_maker, disk_cache_factory):
             assert len(c._cache) == total
 
 
+def test_lru():
+    def size(layer):
+        c, = layer._container.cache_instances
+        return len(c._cache)
+
+    cache = CacheToRam()
+    ds = Transform(x=lambda x: x) >> cache
+    for i in range(100):
+        ds.x(i)
+
+    assert size(cache) == 100
+
+    cache = CacheToRam(size=5)
+    ds = Transform(x=lambda x: x) >> cache
+    for i in range(100):
+        assert size(cache) <= 5
+        ds.x(i)
+    assert size(cache) == 5
+
+
 @pytest.mark.redis
 def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
     def visit(storage, root):

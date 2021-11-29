@@ -1,18 +1,23 @@
 from typing import Union, Any, Tuple
 
+from pylru import lrucache
+
 from .base import Cache
 from ..engine import NodeHash
-from ..storage.locker import ThreadLocker
+from ..storage.locker import ThreadLocker, GlobalThreadLocker
 
 
 class MemoryCache(Cache):
     def __init__(self, size: Union[int, None]):
         super().__init__()
+        # TODO: maybe just always use a global lock without the Locker interface
         if size is not None:
-            raise NotImplementedError('LRU cache is currently not supported')
+            self._cache = lrucache(size)
+            self.locker = GlobalThreadLocker()
 
-        self._cache = {}
-        self.locker = ThreadLocker()
+        else:
+            self._cache = {}
+            self.locker = ThreadLocker()
 
     def get(self, key: NodeHash, context) -> Tuple[Any, bool]:
         key = key.value

@@ -152,6 +152,34 @@ class ThreadLocker(DictRegistry, Locker):
         self._writing = {}
 
 
+class GlobalThreadLocker(Locker):
+    def __init__(self):
+        super().__init__(False)
+        self._lock = Lock()
+
+    def _acquire(self):
+        if self._lock.locked():
+            return False
+        self._lock.acquire()
+        return True
+
+    def _release(self):
+        assert self._lock.locked()
+        self._lock.release()
+
+    def start_reading(self, key: Key) -> bool:
+        return self._acquire()
+
+    def stop_reading(self, key: Key):
+        self._release()
+
+    def start_writing(self, key: Key) -> bool:
+        return self._acquire()
+
+    def stop_writing(self, key: Key):
+        self._release()
+
+
 class RedisLocker(Locker):
     def __init__(self, *args, prefix: str, expire: int):
         super().__init__(True)
