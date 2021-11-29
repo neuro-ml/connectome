@@ -1,6 +1,6 @@
 from collections import Callable
 
-from connectome.interface.nodes import NodeModifier, NodeType
+from .nodes import NodeModifier
 
 
 def format_arguments(blocks):

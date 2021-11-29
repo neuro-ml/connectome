@@ -1,18 +1,17 @@
 import inspect
 import logging
-from typing import Dict, Any, Iterable, Callable, Type
+from typing import Dict, Any, Iterable, Callable
 
 from .edges import EdgeFactory, Function
 from ..containers.base import EdgesBag
-from ..engine.base import Node
 from ..engine.edges import IdentityEdge, ConstantEdge
 from ..exceptions import GraphError, FieldError
 from ..containers.transform import TransformContainer, normalize_inherit
 from ..utils import MultiDict
 from .nodes import NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes, NodeType, Default, \
-    AsOutput, Intermediate, FinalNodeType
+    Intermediate, FinalNodeType, is_private
 from .base import CallableLayer
-from .factory_utils import add_quals, is_private, to_argument
+from .factory_utils import add_quals, to_argument
 from .decorators import Meta, Optional, RuntimeAnnotation
 
 logger = logging.getLogger(__name__)
