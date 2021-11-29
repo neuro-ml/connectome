@@ -58,7 +58,7 @@ jobs:
           pip install -r tests/requirements.txt
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov=./connectome --cov-report=xml --cov-branch
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov-report=xml --cov-branch
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
@@ -70,9 +70,9 @@ jobs:
           path: reports/*-${{ matrix.python-version }}.xml
         if: ${{ always() }}
 
-      - name: Upload coverage results
-        uses: codecov/codecov-action@v2
-        with:
-          fail_ci_if_error: true
-          files: reports/coverage-${{ matrix.python-version }}.xml
-          verbose: true
+#      - name: Upload coverage results
+#        uses: codecov/codecov-action@v2
+#        with:
+#          fail_ci_if_error: true
+#          files: reports/coverage-${{ matrix.python-version }}.xml
+#          verbose: true
