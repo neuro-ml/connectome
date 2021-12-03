@@ -66,6 +66,7 @@ class FunctionEdge(StaticGraph, StaticHash):
         self.function = function
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
+        # TODO: optimize this
         if self.silent:
             silent_hash = LeafHash(None)
             inputs = list(inputs)
