@@ -113,7 +113,7 @@ class ComputableHashEdge(ComputableHashBase):
         return self.edge.hash_graph(inputs)
 
 
-class ImpureFunctionEdge(ComputableHashBase):
+class ImpureEdge(ComputableHashBase):
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         raise HashError("Impure edges can't be a part of a subgraph")
 

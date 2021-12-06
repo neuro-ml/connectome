@@ -197,6 +197,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
     # 2. each node can only have a single incoming edge
     # 2a. the intersection between outputs and virtual nodes must be empty
     # 3. virtual edges with a present input node become non-virtual
+    # 4. the graph must be acyclic
     inputs, outputs = node_to_dict(inputs), node_to_dict(outputs)
     edges = list(edges)
 
@@ -213,10 +214,22 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
         edges.append(IdentityEdge().bind(inputs[name], outputs[name]))
 
     # 2:
-    product = Node('$product')
-    # this call already has the check
-    mapping = TreeNode.from_edges(edges + [ProductEdge(len(outputs)).bind(tuple(outputs.values()), product)])
+    adjacency = {}
+    for edge in edges:
+        if edge.output in adjacency:
+            raise GraphError(f'The node "{edge.output.name}" has multiple incoming edges')
+        adjacency[edge.output] = edge.inputs
+    # 4:
+    cycles = detect_cycles(adjacency)
+    if cycles:
+        raise GraphError(
+            'The computational graph contains cycles:\n  ' +
+            '\n  '.join(' -> '.join(node.name for node in nodes) for nodes in cycles)
+        )
+
     # 1a:
+    product = Node('$product')
+    mapping = TreeNode.from_edges(edges + [ProductEdge(len(outputs)).bind(tuple(outputs.values()), product)])
     tree_inputs = {mapping[node] for node in inputs.values()}
     not_leaves = {node.output.name for node in tree_inputs if not node.is_leaf}
     if not_leaves:
@@ -227,3 +240,28 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
         raise GraphError(f'The nodes {missing} are missing from the inputs')
 
     return tuple(inputs.values()), tuple(outputs.values()), tuple(edges), virtual_nodes
+
+
+def detect_cycles(adjacency):
+    def visit(node):
+        if node in visited:
+            # the node was not completely visited
+            if not visited[node]:
+                cycles.append(tuple(stack) + (node,))
+
+            return
+
+        visited[node] = False
+        stack.append(node)
+
+        for parent in adjacency[node]:
+            visit(parent)
+
+        stack.pop()
+        visited[node] = True
+
+    stack, visited, cycles = [], {}, []
+    for n in adjacency:
+        visit(n)
+
+    return cycles

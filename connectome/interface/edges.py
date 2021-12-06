@@ -4,7 +4,7 @@ from typing import Iterable, Callable, NamedTuple
 
 from .decorators import RuntimeAnnotation
 from ..engine.base import Edge
-from ..engine.edges import FunctionEdge, ImpureFunctionEdge
+from ..engine.edges import FunctionEdge, ImpureEdge
 from .utils import replace_annotation
 from .nodes import *
 
@@ -193,7 +193,7 @@ class Positional(FunctionWrapper):
 
 class Impure(FunctionWrapper):
     def _wrap(self, edge: Edge, inputs: NodeTypes, output: NodeType) -> Iterable[TypedEdge]:
-        yield TypedEdge(ImpureFunctionEdge(edge), inputs, output)
+        yield TypedEdge(ImpureEdge(edge), inputs, output)
 
 
 inverse, positional, impure = Inverse.decorate, Positional.decorate, Impure.decorate
