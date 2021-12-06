@@ -254,7 +254,7 @@ def detect_cycles(adjacency):
         visited[node] = False
         stack.append(node)
 
-        for parent in adjacency[node]:
+        for parent in adjacency.get(node, ()):
             visit(parent)
 
         stack.pop()
