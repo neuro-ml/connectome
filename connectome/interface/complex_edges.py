@@ -1,7 +1,7 @@
 from typing import Callable, Iterable
 
 from .edges import EdgeFactory, TypedEdge, Function, FunctionWrapper, FunctionBase
-from .nodes import Intermediate, Default, Input, Output, NodeTypes, NodeType
+from .nodes import Intermediate, Default, NodeTypes, NodeType
 from ..engine.base import Edge
 from ..engine.edges import ComputableHashEdge
 
@@ -46,8 +46,4 @@ def hash_by_value(func: Callable = None, *, prepare: Callable = None, compute: C
         return CombinedHashByValue(prepare, compute)
 
     assert func is not None
-    return HashByValue(func)
-
-
-# TODO: deprecated
-ComputableHash = CombinedHashByValue
+    return HashByValue.decorate(func)
