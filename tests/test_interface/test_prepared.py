@@ -30,6 +30,16 @@ def test_hash():
     assert one.field('12345678') == one.field('1234----') == two.field('1234')
 
 
+def test_hash_by_value():
+    class A(Transform):
+        @hash_by_value
+        def x(a, b, c):
+            return a + b + c
+
+    ds = A() >> HashDigest(['x'])
+    assert ds.x(1, 2, 3) == ds.x(3, 2, 1)
+
+
 def test_impure():
     def count():
         nonlocal counter

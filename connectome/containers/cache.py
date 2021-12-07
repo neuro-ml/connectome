@@ -8,7 +8,7 @@ from tqdm import tqdm
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Container, Context
 from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, Edge, HashOutput, Request, Response, Command
-from ..engine.edges import CacheEdge, IdentityEdge, ImpureFunctionEdge
+from ..engine.edges import CacheEdge, IdentityEdge, ImpureEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import NodeHashes, TupleHash
 from ..exceptions import DependencyError
@@ -61,7 +61,7 @@ class CacheContainer(CacheBase, ABC):
         if node.is_leaf:
             return
 
-        if isinstance(node.edge, ImpureFunctionEdge):
+        if isinstance(node.edge, ImpureEdge):
             raise ValueError(f'You are trying to cache the field "{name}", '
                              f'which has an `impure` dependency - "{node.name}"')
 

@@ -34,7 +34,10 @@ class MultiDict(Dict[str, List]):
         return super().__getitem__(key)[-1]
 
     def __delitem__(self, key):
-        raise ValueError("Can't delete names from this scope")
+        if len(self.get(key, ())) > 1:
+            raise ValueError("Can't delete a name with multiple definitions")
+
+        super().__delitem__(key)
 
 
 class AntiSet(AbstractSet):

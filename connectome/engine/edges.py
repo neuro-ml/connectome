@@ -66,6 +66,7 @@ class FunctionEdge(StaticGraph, StaticHash):
         self.function = function
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
+        # TODO: optimize this
         if self.silent:
             silent_hash = LeafHash(None)
             inputs = list(inputs)
@@ -112,7 +113,7 @@ class ComputableHashEdge(ComputableHashBase):
         return self.edge.hash_graph(inputs)
 
 
-class ImpureFunctionEdge(ComputableHashBase):
+class ImpureEdge(ComputableHashBase):
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
         raise HashError("Impure edges can't be a part of a subgraph")
 
