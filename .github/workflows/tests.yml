@@ -59,6 +59,7 @@ jobs:
 
           cd tests
           export MODULE_PARENT=$(python -c "import connectome, os; print(os.path.dirname(connectome.__path__[0]))")
+          export MODULE_PARENT=${MODULE_PARENT%"/"}
           cd ..
           echo $MODULE_PARENT
           echo "MODULE_PARENT=$(echo $MODULE_PARENT)" >> $GITHUB_ENV
@@ -69,8 +70,8 @@ jobs:
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
-          sed -i -e "s|$MODULE_PARENT||g" reports/coverage-${{ matrix.python-version }}.xml
-          sed -i -e "s|$(echo $MODULE_PARENT | tr "/" .)||g" reports/coverage-${{ matrix.python-version }}.xml
+          sed -i -e "s|$MODULE_PARENT/||g" reports/coverage-${{ matrix.python-version }}.xml
+          sed -i -e "s|$(echo $MODULE_PARENT/ | tr "/" .)||g" reports/coverage-${{ matrix.python-version }}.xml
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
