@@ -1,2 +1,3 @@
-sphinx_rtd_theme
-sphinx
+mkdocs
+mkdocs-jupyter
+mkdocs-exclude
