@@ -1,12 +1,15 @@
 import operator
 import weakref
 from pathlib import Path
-from typing import Union, Sequence, Callable, Iterable, NamedTuple
+from typing import Union, Sequence, Callable, Iterable
 
 import numpy as np
 
+from stash import RemoteStorage
+from stash.cache import CacheIndex
+from stash.config import init_storage, StorageConfig
+
 from .base import BaseLayer, CallableLayer
-from ..cache.disk.index import CacheIndexStorage
 from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, CacheColumnsContainer
 from ..containers.debug import HashDigestContainer
 from ..containers.filter import FilterContainer
@@ -18,8 +21,6 @@ from ..engine.base import Node
 from ..engine.edges import FunctionEdge
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
-from ..storage.config import init_storage
-from ..storage.interface import RemoteStorage
 from ..utils import PathLike, StringsLike, AntiSet
 from .utils import format_arguments
 
@@ -187,11 +188,6 @@ class CacheToRam(CacheLayer):
             cache.clear()
 
 
-class CacheIndex(NamedTuple):
-    local: Sequence[PathLike]
-    remote: Sequence[RemoteStorage] = ()
-
-
 PathLikes = Union[PathLike, Sequence[PathLike]]
 RemoteStorageLike = Union[RemoteStorage, Sequence[RemoteStorage]]
 SerializersLike = Union[Serializer, Sequence[Serializer]]
@@ -243,8 +239,8 @@ class CacheToDisk(CacheLayer):
         storage = root / 'storage'
 
         if not children:
-            init_storage(index, algorithm={'name': 'sha256'}, levels=[1, 31])
-            init_storage(storage, algorithm={'name': 'sha256'}, levels=[1, 31])
+            init_storage(StorageConfig(hash='sha256', levels=[1, 31]), index)
+            init_storage(StorageConfig(hash='sha256', levels=[1, 31]), storage)
         elif children != {index, storage}:
             names = tuple(x.name for x in children)
             raise FileNotFoundError(
@@ -302,11 +298,9 @@ class HashDigest(BaseLayer):
 def _normalize_disk_arguments(local, remote, names, serializer, storage):
     names = to_seq(names)
     serializer = _resolve_serializer(serializer)
-    if isinstance(local, CacheIndex):
-        local, remote = local.local, local.remote
     if isinstance(local, (str, Path)):
         local = local,
     if isinstance(remote, RemoteStorage):
         remote = remote,
-    local = [CacheIndexStorage(root, storage, serializer) for root in local]
+    local = [CacheIndex(root, storage, serializer) for root in local]
     return names, local, remote

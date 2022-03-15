@@ -1,4 +1,0 @@
-Host remote
-    User remote_user
-    HostName localhost
-    Port 2222

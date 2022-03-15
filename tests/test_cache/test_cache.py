@@ -7,14 +7,16 @@ from threading import Thread
 
 import pytest
 
+from stash.config import init_storage, StorageConfig
+from stash.tools import GlobalThreadLocker
+
 from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform
 from connectome.cache import MemoryCache, DiskCache
 from connectome.containers.cache import CachedColumn
 from connectome.engine.edges import CacheEdge
 from connectome.interface.nodes import Silent
 from connectome.serializers import JsonSerializer
-from connectome.storage.config import init_storage
-from connectome.storage.locker import ThreadLocker
+
 from utils import Counter
 
 
@@ -39,13 +41,14 @@ def assert_empty_state(block):
     caches = list(find_cache())
     assert caches
     for cache in caches:
-        assert isinstance(cache, (MemoryCache, DiskCache))
-        locker = cache.locker if isinstance(cache, MemoryCache) else cache.cache.local[0].locker
+        if isinstance(cache, DiskCache):
+            locker = cache.cache.levels[0].locations[0].locker
+            assert isinstance(locker, GlobalThreadLocker)
+            # the state must be cleaned up
+            assert not locker._lock.locked()
 
-        assert isinstance(locker, ThreadLocker)
-        # the state must be cleaned up
-        assert not locker._reading
-        assert not locker._writing
+        else:
+            assert isinstance(cache, MemoryCache)
 
 
 def test_memory_locking(block_maker):
@@ -79,8 +82,9 @@ def test_errors_handling(block_maker, disk_cache_factory):
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
     i = ds.ids[0]
 
-    with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}) as disk_cache:
-        with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}, cls=CacheColumns) as cols_cache:
+    with disk_cache_factory('image', JsonSerializer(), {'name': 'GlobalThreadLocker'}) as disk_cache:
+        with disk_cache_factory('image', JsonSerializer(), {'name': 'GlobalThreadLocker'},
+                                cls=CacheColumns) as cols_cache:
             for layer in [CacheToRam(), disk_cache, cols_cache]:
                 # one thread
                 cached = ds >> Apply(image=throw) >> layer
@@ -107,7 +111,7 @@ def test_columns_cache_sharding(block_maker, disk_cache_factory):
 
     for size in [100, 200, 10, 0.5, 0.1, 0.99, None]:
         with disk_cache_factory(
-                'image', JsonSerializer(), {'name': 'ThreadLocker'}, shard_size=size, cls=CacheColumns
+                'image', JsonSerializer(), {'name': 'GlobalThreadLocker'}, shard_size=size, cls=CacheColumns
         ) as cache:
             cached = ds >> cache
             cached.image(i)
@@ -162,10 +166,10 @@ def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
         with tempfile.TemporaryDirectory() as temp, storage_factory() as temp_storage:
             temp = Path(temp) / 'cache'
             init_storage(
-                temp, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 63], locker={
+                StorageConfig(hash='blake2b', levels=[1, 63], locker={
                     'name': 'RedisLocker', 'args': [redis_hostname],
                     'kwargs': {'prefix': 'connectome.tests', 'expire': 10}
-                }
+                }), temp,
             )
 
             th = Process(target=visit, args=(temp_storage, temp))
@@ -182,7 +186,7 @@ def test_disk_locking_threads(block_maker, disk_cache_factory):
 
     ds = block_maker.first_ds(first_constant=2, ids_arg=3)
     for _ in range(5):
-        with disk_cache_factory('image', JsonSerializer(), {'name': 'ThreadLocker'}) as disk_cache:
+        with disk_cache_factory('image', JsonSerializer(), {'name': 'GlobalThreadLocker'}) as disk_cache:
             cached = ds >> Apply(image=sleeper(0.1)) >> disk_cache
             th = Thread(target=visit)
             th.start()
