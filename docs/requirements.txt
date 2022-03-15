@@ -2,3 +2,4 @@ mkdocs
 mkdocs-jupyter
 mkdocs-exclude
 mkdocstrings
+ipython_genutils
