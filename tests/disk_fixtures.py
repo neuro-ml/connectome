@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-from stash.config import init_storage, StorageConfig
+from tarn.config import init_storage, StorageConfig
 
 from connectome import CacheToDisk
 from connectome.storage import Storage, Disk

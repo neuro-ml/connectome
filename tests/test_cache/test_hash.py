@@ -1,7 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from stash.config import init_storage, StorageConfig
+from tarn.config import init_storage, StorageConfig
 
 from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns
 from connectome.interface.blocks import HashDigest

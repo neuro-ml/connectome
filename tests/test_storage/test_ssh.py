@@ -2,7 +2,7 @@ import pytest
 
 from connectome import Transform
 from connectome.serializers import JsonSerializer
-from stash import SSHLocation
+from tarn import SSHLocation
 from utils import Counter
 
 

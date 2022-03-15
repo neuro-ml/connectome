@@ -7,8 +7,8 @@ from threading import Thread
 
 import pytest
 
-from stash.config import init_storage, StorageConfig
-from stash.tools import GlobalThreadLocker
+from tarn.config import init_storage, StorageConfig
+from tarn.tools import GlobalThreadLocker
 
 from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform
 from connectome.cache import MemoryCache, DiskCache

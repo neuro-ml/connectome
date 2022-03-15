@@ -5,7 +5,7 @@ from connectome import Source, Transform, Chain, CacheToRam, meta
 from connectome.exceptions import DependencyError, FieldError
 from connectome.interface.base import LazyChain
 from connectome.interface.blocks import HashDigest, CacheColumns, Merge
-from stash.config import StorageConfig, init_storage
+from tarn.config import StorageConfig, init_storage
 
 
 class DS(Source):

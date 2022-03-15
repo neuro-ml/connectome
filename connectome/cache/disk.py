@@ -1,7 +1,7 @@
 import logging
 from typing import Sequence
 
-from stash.cache import CacheIndex, CacheStorage
+from tarn.cache import CacheIndex, CacheStorage
 
 from .base import Cache
 

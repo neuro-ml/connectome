@@ -5,7 +5,7 @@ import pytest
 from connectome import Transform, CacheToDisk
 from connectome.exceptions import StorageCorruption
 from connectome.serializers import JsonSerializer
-from stash.cache.pickler import LATEST_VERSION
+from tarn.cache.pickler import LATEST_VERSION
 
 
 def setup_cache(temp_dir):

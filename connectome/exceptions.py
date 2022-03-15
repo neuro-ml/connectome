@@ -1,5 +1,5 @@
 # TODO: legacy support
-from stash.exceptions import StorageCorruption
+from tarn.exceptions import StorageCorruption
 
 
 class GraphError(Exception):

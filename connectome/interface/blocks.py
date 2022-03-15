@@ -5,9 +5,9 @@ from typing import Union, Sequence, Callable, Iterable
 
 import numpy as np
 
-from stash import RemoteStorage
-from stash.cache import CacheIndex
-from stash.config import init_storage, StorageConfig
+from tarn import RemoteStorage
+from tarn.cache import CacheIndex
+from tarn.config import init_storage, StorageConfig
 
 from .base import BaseLayer, CallableLayer
 from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, CacheColumnsContainer

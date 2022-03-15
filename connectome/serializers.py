@@ -1,2 +1,2 @@
 # TODO: legacy support
-from stash.cache.serializers import *
+from tarn.cache.serializers import *
