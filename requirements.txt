@@ -1,4 +1,4 @@
 numpy
 tqdm
 pylru
-tarn<=0.1.0
+tarn<0.1.0
