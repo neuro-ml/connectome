@@ -1,12 +1,15 @@
 import operator
 import weakref
 from pathlib import Path
-from typing import Union, Sequence, Callable, Iterable, NamedTuple
+from typing import Union, Sequence, Callable, Iterable
 
 import numpy as np
 
+from tarn import RemoteStorage
+from tarn.cache import CacheIndex
+from tarn.config import init_storage, StorageConfig
+
 from .base import BaseLayer, CallableLayer
-from ..cache.disk.index import CacheIndexStorage
 from ..containers.cache import MemoryCacheContainer, DiskCacheContainer, CacheColumnsContainer
 from ..containers.debug import HashDigestContainer
 from ..containers.filter import FilterContainer
@@ -18,8 +21,6 @@ from ..engine.base import Node
 from ..engine.edges import FunctionEdge
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
-from ..storage.config import init_storage
-from ..storage.interface import RemoteStorage
 from ..utils import PathLike, StringsLike, AntiSet
 from .utils import format_arguments
 
@@ -115,8 +116,27 @@ class GroupBy(BaseLayer[GroupContainer]):
 
 
 class Apply(CallableLayer):
+    """
+    A layer that applies separate functions to each of the specified names.
+
+    `Apply` provides a convenient shortcut for transformations that only depend on the previous value of the name.
+
+    Examples
+    --------
+    >>> Apply(image=zoom, mask=zoom_binary)
+    >>> # is the same as using
+    >>> class Zoom(Transform):
+    >>>     __inherit__ = True
+    >>>
+    >>>     def image(image):
+    >>>         return zoom(image)
+    >>>
+    >>>     def mask(mask):
+    >>>         return zoom_binary(mask)
+    """
+
     def __init__(self, **transform: Callable):
-        self.names = sorted(transform)
+        self._names = sorted(transform)
 
         inputs, outputs, edges = [], [], []
         for name, func in transform.items():
@@ -130,7 +150,7 @@ class Apply(CallableLayer):
         ), ())
 
     def __repr__(self):
-        args = ', '.join(self.names)
+        args = ', '.join(self._names)
         return f'Apply({args})'
 
 
@@ -166,11 +186,6 @@ class CacheToRam(CacheLayer):
         """ Clears all the values cached by this layer. """
         for cache in self._cache_instances:
             cache.clear()
-
-
-class CacheIndex(NamedTuple):
-    local: Sequence[PathLike]
-    remote: Sequence[RemoteStorage] = ()
 
 
 PathLikes = Union[PathLike, Sequence[PathLike]]
@@ -224,8 +239,8 @@ class CacheToDisk(CacheLayer):
         storage = root / 'storage'
 
         if not children:
-            init_storage(index, algorithm={'name': 'sha256'}, levels=[1, 31])
-            init_storage(storage, algorithm={'name': 'sha256'}, levels=[1, 31])
+            init_storage(StorageConfig(hash='sha256', levels=[1, 31]), index)
+            init_storage(StorageConfig(hash='sha256', levels=[1, 31]), storage)
         elif children != {index, storage}:
             names = tuple(x.name for x in children)
             raise FileNotFoundError(
@@ -283,11 +298,9 @@ class HashDigest(BaseLayer):
 def _normalize_disk_arguments(local, remote, names, serializer, storage):
     names = to_seq(names)
     serializer = _resolve_serializer(serializer)
-    if isinstance(local, CacheIndex):
-        local, remote = local.local, local.remote
     if isinstance(local, (str, Path)):
         local = local,
     if isinstance(remote, RemoteStorage):
         remote = remote,
-    local = [CacheIndexStorage(root, storage, serializer) for root in local]
+    local = [CacheIndex(root, storage, serializer) for root in local]
     return names, local, remote

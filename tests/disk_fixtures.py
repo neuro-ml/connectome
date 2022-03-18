@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
+from tarn.config import init_storage, StorageConfig
 
 from connectome import CacheToDisk
 from connectome.storage import Storage, Disk
-from connectome.storage.config import init_storage
 
 
 @pytest.fixture
@@ -21,8 +21,8 @@ def storage_factory():
                 root = Path(root) / name
                 roots.append(root)
                 init_storage(
+                    StorageConfig(hash='blake2b', levels=[1, 63], locker=locker),
                     root, group=group,
-                    algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 31, 32], locker=locker
                 )
 
             yield Storage(list(map(Disk, roots)))
@@ -33,7 +33,7 @@ def storage_factory():
 @pytest.fixture
 def disk_cache_factory(storage_factory):
     def init(root, storage, serializer, names, locker, cls, **kwargs):
-        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 63], locker=locker)
+        init_storage(StorageConfig(hash='blake2b', levels=[1, 63], locker=locker), root)
         return cls(root, storage, serializer, names, **kwargs)
 
     @contextmanager

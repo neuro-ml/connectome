@@ -2,7 +2,8 @@ from functools import partial
 from hashlib import blake2b
 from typing import Iterable, Any, Generator
 
-from ..cache.disk.cache import key_to_digest
+from tarn.cache.storage import key_to_digest
+
 from .transform import TransformContainer
 from ..engine.base import Node, Request, Response, Command
 from ..engine.edges import StaticHash, StaticGraph

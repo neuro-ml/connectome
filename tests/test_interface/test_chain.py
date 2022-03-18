@@ -5,7 +5,7 @@ from connectome import Source, Transform, Chain, CacheToRam, meta
 from connectome.exceptions import DependencyError, FieldError
 from connectome.interface.base import LazyChain
 from connectome.interface.blocks import HashDigest, CacheColumns, Merge
-from connectome.storage.config import init_storage
+from tarn.config import StorageConfig, init_storage
 
 
 class DS(Source):
@@ -209,7 +209,7 @@ def test_lazy(tmpdir, storage_factory):
 
     with storage_factory() as storage:
         root = Path(tmpdir) / 'cache'
-        init_storage(root, algorithm={'name': 'blake2b', 'digest_size': 64}, levels=[1, 63])
+        init_storage(StorageConfig(hash='blake2b', levels=[1, 63]), root)
         cache = CacheColumns(root, storage, [], [])
         A() >> B() >> cache
         with pytest.raises(DependencyError):

@@ -3,9 +3,9 @@ import os
 import pytest
 
 from connectome import Transform, CacheToDisk
-from connectome.cache.pickler import LATEST_VERSION
 from connectome.exceptions import StorageCorruption
 from connectome.serializers import JsonSerializer
+from tarn.cache.pickler import LATEST_VERSION
 
 
 def setup_cache(temp_dir):

@@ -1,2 +1,5 @@
-sphinx_rtd_theme
-sphinx
+mkdocs
+mkdocs-jupyter
+mkdocs-exclude
+mkdocstrings
+ipython_genutils

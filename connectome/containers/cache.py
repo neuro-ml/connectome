@@ -3,7 +3,7 @@ from itertools import starmap
 from math import ceil
 from typing import Any, Generator, Union
 
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from .base import Nodes, Tuple, BoundEdges, EdgesBag, Container, Context
 from ..engine import NodeHash
