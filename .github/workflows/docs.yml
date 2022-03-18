@@ -1,9 +1,8 @@
 name: docs
 
 on:
-  push:
-    branches:
-      - dev
+  release:
+    types: [ released ]
 
 jobs:
   deploy:
