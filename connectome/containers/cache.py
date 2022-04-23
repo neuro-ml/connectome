@@ -161,7 +161,8 @@ class CachedColumn(Edge):
 
     def _get_shard(self, key, keys):
         keys = sorted(keys)
-        assert key in keys
+        if key not in keys:
+            raise ValueError(f'The key "{key}" is not present among the {len(keys)} keys cached by this layer')
 
         size = self.shard_size
         if size is None:

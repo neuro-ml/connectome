@@ -51,7 +51,12 @@ class FunctionBase(EdgeFactory, ABC):
         signature = list(inspect.signature(func).parameters.values())
         args = []
         for idx, parameter in enumerate(signature):
-            assert parameter.default == parameter.empty, parameter
+            if parameter.default != parameter.empty:
+                raise ValueError(
+                    f'Function {func} has a default value for parameter {parameter.name}. '
+                    'Default parameters are currently not supported.'
+                )
+
             is_positional = idx == 0 and parameter.kind == parameter.POSITIONAL_ONLY
             if not is_positional:
                 assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
