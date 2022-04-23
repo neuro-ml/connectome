@@ -43,26 +43,36 @@ def test_corrupted_error(temp_dir):
 
 @pytest.mark.skipif(LATEST_VERSION == 0, reason='Current pickler has a single version')
 def test_versioning(monkeypatch, temp_dir):
-    def f(x):
-        nonlocal count
-        count += 1
-        return 1
-
-    count = 0
+    counter = A()
+    counter.count = 0
     cache = CacheToDisk.simple('x', root=temp_dir, serializer=JsonSerializer())
-    ds = Transform(x=f) >> cache
+    ds = Transform(x=counter.f) >> cache
     index = temp_dir / 'index'
     real = LATEST_VERSION
     monkeypatch.setattr('tarn.cache.pickler.LATEST_VERSION', 0)
 
+    # fill the cache
     value = ds.x(1)
-    assert count == 1
+    assert counter.count == 1
     assert len(list(index.glob('*/*'))) == 1
+
+    # restore the state - otherwise the cache is invalidated
+    counter.count = 0
     assert ds.x(1) == value
-    assert count == 1
+    assert counter.count == 0
     assert len(list(index.glob('*/*'))) == 1
 
     monkeypatch.setattr('tarn.cache.pickler.LATEST_VERSION', real)
     assert ds.x(1) == value
-    assert count == 1
+    assert counter.count == 0
     assert len(list(index.glob('*/*'))) == 2
+
+
+class A:
+    def f(self, x):
+        self.count += 1
+        return 1
+
+    @classmethod
+    def __getversion__(cls):
+        return 1
