@@ -53,7 +53,7 @@ def test_versioning(monkeypatch, temp_dir):
     ds = Transform(x=f) >> cache
     index = temp_dir / 'index'
     real = LATEST_VERSION
-    monkeypatch.setattr('connectome.cache.pickler.LATEST_VERSION', 0)
+    monkeypatch.setattr('tarn.cache.pickler.LATEST_VERSION', 0)
 
     value = ds.x(1)
     assert count == 1
@@ -62,7 +62,7 @@ def test_versioning(monkeypatch, temp_dir):
     assert count == 1
     assert len(list(index.glob('*/*'))) == 1
 
-    monkeypatch.setattr('connectome.cache.pickler.LATEST_VERSION', real)
+    monkeypatch.setattr('tarn.cache.pickler.LATEST_VERSION', real)
     assert ds.x(1) == value
     assert count == 1
     assert len(list(index.glob('*/*'))) == 2
