@@ -109,8 +109,17 @@ def extract_signature(func):
     annotations = {}
     signature = inspect.signature(func)
     for parameter in signature.parameters.values():
-        assert parameter.default == parameter.empty, parameter
-        assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
+        if parameter.default != parameter.empty:
+            raise ValueError(
+                f'Function {func} has a default value for parameter {parameter.name}. '
+                'Default parameters are currently not supported.'
+            )
+        if parameter.kind != parameter.POSITIONAL_OR_KEYWORD:
+            raise ValueError(
+                f'Error for function {func}, parameter {parameter.name}: '
+                f'all parameters must be "positional-or-keyword"'
+            )
+
         names.append(parameter.name)
         annotations[parameter.name] = parameter.annotation
 
