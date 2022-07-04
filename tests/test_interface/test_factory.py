@@ -1,7 +1,9 @@
+import re
+
 import numpy as np
 import pytest
 
-from connectome import Transform, Function
+from connectome import Transform, Function, Source, meta
 from connectome.exceptions import FieldError, GraphError
 
 
@@ -74,3 +76,14 @@ def test_explicit_definitions():
         x = Function(lambda a, b, c: [a, b, c], 'name1', c='name3', b='name2')
 
     assert A().x(name1=1, name2=2, name3=3) == [1, 2, 3]
+
+
+def test_multiple_keys():
+    with pytest.raises(FieldError, match=re.escape("Trying to use multiple arguments as keys: ('x', 'y')")):
+        class A(Source):
+            @meta
+            def ids():
+                return
+
+            def f(x, y):
+                return

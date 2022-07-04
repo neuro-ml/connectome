@@ -348,7 +348,7 @@ class SourceFactory(GraphFactory):
         if not ids:
             return inputs
         if len(ids) > 1:
-            raise TypeError(f'Trying to use multiple arguments as keys: {(x.name for x in ids)}')
+            raise FieldError(f'Trying to use multiple arguments as keys: {tuple(sorted(x.name for x in ids))}')
         i, = ids
         return [x if x != i else Input(self._key_name) for x in inputs]
 
