@@ -28,7 +28,7 @@ class APIMeta(SafeMeta):
         bases = set(bases)
         intersection = set(BASES) & bases
         if len(intersection) != 1:
-            raise TypeError(f'Layers must inherit from on of ' + ', '.join(x.__name__ for x in BASES))
+            raise TypeError(f'Layers must inherit from one of ' + ', '.join(x.__name__ for x in BASES))
 
         main, = intersection
         factory = BASES[main]
