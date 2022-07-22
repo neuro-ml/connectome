@@ -1,3 +1,10 @@
+[![docs](https://img.shields.io/badge/-docs-success)](https://neuro-ml.github.io/connectome/)
+[![codecov](https://codecov.io/gh/neuro-ml/connectome/branch/master/graph/badge.svg)](https://codecov.io/gh/neuro-ml/connectome)
+[![pypi](https://img.shields.io/pypi/v/connectome?logo=pypi&label=PyPi)](https://pypi.org/project/connectome/)
+![License](https://img.shields.io/github/license/neuro-ml/connectome)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/connectome)](https://pypi.org/project/connectome/)
+![GitHub branch checks state](https://img.shields.io/github/checks-status/neuro-ml/connectome/master)
+
 Connectome is a framework for datasets management with strong emphasis on simplicity, composability and reusability.
 
 # Features
@@ -29,7 +36,10 @@ pip install git+https://github.com/neuro-ml/connectome.git
 
 # Getting started
 
-You can check out our `Intro to connectome` series of tutorials [here](https://github.com/neuro-ml/connectome-tutorials)
+The docs are located [here](https://neuro-ml.github.io/connectome)
+
+Also, you can check out our `Intro to connectome` series of
+tutorials [here](https://neuro-ml.github.io/connectome/tutorials/00%20-%20Intro/)
 
 # Acknowledgements
 
