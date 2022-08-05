@@ -121,7 +121,7 @@ class FunctionWrapper(FunctionBase, ABC):
         assert args
         assert len(args) >= 2
         self, func, *args = args
-        if isinstance(func, FunctionBase):
+        if isinstance(func, EdgeFactory):
             assert not args
             assert not kwargs
         else:
@@ -130,8 +130,8 @@ class FunctionWrapper(FunctionBase, ABC):
         self.function = func
 
     @classmethod
-    def decorate(cls, instance: Union[Callable, FunctionBase]) -> 'FunctionWrapper':
-        if not isinstance(instance, FunctionBase):
+    def decorate(cls, instance: Union[Callable, EdgeFactory]) -> 'FunctionWrapper':
+        if not isinstance(instance, EdgeFactory):
             instance = Function.decorate(instance)
         return cls(instance)
 
