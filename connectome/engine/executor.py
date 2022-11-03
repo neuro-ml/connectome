@@ -1,32 +1,51 @@
 import sys
-from abc import ABC, abstractmethod
-from multiprocessing.pool import ThreadPool
-
-from .base import Command
+from concurrent.futures import Executor, Future
 
 if sys.version_info[:2] < (3, 7):
-    from queue import Queue as SafeQueue
+    from queue import Queue as SimpleQueue
 else:
-    from queue import SimpleQueue as SafeQueue
+    from queue import SimpleQueue
 
 
-class Thunk:
-    def __init__(self, parent):
-        self.parent = parent
+class SyncFuture:
+    def __init__(self):
         self.ready = False
         self.error = self.value = None
 
+    def done(self):
+        return self.ready
 
-class Frame(Thunk):
-    def __init__(self, stack, commands, parent):
-        super().__init__(parent)
+    def result(self, timeout=None):
+        assert self.ready
+        if self.error is not None:
+            raise self.error
+        return self.value
+
+
+class SyncExecutor(Executor):
+    def submit(*args, **kwargs) -> Future:
+        self, func, *args = args
+        future = SyncFuture()
+        future.ready = True
+        try:
+            future.value = func(*args, **kwargs)
+        except BaseException as e:
+            future.error = e
+
+        return future
+
+
+class Frame(SyncFuture):
+    def __init__(self, stack, commands):
+        super().__init__()
         self.stack = stack
         self.commands = commands
 
 
-class Executor(ABC):
+class AsyncLoop:
     def __init__(self, frame: Frame):
         self.frame = frame
+        self.frames = SimpleQueue()
 
     def push(self, x):
         self.frame.stack.append(x)
@@ -43,105 +62,20 @@ class Executor(ABC):
     def pop_command(self):
         return self.frame.commands.pop()
 
-    @abstractmethod
-    def next_frame(self):
-        pass
-
-    @abstractmethod
-    def enqueue_frame(self, x):
-        pass
-
-    @abstractmethod
     def clear(self):
-        pass
+        q = self.frames
+        while not q.empty():
+            assert q.get_nowait().ready
 
-    @abstractmethod
-    def call(self, func, args, kwargs):
-        pass
+    def dispose_frame(self):
+        self.frame = self.frames.get_nowait()
 
+    def next_frame(self):
+        self.frames.put_nowait(self.frame)
+        self.frame = self.frames.get_nowait()
 
-class Backend:
-    @abstractmethod
-    def build(self, frame: Frame) -> Executor:
-        pass
-
-
-class Synchronous(Backend):
-    class _Executor(Executor):
-        def __init__(self, frame: Frame):
-            super().__init__(frame)
-            self.frames = SafeQueue()
-
-        def clear(self):
-            q = self.frames
-            while not q.empty():
-                assert q.get_nowait().ready
-
-        def next_frame(self):
-            self.frame = self.frames.get_nowait()
-
-        def enqueue_frame(self, x):
-            self.frames.put_nowait(x)
-
-        def call(self, func, args, kwargs):
-            self.push(func(*args, **kwargs))
-
-    def build(self, frame: Frame) -> Executor:
-        return self._Executor(frame)
+    def enqueue_frame(self, x):
+        self.frames.put_nowait(x)
 
 
-class Threads(Backend):
-    class _Executor(Executor):
-        def __init__(self, frame: Frame, queue: SafeQueue):
-            super().__init__(frame)
-            self.frames, self.requests = SafeQueue(), queue
-
-        def clear(self):
-            q = self.frames
-            while not q.empty():
-                assert q.get_nowait().ready
-
-        def next_frame(self):
-            self.frame = self.frames.get()
-
-        def enqueue_frame(self, x):
-            self.frames.put(x)
-
-        def call(self, func, args, kwargs):
-            thunk = Thunk(self.frame)
-            self.requests.put((func, args, kwargs, thunk, self.frames))
-            self.push_command((Command.AwaitThunk, thunk))
-            self.next_frame()
-
-    def build(self, frame: Frame) -> Executor:
-        return self._Executor(frame, self.thunks)
-
-    def __init__(self, n: int):
-        self.n = n
-        self.thunks = SafeQueue()
-        self.pool = ThreadPool(n, self._loop, (self.thunks,))
-        self.pool.close()
-
-    @staticmethod
-    def _loop(thunks: SafeQueue):
-        while True:
-            value = thunks.get()
-            if value is None:
-                break
-
-            func, args, kwargs, thunk, frames = value
-            try:
-                thunk.value = func(*args, **kwargs)
-            except BaseException as e:
-                thunk.error = e
-
-            thunk.ready = True
-            frames.put(thunk.parent)
-
-    def __del__(self):
-        for _ in range(self.n):
-            self.thunks.put(None)
-        self.pool.join()
-
-
-DefaultBackend = Synchronous()
+DefaultExecutor = SyncExecutor()

@@ -1,34 +1,34 @@
+from concurrent.futures import Executor
+
 from .base import Command
-from .executor import Frame, Backend
+from .executor import Frame, AsyncLoop
 
 
 # TODO: replace cache by a thunk tree
-def execute(cmd, node, hashes, cache, backend: Backend):
-    executor = backend.build(Frame([node], [(Command.Return,), (cmd,)], None))
-    push, pop, peek = executor.push, executor.pop, executor.peek
-    push_command, pop_command = executor.push_command, executor.pop_command
-    next_frame, enqueue_frame = executor.next_frame, executor.enqueue_frame
+def execute(cmd, node, hashes, cache, executor: Executor):
+    root = Frame([node], [(Command.Return,), (cmd,)])
+    loop = AsyncLoop(root)
+    push, pop, peek = loop.push, loop.pop, loop.peek
+    push_command, pop_command = loop.push_command, loop.pop_command
+    next_frame, enqueue_frame = loop.next_frame, loop.enqueue_frame
+    dispose_frame = loop.dispose_frame
 
     while True:
-        if executor.frame.ready:
-            next_frame()
-            continue
-
+        assert not loop.frame.ready
         cmd, *args = pop_command()
 
         # return
         if cmd == Command.Return:
             assert not args
-            assert len(executor.frame.stack) == 1, len(executor.frame.stack)
-            executor.frame.value = pop()
-            executor.frame.ready = True
+            assert len(loop.frame.stack) == 1, len(loop.frame.stack)
+            value = pop()
+            if loop.frame is root:
+                loop.clear()
+                return value
 
-            if executor.frame.parent is None:
-                executor.clear()
-                return executor.frame.value
-
-            enqueue_frame(executor.frame.parent)
-            next_frame()
+            loop.frame.value = value
+            loop.frame.ready = True
+            dispose_frame()
 
         # communicate with edges
         elif cmd == Command.Send:
@@ -57,19 +57,17 @@ def execute(cmd, node, hashes, cache, backend: Backend):
             node = pop()
             if node in hashes:
                 value = hashes[node]
-                if isinstance(value, _CacheWaiter):
+                if value is _CACHE_SENTINEL:
                     # restore state
                     push_command((cmd, *args))
                     push(node)
-                    # remember to come back
-                    value.add(executor.frame)
                     # switch context
                     next_frame()
 
                 else:
                     push(value)
             else:
-                hashes[node] = _CacheWaiter()
+                hashes[node] = _CACHE_SENTINEL
                 push_command((Command.Store, hashes, node))
                 push_command((Command.Send, node, node.edge.compute_hash()))
                 push(None)
@@ -81,19 +79,17 @@ def execute(cmd, node, hashes, cache, backend: Backend):
 
             if node in cache:
                 value = cache[node]
-                if isinstance(value, _CacheWaiter):
+                if value is _CACHE_SENTINEL:
                     # restore state
                     push_command((cmd, *args))
                     push(node)
-                    # remember to come back
-                    value.add(executor.frame)
                     # switch context
                     next_frame()
 
                 else:
                     push(value)
             else:
-                cache[node] = _CacheWaiter()
+                cache[node] = _CACHE_SENTINEL
                 push_command((Command.Store, cache, node))
                 push_command((Command.Send, node, node.edge.evaluate()))
                 push(None)
@@ -128,22 +124,21 @@ def execute(cmd, node, hashes, cache, backend: Backend):
             node = pop()
             push_command((Command.Tuple, len(args)))
             for arg in args:
-                local = Frame([node], [(Command.Return,), arg], executor.frame)
-                push_command((Command.AwaitThunk, local))
+                local = Frame([node], [(Command.Return,), arg])
+                push_command((Command.AwaitFuture, local))
                 enqueue_frame(local)
 
         elif cmd == Command.Call:
             pop()  # pop the node
             func, pos, kw = args
-            executor.call(func, pos, kw)
+            push_command((Command.AwaitFuture, executor.submit(func, *pos, **kw)))
+            next_frame()
 
         # utils
         elif cmd == Command.Store:
             storage, key = args
-            parents = storage[key]
-            assert isinstance(parents, _CacheWaiter), parents
-            for parent in parents:
-                enqueue_frame(parent)
+            sentinel = storage[key]
+            assert sentinel is _CACHE_SENTINEL, sentinel
 
             storage[key] = peek()
 
@@ -155,13 +150,10 @@ def execute(cmd, node, hashes, cache, backend: Backend):
             n, = args
             push(tuple(pop() for _ in range(n)))
 
-        elif cmd == Command.AwaitThunk:
+        elif cmd == Command.AwaitFuture:
             child, = args
-            if child.ready:
-                if child.error is not None:
-                    raise child.error
-
-                push(child.value)
+            if child.done():
+                push(child.result())
             else:
                 push_command((cmd, *args))
                 next_frame()
@@ -170,5 +162,4 @@ def execute(cmd, node, hashes, cache, backend: Backend):
             raise RuntimeError('Unknown command', cmd)
 
 
-class _CacheWaiter(set):
-    pass
+_CACHE_SENTINEL = object()
