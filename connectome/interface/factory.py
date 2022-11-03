@@ -1,6 +1,6 @@
 import inspect
 import logging
-from typing import Dict, Any, Iterable, Callable
+from typing import Dict, Any, Iterable, Callable, Type
 
 from .edges import EdgeFactory, Function
 from ..containers.base import EdgesBag
@@ -374,3 +374,24 @@ class TransformFactory(GraphFactory):
     def _process_inherit(self, value):
         # save this value for final step
         self.forward_inherit = value
+
+
+def items_to_container(items, inherit, factory_cls: Type[GraphFactory]):
+    if isinstance(items, dict):
+        items = items.items()
+
+    local = MultiDict()
+    if inherit is not None:
+        local['__inherit__'] = inherit
+    for name, value in items:
+        if not is_detectable(value) and not isinstance(value, RuntimeAnnotation):
+            raise TypeError(
+                f'All arguments must be callable. "{name}" is not callable but {type(value)}'
+            )
+
+        local[name] = value
+
+    factory = factory_cls(local)
+    if factory.special_methods:
+        raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
+    return factory.build({}), factory.property_names
