@@ -1,13 +1,13 @@
 import logging
-from typing import Callable, Dict, Type, Union, Iterable
+from typing import Callable, Dict, Type, Union, Iterable, Tuple
 
+from .base import CallableLayer
 from .compat import SafeMeta
 from ..utils import MultiDict
 from .factory import SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals, GraphFactory, \
-    is_detectable
+    items_to_container
 
 logger = logging.getLogger(__name__)
-
 BASES: Dict[Type[FactoryLayer], GraphFactory] = {}
 
 
@@ -61,6 +61,11 @@ class Source(FactoryLayer, metaclass=APIMeta, __factory=SourceFactory):
         raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
 
 
+class SourceBase(CallableLayer):
+    def __init__(self, items: Union[Iterable[Tuple[str, Callable]], Dict[str, Callable]]):
+        super().__init__(*items_to_container(items, None, SourceFactory))
+
+
 class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
     """
     Base class for all transforms.
@@ -78,29 +83,21 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
     """
     __inherit__: Union[str, Iterable[str], bool] = ()
 
-    def __init__(*args, __inherit__=(), **kwargs: Callable):
+    def __init__(*args, __inherit__: Union[str, Iterable[str], bool] = (), **kwargs: Callable):
         assert args
         if len(args) > 1:
             raise TypeError('This constructor accepts only keyword arguments.')
         self, = args
-
-        local = MultiDict()
-        local['__inherit__'] = __inherit__
-        for name, value in kwargs.items():
-            if not is_detectable(value):
-                raise TypeError(
-                    f'All arguments for Transform must be callable. "{name}" is not callable but {type(value)}'
-                )
-
-            local[name] = value
-
-        factory = TransformFactory(local)
-        if factory.special_methods:
-            raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
-        super(Transform, self).__init__(factory.build({}), factory.property_names, ())
+        super(Transform, self).__init__(*items_to_container(kwargs, __inherit__, TransformFactory), ())
 
     def __repr__(self):
         return f"{self.__class__.__name__}({', '.join(self._methods.methods)})"
+
+
+class TransformBase(CallableLayer):
+    def __init__(self, items: Union[Iterable[Tuple[str, Callable]], Dict[str, Callable]],
+                 inherit: Union[str, Iterable[str], bool] = ()):
+        super().__init__(*items_to_container(items, inherit, TransformFactory))
 
 
 class Mixin(FactoryLayer, metaclass=APIMeta, __factory=None):

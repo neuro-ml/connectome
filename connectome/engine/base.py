@@ -7,7 +7,7 @@ from .node_hash import NodeHash, NodeHashes
 
 class Command(Enum):
     ParentHash, CurrentHash, ParentValue, Payload, Await, Call = range(6)
-    Send, Store, Item, ComputeHash, Evaluate, AwaitThunk, Tuple, Return = range(-8, 0)
+    Send, Store, Item, ComputeHash, Evaluate, AwaitFuture, Tuple, Return = range(-8, 0)
 
 
 HashOutput = Tuple[NodeHash, Any]

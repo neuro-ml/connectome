@@ -3,6 +3,7 @@ from collections import Counter
 import pytest
 
 from connectome import positional, Source, Chain, Transform, Merge, meta, Output
+from connectome.interface.metaclasses import TransformBase, SourceBase
 
 
 def test_single_with_params():
@@ -230,3 +231,19 @@ def test_constructor():
         A(1)
 
     B(1)
+
+
+def test_plain_inheritance():
+    class A(TransformBase):
+        def __init__(self):
+            super().__init__({'x': lambda x: x + 1})
+
+    class B(SourceBase):
+        def __init__(self):
+            super().__init__({'x': lambda i: len(i), 'ids': meta(lambda: ['0'])})
+
+    a = A()
+    b = B()
+    assert a.x(1) == 2
+    assert b.ids == ['0']
+    assert b.x('0') == 1

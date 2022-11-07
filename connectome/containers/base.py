@@ -1,12 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
+from concurrent.futures import Executor
 from operator import itemgetter
 from typing import Tuple, Optional, Set, AbstractSet
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
-from ..engine import Backend, DefaultBackend
 from ..exceptions import GraphError, FieldError
 from ..utils import node_to_dict
 
@@ -21,12 +21,12 @@ class Container:
 
 
 class GraphCompiler:
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, backend: Backend):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, executor: Executor):
         tree_node_map = TreeNode.from_edges(edges)
         self._edges = edges
         self.inputs = tuple(tree_node_map[x] for x in inputs)
         self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
-        self.backend = backend
+        self.backend = executor
         self.virtuals = virtuals
         self.methods = {node.name: self._compile(node) for node in self.outputs.values()}
 
@@ -96,7 +96,7 @@ class EdgesBag(Container):
 
         self.persistent_nodes = persistent_nodes
         self.context = context
-        self.backend = DefaultBackend
+        self.backend = None
 
     def freeze(self) -> 'EdgesBag':
         # TODO: layer inputs and outputs may not be among the edges
