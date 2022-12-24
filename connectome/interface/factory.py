@@ -2,17 +2,17 @@ import inspect
 import logging
 from typing import Dict, Any, Iterable, Callable, Type
 
+from .base import CallableLayer
+from .decorators import Meta, Optional, RuntimeAnnotation
 from .edges import EdgeFactory, Function
-from ..containers.base import EdgesBag
-from ..engine.edges import IdentityEdge, ConstantEdge
-from ..exceptions import GraphError, FieldError
-from ..containers.transform import TransformContainer, normalize_inherit
-from ..utils import MultiDict
+from .factory_utils import add_quals, to_argument
 from .nodes import NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes, NodeType, Default, \
     Intermediate, FinalNodeType, is_private
-from .base import CallableLayer
-from .factory_utils import add_quals, to_argument
-from .decorators import Meta, Optional, RuntimeAnnotation
+from ..containers import EdgesBag, ReversibleContainer
+from ..containers.reversible import normalize_inherit
+from ..engine import IdentityEdge, ConstantEdge
+from ..exceptions import GraphError, FieldError
+from ..utils import MultiDict
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +305,7 @@ class GraphFactory:
             for name, value in self.defaults.items()
         ])
 
-    def build(self, arguments: dict) -> TransformContainer:
+    def build(self, arguments: dict) -> EdgesBag:
         diff = list(set(self.arguments) - set(arguments))
         if diff:
             raise TypeError(f'Missing required arguments: {diff}.')
@@ -314,12 +314,12 @@ class GraphFactory:
             'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
             list(self.inputs), list(self.outputs), list(self.backward_inputs), list(self.backward_outputs),
         )
-        return TransformContainer(
+        return ReversibleContainer(
             list(self.inputs.values()), list(self.outputs.values()),
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            optional_nodes=self.optional_names, persistent_nodes=self.persistent_names,
-            forward_virtual=self.forward_inherit, backward_virtual=self.backward_inherit,
+            optional_nodes=self.optional_names, forward_virtual=self.forward_inherit,
+            backward_virtual=self.backward_inherit, persistent_nodes=self.persistent_names,
         )
 
 

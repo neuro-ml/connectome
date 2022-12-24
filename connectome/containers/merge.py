@@ -1,14 +1,18 @@
-from typing import Sequence, Any, Generator
+import warnings
+from typing import Sequence
 
-from ..engine.edges import ConstantEdge, IdentityEdge
-from ..engine.base import Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command
-from ..engine.node_hash import MergeHash
-from ..utils import node_to_dict
 from .base import EdgesBag
+from ..engine.base import Node
+from ..engine.edges import ConstantEdge, IdentityEdge
+from ..layers.merge import SwitchEdge
+from ..utils import node_to_dict
 
 
-class SwitchContainer(EdgesBag):
+class SwitchContainer(EdgesBag):  # pragma: no cover
     def __init__(self, id_to_index: dict, layers: Sequence[EdgesBag], keys_name: str, persistent_names: Sequence[str]):
+        warnings.warn('This class is deprecated and will be removed soon', DeprecationWarning)
+        warnings.warn('This class is deprecated and will be removed soon', UserWarning)
+
         inputs = []
         groups = []
         edges = []
@@ -47,27 +51,3 @@ class SwitchContainer(EdgesBag):
 
         super().__init__([inp], outputs, edges, context=None, persistent_nodes=set(persistent_names))
         self.layers = layers
-
-
-class SwitchEdge(Edge):
-    def __init__(self, id_to_index: dict, n_branches: int):
-        super().__init__(arity=1 + n_branches)
-        self.id_to_index = id_to_index
-
-    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
-        key = yield Command.ParentValue, 0
-        try:
-            idx = self.id_to_index[key]
-        except KeyError:
-            raise ValueError(f'Identifier {key} not found.') from None
-
-        value = yield Command.ParentHash, idx + 1
-        return value, idx
-
-    def evaluate(self) -> Generator[Request, Response, Any]:
-        payload = yield Command.Payload,
-        value = yield Command.ParentValue, payload + 1
-        return value
-
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return MergeHash(*inputs)

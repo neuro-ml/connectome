@@ -3,13 +3,12 @@ from tempfile import TemporaryDirectory
 
 from tarn.config import init_storage, StorageConfig
 
-from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns
-from connectome.interface.blocks import HashDigest
+from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns, HashDigest
 from connectome.serializers import JsonSerializer
 
 
 def test_hash(block_maker, storage_factory):
-    hash_layer = HashDigest(['image'])
+    hash_layer = HashDigest(['image'], 'blake2b')
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=15),
         block_maker.crop(),

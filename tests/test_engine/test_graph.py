@@ -1,7 +1,7 @@
 import pytest
 
-from connectome.containers.cache import MemoryCacheContainer
-from connectome.containers.pipeline import PipelineContainer
+from connectome import CacheToRam
+from connectome.layers.chain import connect
 
 
 def test_single(first_simple):
@@ -14,26 +14,26 @@ def test_single(first_simple):
 def test_duplicates(layer_maker):
     double = layer_maker.make_layer(x=lambda x: 2 * x)
     assert double.compile()['x'](4) == 8
-    eight = PipelineContainer(
+    eight = connect(
         double, double, double,
     )
     assert eight.compile()['x'](4) == 32
 
 
 def test_chain(first_simple, second_simple, third_simple):
-    chain = PipelineContainer(first_simple)
+    chain = first_simple
     methods = chain.compile()
 
     assert methods['sum'](1, 2) == 3
     assert methods['squared'](4) == 16
 
-    chain = PipelineContainer(first_simple, second_simple)
+    chain = connect(first_simple, second_simple)
     methods = chain.compile()
     assert methods['prod'](7) == 7 ** 5
     assert methods['min'](3) == 9
     assert methods['sub'](5, 3) == 2
 
-    chain = PipelineContainer(first_simple, second_simple, third_simple)
+    chain = connect(first_simple, second_simple, third_simple)
     methods = chain.compile()
     assert methods['div'](7) == 7 ** 4
     assert methods['original'](x=9, y=10) == 9
@@ -50,8 +50,7 @@ def test_cache(layer_maker):
     assert first.compile()['x'](1) == 1
     assert count == 1
 
-    chain = PipelineContainer(first, MemoryCacheContainer(
-        size=None, names=['x'], allow_impure=False, cache_instances=set()))
+    chain = CacheToRam('x')._connect(first)
     methods = chain.compile()
     assert methods['x'](1) == 1
     assert count == 2
@@ -73,7 +72,7 @@ def test_nodes_caching(layer_maker):
         return x
 
     count = 0
-    chain = PipelineContainer(
+    chain = connect(
         layer_maker.make_layer(x=lambda x: x + 1),
         layer_maker.make_layer(x=counter),
         layer_maker.make_layer(a=lambda x: x, b=lambda x: x, x=lambda x: x),
@@ -97,18 +96,18 @@ def test_backward_methods(first_backward, second_backward):
     assert first_backward.get_backward_method('prod')(10) == 5
     assert first_backward.get_backward_method('prod')(first_backward.get_forward_method('prod')(15)) == 15
 
-    first_backward = PipelineContainer(first_backward)
+    first_backward = first_backward
     assert first_backward.get_backward_method('prod')(10) == 5
     assert first_backward.get_backward_method('prod')(first_backward.get_forward_method('prod')(15)) == 15
 
-    chain = PipelineContainer(first_backward, second_backward)
+    chain = connect(first_backward, second_backward)
     methods = chain.compile()
     assert methods['prod'](10) == '21'
     assert chain.get_backward_method('prod')(methods['prod'](15)) == 15.0
 
 
 def test_loopback(first_backward, second_backward, layer_maker):
-    layer = PipelineContainer(first_backward, second_backward)
+    layer = connect(first_backward, second_backward)
 
     wrapped = layer.loopback(lambda x: x, 'prod', 'prod')
     assert wrapped['prod'](4) == 4
@@ -128,7 +127,7 @@ def test_loopback(first_backward, second_backward, layer_maker):
         _counter=counter
     )
 
-    layer = PipelineContainer(layer, cross_pipes_checker)
+    layer = connect(layer, cross_pipes_checker)
     wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod')
     assert wrapped['prod'](4) == 49
     assert count == 1
@@ -145,5 +144,5 @@ def test_optional(first_simple, layer_maker):
         optional_nodes=['sub']
     )
 
-    layer = PipelineContainer(first, second)
+    layer = connect(first, second)
     assert layer.compile()['first_out'](4, 3) == 84

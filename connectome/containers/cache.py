@@ -1,36 +1,23 @@
 from abc import ABC, abstractmethod
-from itertools import starmap
-from math import ceil
-from typing import Any, Generator, Union
 
-from tqdm.auto import tqdm
-
-from .base import Nodes, Tuple, BoundEdges, EdgesBag, Container, Context
-from ..engine import NodeHash
-from ..engine.base import Node, TreeNode, Edge, HashOutput, Request, Response, Command
+from .base import EdgesBag, Container
+from .context import IdentityContext
+from ..cache import Cache, MemoryCache, DiskCache
+from ..engine.base import Node, TreeNode
 from ..engine.edges import CacheEdge, IdentityEdge, ImpureEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import NodeHashes, TupleHash
 from ..exceptions import DependencyError
-from ..utils import node_to_dict
-from ..cache import Cache, MemoryCache, DiskCache
-
-
-class IdentityContext(Context):
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        # just propagate everything
-        return outputs, edges
-
-    def update(self, mapping: dict) -> 'Context':
-        return self
+from ..layers.columns import CachedColumn
+from ..utils import node_to_dict, deprecation_warn
 
 
 class CacheBase(Container):
     pass
 
 
-class CacheContainer(CacheBase, ABC):
+class CacheContainer(CacheBase, ABC):  # pragma: no cover
     def __init__(self, names, allow_impure):
+        deprecation_warn()
         self.cache_names = names
         self.allow_impure = allow_impure
 
@@ -54,7 +41,10 @@ class CacheContainer(CacheBase, ABC):
             else:
                 edges.append(IdentityEdge().bind(forward_outputs[node.name], node))
 
-        return EdgesBag(state.inputs, outputs, edges, IdentityContext(), persistent_nodes=state.persistent_nodes)
+        return EdgesBag(
+            state.inputs, outputs, edges, IdentityContext(), persistent_nodes=state.persistent_nodes,
+            optional_nodes=None,
+        )
 
     @staticmethod
     def _detect_impure(node: TreeNode, name: str):
@@ -69,7 +59,7 @@ class CacheContainer(CacheBase, ABC):
             CacheContainer._detect_impure(parent, name)
 
 
-class MemoryCacheContainer(CacheContainer):
+class MemoryCacheContainer(CacheContainer):  # pragma: no cover
     def __init__(self, names, size, allow_impure, cache_instances):
         super().__init__(names, allow_impure)
         self.cache_instances = cache_instances
@@ -81,7 +71,7 @@ class MemoryCacheContainer(CacheContainer):
         return cache
 
 
-class DiskCacheContainer(CacheContainer):
+class DiskCacheContainer(CacheContainer):  # pragma: no cover
     def __init__(self, names, local, remote, allow_impure):
         super().__init__(names, allow_impure)
         self.storage = DiskCache(local, remote, fetch=bool(remote))
@@ -90,12 +80,13 @@ class DiskCacheContainer(CacheContainer):
         return self.storage
 
 
-class CacheColumnsContainer(CacheBase):
+class CacheColumnsContainer(CacheBase):  # pragma: no cover
     """
     CacheRow = Product + CacheToDisk + CacheToRam + Projection
     """
 
     def __init__(self, names, local, remote, verbose, shard_size):
+        deprecation_warn()
         self.shard_size = shard_size
         self.verbose = verbose
         self.cache_names = names
@@ -133,86 +124,6 @@ class CacheColumnsContainer(CacheBase):
                     self.disk, self.ram, graph, self.verbose, self.shard_size).bind([output, key, keys], local))
                 outputs.append(local)
 
-        return EdgesBag([key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes)
-
-
-class CachedColumn(Edge):
-    """
-    Edge Inputs
-    -----------
-    entry: the entry at ``key``
-    key: a unique key for each entry in the tuple
-    keys: all available keys
-    """
-
-    def __init__(self, disk: DiskCache, ram: MemoryCache, graph: Graph, verbose: bool,
-                 shard_size: Union[int, float, None]):
-        super().__init__(arity=3)
-        self.graph = graph
-        self.disk = disk
-        self.ram = ram
-        self.verbose = verbose
-        self.shard_size = shard_size
-
-    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
-        # propagate the first value
-        value = yield Command.ParentHash, 0
-        return value, None
-
-    def _get_shard(self, key, keys):
-        keys = sorted(keys)
-        if key not in keys:
-            raise ValueError(f'The key "{key}" is not present among the {len(keys)} keys cached by this layer')
-
-        size = self.shard_size
-        if size is None:
-            return keys, 1, 0
-        if isinstance(size, float):
-            size = ceil(size * len(keys))
-
-        assert size > 0
-        idx = keys.index(key) // size
-        count = ceil(len(keys) / size)
-        start = idx * size
-        keys = keys[start:start + size]
-        assert key in keys
-        return keys, count, idx
-
-    def evaluate(self) -> Generator[Request, Response, Any]:
-        output = yield Command.CurrentHash,
-        value, exists = self.ram.raw_get(output)
-        if exists:
-            return value
-
-        key = yield Command.ParentValue, 1
-        keys = yield Command.ParentValue, 2
-        keys, shards_count, shard_idx = self._get_shard(key, keys)
-
-        hashes, states = [], []
-        for k in keys:
-            h, state = self.graph.get_hash(k)
-            hashes.append(h)
-            states.append(state)
-            if k == key:
-                assert output == h, (output, h)
-        # TODO: hash the graph?
-        compound = TupleHash(*hashes)
-
-        digest, context = self.disk.prepare(compound)
-        values, exists = self.disk.get(digest, context)
-        if not exists:
-            suffix = '' if shards_count == 1 else f' ({shard_idx}/{shards_count})'
-            values = tuple(starmap(self.graph.get_value, tqdm(
-                states, desc=f'Generating the columns cache{suffix}', disable=not self.verbose,
-            )))
-            self.disk.set(digest, values, context)
-
-        for k, h, value in zip(keys, hashes, values):
-            self.ram.raw_set(h, value)
-            if k == key:
-                result = value
-
-        return result  # noqa
-
-    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return inputs[0]
+        return EdgesBag(
+            [key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes, optional_nodes=None
+        )

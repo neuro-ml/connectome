@@ -1,21 +1,32 @@
 import logging
-from abc import ABC, abstractmethod
+import warnings
 from concurrent.futures import Executor
 from operator import itemgetter
-from typing import Tuple, Optional, Set, AbstractSet
+from typing import Optional, Set
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
 from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..exceptions import GraphError, FieldError
-from ..utils import node_to_dict
+from ..utils import node_to_dict, NameSet
+from .context import Context, NoContext, update_map
+
+__all__ = 'Container', 'EdgesBag'
 
 logger = logging.getLogger(__name__)
 
-NameSet = AbstractSet[str]
-
 
 class Container:
+    def __init__(self):
+        warnings.warn(
+            'The container interface is deprecated and will be merged with `EdgesBag` soon',
+            UserWarning
+        )
+        warnings.warn(
+            'The container interface is deprecated and will be merged with `EdgesBag` soon',
+            DeprecationWarning
+        )
+
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         raise NotImplementedError
 
@@ -63,31 +74,16 @@ class GraphCompiler:
         return Graph(self.inputs + inputs, node, self.backend).call
 
 
-class Context(ABC):
-    @abstractmethod
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        pass
-
-    @abstractmethod
-    def update(self, mapping: dict) -> 'Context':
-        pass
-
-
-class NoContext(Context):
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        raise ValueError('The layer is not reversible')
-
-    def update(self, mapping: dict) -> 'Context':
-        return self
-
-
-class EdgesBag(Container):
+class EdgesBag:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
-                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet]):
+                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet],
+                 optional_nodes: Optional[NameSet] = None):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:
             persistent_nodes = set()
+        if optional_nodes is None:
+            optional_nodes = set()
         if context is None:
             context = NoContext()
 
@@ -95,6 +91,7 @@ class EdgesBag(Container):
             inputs, outputs, edges, virtual_nodes, persistent_nodes)
 
         self.persistent_nodes = persistent_nodes
+        self.optional_nodes = optional_nodes
         self.context = context
         self.backend = None
 
@@ -113,7 +110,8 @@ class EdgesBag(Container):
             update_map(self.outputs, node_map),
             edges_copy,
             self.context.update(node_map),
-            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes
+            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
+            optional_nodes=self.optional_nodes,
         )
 
     def compile(self) -> GraphCompiler:
@@ -167,13 +165,6 @@ class EdgesBag(Container):
 
         outputs, edges = state.context.reverse(all_inputs, outputs, edges)
         return GraphCompiler(all_inputs, outputs, edges, set(), self.backend)
-
-
-def update_map(nodes, node_map):
-    for node in nodes:
-        if node not in node_map:
-            node_map[node] = Node(node.name)
-    return [node_map[x] for x in nodes]
 
 
 def identity(x):

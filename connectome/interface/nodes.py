@@ -1,7 +1,7 @@
 import logging
 from typing import Sequence, Type, Union
 
-from ..engine.base import Node
+from ..engine import Node
 
 logger = logging.getLogger(__name__)
 

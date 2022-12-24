@@ -4,7 +4,12 @@ from typing import Sequence, Callable, Any, Generator, Tuple
 from .base import NodeHash, Edge, NodeHashes, HashOutput, HashError, Request, Response
 from .graph import Command
 from .node_hash import LeafHash, ApplyHash, TupleHash
-from ..cache import Cache
+
+__all__ = (
+    'StaticHash', 'StaticGraph', 'StaticEdge',
+    'ImpureEdge', 'CacheEdge', 'IdentityEdge', 'FunctionEdge', 'ComputableHashEdge',
+    'ConstantEdge', 'ComputableHashBase', 'ProductEdge',
+)
 
 
 class StaticHash(Edge):
@@ -150,7 +155,7 @@ class ConstantEdge(StaticEdge):
 
 
 class CacheEdge(StaticGraph, StaticHash):
-    def __init__(self, storage: Cache):
+    def __init__(self, storage):
         super().__init__(arity=1)
         self.cache = storage
 

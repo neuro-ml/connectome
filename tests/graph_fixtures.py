@@ -1,12 +1,7 @@
 import pytest
 
-from connectome.containers.pipeline import PipelineContainer
-from connectome.containers.base import EdgesBag
-
-from connectome.engine.base import Node, BoundEdge
-from connectome.engine.edges import FunctionEdge
-from connectome.containers.transform import TransformContainer
-
+from connectome.containers import ReversibleContainer
+from connectome.engine import Node, BoundEdge, FunctionEdge
 from connectome.utils import extract_signature
 
 
@@ -67,7 +62,7 @@ class LayerMaker:
             cur_inputs = [get_related_nodes(name, True) for name in attr_names]
             edges.append(BoundEdge(FunctionEdge(func, len(attr_names)), cur_inputs, output_node))
 
-        return TransformContainer(
+        return ReversibleContainer(
             list(inputs.values()), list(outputs.values()), edges,
             list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes=optional_nodes,
             forward_virtual=(), backward_virtual=(),
@@ -81,14 +76,14 @@ def layer_maker():
 
 @pytest.fixture
 def first_simple(layer_maker):
-    return PipelineContainer(layer_maker.make_layer(
+    return layer_maker.make_layer(
         sum=lambda x, y: x + y,
         sub=lambda x, y: x - y,
         squared=lambda x: x ** 2,
         cube=lambda x: x ** 3,
         x=lambda x: x,
         y=lambda y: y,
-    ))
+    )
 
 
 @pytest.fixture

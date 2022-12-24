@@ -1,39 +1,27 @@
-from functools import partial
 from hashlib import blake2b
-from typing import Iterable, Any, Generator
+from typing import Iterable
 
-from tarn.cache.storage import key_to_digest
-
-from .transform import TransformContainer
-from ..engine.base import Node, Request, Response, Command
-from ..engine.edges import StaticHash, StaticGraph
-from ..engine.node_hash import NodeHashes, NodeHash
-
-
-class HashDigestEdge(StaticGraph, StaticHash):
-    def __init__(self):
-        super().__init__(arity=1)
-        # TODO: find a way to pass different hashers
-        self._hasher = partial(blake2b, digest_size=64)
-
-    def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return inputs[0]
-
-    def evaluate(self) -> Generator[Request, Response, Any]:
-        value = yield Command.ParentValue, 0
-        output = yield Command.CurrentHash,
-
-        pickled, digest = key_to_digest(self._hasher, output.value)
-        return value, output.value, digest, pickled
+from ..engine import Node
+from ..layers.chain import connect
+from ..layers.debug import HashDigestEdge
+from .base import EdgesBag
+from ..utils import deprecation_warn
 
 
-class HashDigestContainer(TransformContainer):
+class HashDigestContainer(EdgesBag):  # pragma: no cover
     def __init__(self, names: Iterable[str]):
+        deprecation_warn()
         inputs, outputs, edges = [], [], []
         for name in names:
             inp, out = Node(name), Node(name)
             inputs.append(inp)
             outputs.append(out)
-            edges.append(HashDigestEdge().bind(inp, out))
+            edges.append(HashDigestEdge(blake2b).bind(inp, out))
 
-        super().__init__(inputs, outputs, edges, forward_virtual=True, backward_virtual=True)
+        super().__init__(
+            inputs, outputs, edges,
+            context=None, virtual_nodes=None, persistent_nodes=None, optional_nodes=None,
+        )
+
+    def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
+        return connect(container, self)

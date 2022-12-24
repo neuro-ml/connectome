@@ -1,4 +1,5 @@
 import inspect
+import warnings
 from collections import Counter
 from pathlib import Path
 from typing import Union, Dict, List, Sequence, AbstractSet, Iterable
@@ -6,6 +7,7 @@ from typing import Union, Dict, List, Sequence, AbstractSet, Iterable
 PathLike = Union[Path, str]
 Strings = Sequence[str]
 StringsLike = Union[str, Strings]
+NameSet = AbstractSet[str]
 
 
 class MultiDict(Dict[str, List]):
@@ -135,3 +137,14 @@ def node_to_dict(nodes):
     nodes = tuple(nodes)
     check_for_duplicates(nodes)
     return {node.name: node for node in nodes}
+
+
+def deprecation_warn(level=3):
+    warnings.warn('This class is deprecated', UserWarning, level)
+    warnings.warn('This class is deprecated', DeprecationWarning, level)
+
+
+def to_seq(x, cls=str):
+    if isinstance(x, cls):
+        x = [x]
+    return x
