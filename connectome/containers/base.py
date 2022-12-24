@@ -1,21 +1,32 @@
 import logging
-from abc import ABC, abstractmethod
+import warnings
 from concurrent.futures import Executor
 from operator import itemgetter
-from typing import Tuple, Optional, Set, AbstractSet
+from typing import Optional, Set
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
-from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges, TreeNodes
+from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
 from ..exceptions import GraphError, FieldError
-from ..utils import node_to_dict
+from ..utils import node_to_dict, NameSet
+from .context import Context, NoContext, update_map
+
+__all__ = 'Container', 'EdgesBag'
 
 logger = logging.getLogger(__name__)
 
-NameSet = AbstractSet[str]
-
 
 class Container:
+    def __init__(self):
+        warnings.warn(
+            'The container interface is deprecated and will be merged with `EdgesBag` soon',
+            UserWarning
+        )
+        warnings.warn(
+            'The container interface is deprecated and will be merged with `EdgesBag` soon',
+            DeprecationWarning
+        )
+
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
         raise NotImplementedError
 
@@ -63,34 +74,7 @@ class GraphCompiler:
         return Graph(self.inputs + inputs, node, self.backend).call
 
 
-class Context(ABC):
-    @abstractmethod
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        pass
-
-    @abstractmethod
-    def update(self, mapping: dict) -> 'Context':
-        pass
-
-
-class NoContext(Context):
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        raise ValueError('The layer is not reversible')
-
-    def update(self, mapping: dict) -> 'Context':
-        return self
-
-
-class IdentityContext(Context):
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        # just propagate everything
-        return outputs, edges
-
-    def update(self, mapping: dict) -> 'Context':
-        return self
-
-
-class EdgesBag(Container):
+class EdgesBag:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
                  virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet],
                  optional_nodes: Optional[NameSet] = None):
@@ -183,55 +167,6 @@ class EdgesBag(Container):
         return GraphCompiler(all_inputs, outputs, edges, set(), self.backend)
 
 
-class BagContext(Context):
-    def __init__(self, inputs: Nodes, outputs: Nodes, inherit: AbstractSet[str]):
-        self.inputs = inputs
-        self.outputs = outputs
-        self.inherit = inherit
-
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        edges = list(edges)
-        outputs = node_to_dict(outputs)
-        # backward transforms
-        for node in self.inputs:
-            name = node.name
-            if name in outputs:
-                edges.append(IdentityEdge().bind(outputs[name], node))
-
-        # collect the actual outputs
-        actual = []
-        mapping = TreeNode.from_edges(edges)
-        leaves = [mapping[node] for node in inputs]
-        for node in self.outputs:
-            if is_reachable(leaves, mapping[node]):
-                actual.append(node)
-
-        # add inheritance
-        add = self.inherit - set(node_to_dict(actual))
-        for name, node in outputs.items():
-            name = node.name
-            if name in add:
-                out = Node(name)
-                edges.append(IdentityEdge().bind(node, out))
-                actual.append(out)
-
-        return actual, edges
-
-    def update(self, mapping: dict) -> 'Context':
-        return BagContext(
-            update_map(self.inputs, mapping),
-            update_map(self.outputs, mapping),
-            self.inherit,
-        )
-
-
-def update_map(nodes, node_map):
-    for node in nodes:
-        if node not in node_map:
-            node_map[node] = Node(node.name)
-    return [node_map[x] for x in nodes]
-
-
 def identity(x):
     return x
 
@@ -321,14 +256,3 @@ def detect_cycles(adjacency):
         visit(n)
 
     return cycles
-
-
-def is_reachable(inputs: TreeNodes, output: TreeNode):
-    def reachable(x: TreeNode):
-        if x.is_leaf:
-            return x in inputs
-
-        return all(map(reachable, x.parents))
-
-    inputs = set(inputs)
-    return reachable(output)

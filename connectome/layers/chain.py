@@ -1,8 +1,7 @@
 from typing import Tuple, Sequence, NamedTuple, List, Dict, Set
 
-from ..containers.base import Context, EdgesBag
-from ..engine.base import BoundEdge, Node, Nodes, BoundEdges, TreeNode
-from ..engine.edges import IdentityEdge
+from ..containers import Context, EdgesBag
+from ..engine import BoundEdge, Node, Nodes, BoundEdges, TreeNode, IdentityEdge
 from ..engine.graph import count_entries
 from ..exceptions import DependencyError
 from ..utils import check_for_duplicates, node_to_dict
@@ -41,7 +40,13 @@ class ChainContext(Context):
         return ChainContext(self.previous.update(mapping), self.current.update(mapping))
 
 
-def connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
+def connect(head: EdgesBag, *tail: EdgesBag) -> EdgesBag:
+    for container in tail:
+        head = _connect(head, container)
+    return head
+
+
+def _connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
     current = right.freeze()
     previous = left.freeze()
 

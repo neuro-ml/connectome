@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
-from .base import EdgesBag, Container, IdentityContext
+from .base import EdgesBag, Container
+from .context import IdentityContext
 from ..cache import Cache, MemoryCache, DiskCache
 from ..engine.base import Node, TreeNode
 from ..engine.edges import CacheEdge, IdentityEdge, ImpureEdge

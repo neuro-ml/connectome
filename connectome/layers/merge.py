@@ -1,8 +1,9 @@
 from typing import Sequence, Any, Generator
 
-from ..containers.base import EdgesBag
-from ..engine.edges import ConstantEdge, IdentityEdge
-from ..engine.base import Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command
+from ..containers import EdgesBag
+from ..engine import (
+    ConstantEdge, IdentityEdge, Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command
+)
 from ..engine.node_hash import MergeHash
 from ..utils import node_to_dict
 from ..interface.utils import format_arguments

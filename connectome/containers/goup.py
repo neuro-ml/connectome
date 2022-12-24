@@ -2,7 +2,7 @@ from collections import defaultdict
 from hashlib import sha256
 from typing import Sequence, Any, Generator
 
-from .base import EdgesBag, Container, NoContext
+from .base import EdgesBag, Container
 from ..engine import NodeHash
 from ..engine.base import Node, TreeNode, NodeHashes, Command, Request, Response
 from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
@@ -57,7 +57,7 @@ class GroupContainer(Container):
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
         return EdgesBag(
-            [changed_input], outputs, edges, NoContext(), persistent_nodes=main.persistent_nodes, optional_nodes=None,
+            [changed_input], outputs, edges, None, persistent_nodes=main.persistent_nodes, optional_nodes=None,
         )
 
 
@@ -170,7 +170,7 @@ class MultiGroupLayer(Container):
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
         return EdgesBag(
-            [changed_input], outputs, edges, NoContext(), persistent_nodes=main.persistent_nodes,
+            [changed_input], outputs, edges, None, persistent_nodes=main.persistent_nodes,
             optional_nodes=None,
         )
 

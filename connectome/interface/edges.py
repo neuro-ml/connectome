@@ -2,15 +2,14 @@ import inspect
 from abc import ABC, abstractmethod
 from typing import Iterable, Callable, NamedTuple
 
+from ..engine import Edge, FunctionEdge, ImpureEdge
 from .decorators import RuntimeAnnotation
-from ..engine.base import Edge
-from ..engine.edges import FunctionEdge, ImpureEdge
 from .utils import replace_annotation
 from .nodes import *
 
 __all__ = (
     'TypedEdge', 'EdgeFactory',
-    'Function',
+    'Function', 'FunctionWrapper', 'FunctionBase',
     'Inverse', 'inverse', 'Impure', 'impure', 'Positional', 'positional'
 )
 

@@ -1,13 +1,10 @@
-from typing import Callable, Sequence, Any, Iterable
-
-from tqdm.auto import tqdm
+from typing import Callable
 
 from .base import EdgesBag, Container
 from .cache import IdentityContext
 from ..engine.base import Node, TreeNode
-from ..engine.edges import FunctionEdge, StaticEdge, StaticGraph
+from ..engine.edges import FunctionEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import FilterHash
 from ..layers.filter import FilterEdge
 from ..utils import extract_signature, node_to_dict
 

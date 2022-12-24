@@ -7,6 +7,7 @@ from typing import Union, Dict, List, Sequence, AbstractSet, Iterable
 PathLike = Union[Path, str]
 Strings = Sequence[str]
 StringsLike = Union[str, Strings]
+NameSet = AbstractSet[str]
 
 
 class MultiDict(Dict[str, List]):

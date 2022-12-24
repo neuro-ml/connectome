@@ -1,10 +1,9 @@
 from typing import Callable
 
-from ..containers.base import EdgesBag, BagContext
-from .base import CallableLayer
-from ..engine.base import Node
-from ..engine.edges import FunctionEdge
+from ..containers import ReversibleContainer
+from ..engine import Node, FunctionEdge
 from ..utils import AntiSet
+from .base import CallableLayer
 
 
 class Apply(CallableLayer):
@@ -37,7 +36,7 @@ class Apply(CallableLayer):
             outputs.append(out)
             edges.append(FunctionEdge(func, arity=1).bind(inp, out))
 
-        super().__init__(EdgesBag(
-            inputs, outputs, edges, context=BagContext((), (), AntiSet()),
-            virtual_nodes=AntiSet(transform), optional_nodes=None, persistent_nodes=None,
+        super().__init__(ReversibleContainer(
+            inputs, outputs, edges, forward_virtual=AntiSet(transform), backward_virtual=AntiSet(),
+            optional_nodes=None, persistent_nodes=None,
         ), ())

@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 
 from .cache import CacheLayer, SerializersLike, PathLikes, RemoteStorageLike, _normalize_disk_arguments
 from ..cache import DiskCache, MemoryCache
-from ..containers.base import EdgesBag, IdentityContext
+from ..containers import EdgesBag, IdentityContext
 from ..engine import (
     Edge, TreeNode, Node, Graph, Request, Response, HashOutput, Command, TupleHash, NodeHashes, NodeHash
 )

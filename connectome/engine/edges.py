@@ -5,6 +5,12 @@ from .base import NodeHash, Edge, NodeHashes, HashOutput, HashError, Request, Re
 from .graph import Command
 from .node_hash import LeafHash, ApplyHash, TupleHash
 
+__all__ = (
+    'StaticHash', 'StaticGraph', 'StaticEdge',
+    'ImpureEdge', 'CacheEdge', 'IdentityEdge', 'FunctionEdge', 'ComputableHashEdge',
+    'ConstantEdge', 'ComputableHashBase', 'ProductEdge',
+)
+
 
 class StaticHash(Edge):
     """ Computes the current hash from all the parents' hashes. """

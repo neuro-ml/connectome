@@ -46,7 +46,7 @@ class CallableLayer(Layer):
             )
             return result
 
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             return connect(previous, self._container)
 
     def __rshift__(self, layer: Layer) -> 'Chain':

@@ -3,7 +3,7 @@ from typing import Callable, Sequence, Any, Iterable
 from tqdm.auto import tqdm
 
 from .base import EdgesBag, Layer
-from ..containers.base import IdentityContext
+from ..containers import IdentityContext
 from ..engine import Node, TreeNode, Graph, FilterHash, FunctionEdge, StaticEdge, StaticGraph
 from ..utils import extract_signature, node_to_dict
 

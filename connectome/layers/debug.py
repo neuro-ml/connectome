@@ -3,14 +3,10 @@ from typing import Generator, Any
 
 from tarn.cache.storage import key_to_digest
 
-from ..containers.base import EdgesBag
-from ..engine.base import Node, Request, Response, Command
-
+from ..containers import EdgesBag
+from ..engine import Node, Request, Response, Command, StaticGraph, StaticHash, NodeHashes, NodeHash
 from .cache import to_seq
-from ..engine.edges import StaticGraph, StaticHash
-from ..engine.node_hash import NodeHashes, NodeHash
 from ..utils import StringsLike
-
 from .base import CallableLayer
 
 

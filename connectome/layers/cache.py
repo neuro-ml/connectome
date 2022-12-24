@@ -10,7 +10,7 @@ from tarn.cache import CacheIndex
 from tarn.config import init_storage, StorageConfig
 
 from .base import Layer
-from ..containers.base import EdgesBag, Container, IdentityContext
+from ..containers import EdgesBag, Container, IdentityContext
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..utils import PathLike, StringsLike, node_to_dict
