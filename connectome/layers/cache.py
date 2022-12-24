@@ -13,7 +13,7 @@ from .base import Layer
 from ..containers import EdgesBag, Container, IdentityContext
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
-from ..utils import PathLike, StringsLike, node_to_dict
+from ..utils import PathLike, StringsLike, node_to_dict, to_seq
 from ..engine import TreeNode, Node, ImpureEdge, CacheEdge, IdentityEdge
 from ..cache import Cache, MemoryCache, DiskCache
 
@@ -191,9 +191,3 @@ def _resolve_serializer(serializer):
     if not isinstance(serializer, Serializer):
         serializer = ChainSerializer(*serializer)
     return serializer
-
-
-def to_seq(x):
-    if isinstance(x, str):
-        x = [x]
-    return x

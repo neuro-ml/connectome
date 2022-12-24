@@ -3,7 +3,7 @@ import operator
 from ..containers.base import EdgesBag
 from ..containers.goup import GroupContainer, MultiGroupLayer
 from ..layers import *  # noqa
-from ..utils import deprecation_warn, StringsLike  # noqa
+from ..utils import deprecation_warn, StringsLike, to_seq  # noqa
 
 
 class LegacyContainer(Layer):
@@ -29,9 +29,3 @@ class GroupBy(LegacyContainer):
 
     def __repr__(self):
         return f'GroupBy({repr(self._container.name)})'
-
-
-def to_seq(x):
-    if isinstance(x, str):
-        x = [x]
-    return x

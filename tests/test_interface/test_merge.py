@@ -1,3 +1,4 @@
+import pytest
 from connectome import Source, Merge, Transform, Chain, positional, meta, impure
 from connectome.interface.blocks import HashDigest
 
@@ -150,3 +151,44 @@ def test_impure():
     assert i == 1
     assert ds.f('10') == '10'
     assert i == 2
+
+
+def test_collisions():
+    class A(Source):
+        @meta
+        def ids():
+            return tuple('012')
+
+    class B(Source):
+        @meta
+        def ids():
+            return tuple('123')
+
+    class C(Source):
+        @meta
+        def keys():
+            return ()
+
+    class D(Source):
+        @meta
+        def ids():
+            return ()
+
+        @meta
+        def keys():
+            return ()
+
+    class E(Source):
+        pass
+
+    with pytest.raises(RuntimeError):
+        Merge(A(), B())
+
+    with pytest.raises(ValueError):
+        Merge(A(), C())
+
+    with pytest.raises(ValueError):
+        Merge(D())
+
+    with pytest.raises(ValueError):
+        Merge(E())

@@ -142,3 +142,9 @@ def node_to_dict(nodes):
 def deprecation_warn(level=3):
     warnings.warn('This class is deprecated', UserWarning, level)
     warnings.warn('This class is deprecated', DeprecationWarning, level)
+
+
+def to_seq(x, cls=str):
+    if isinstance(x, cls):
+        x = [x]
+    return x
