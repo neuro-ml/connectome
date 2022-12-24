@@ -6,7 +6,7 @@ from typing import Tuple, Optional, Set, AbstractSet
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
-from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
+from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges, TreeNodes
 from ..exceptions import GraphError, FieldError
 from ..utils import node_to_dict
 
@@ -81,13 +81,25 @@ class NoContext(Context):
         return self
 
 
+class IdentityContext(Context):
+    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
+        # just propagate everything
+        return outputs, edges
+
+    def update(self, mapping: dict) -> 'Context':
+        return self
+
+
 class EdgesBag(Container):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
-                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet]):
+                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet],
+                 optional_nodes: Optional[NameSet] = None):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:
             persistent_nodes = set()
+        if optional_nodes is None:
+            optional_nodes = set()
         if context is None:
             context = NoContext()
 
@@ -95,6 +107,7 @@ class EdgesBag(Container):
             inputs, outputs, edges, virtual_nodes, persistent_nodes)
 
         self.persistent_nodes = persistent_nodes
+        self.optional_nodes = optional_nodes
         self.context = context
         self.backend = None
 
@@ -113,7 +126,8 @@ class EdgesBag(Container):
             update_map(self.outputs, node_map),
             edges_copy,
             self.context.update(node_map),
-            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes
+            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
+            optional_nodes=self.optional_nodes,
         )
 
     def compile(self) -> GraphCompiler:
@@ -167,6 +181,48 @@ class EdgesBag(Container):
 
         outputs, edges = state.context.reverse(all_inputs, outputs, edges)
         return GraphCompiler(all_inputs, outputs, edges, set(), self.backend)
+
+
+class BagContext(Context):
+    def __init__(self, inputs: Nodes, outputs: Nodes, inherit: AbstractSet[str]):
+        self.inputs = inputs
+        self.outputs = outputs
+        self.inherit = inherit
+
+    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
+        edges = list(edges)
+        outputs = node_to_dict(outputs)
+        # backward transforms
+        for node in self.inputs:
+            name = node.name
+            if name in outputs:
+                edges.append(IdentityEdge().bind(outputs[name], node))
+
+        # collect the actual outputs
+        actual = []
+        mapping = TreeNode.from_edges(edges)
+        leaves = [mapping[node] for node in inputs]
+        for node in self.outputs:
+            if is_reachable(leaves, mapping[node]):
+                actual.append(node)
+
+        # add inheritance
+        add = self.inherit - set(node_to_dict(actual))
+        for name, node in outputs.items():
+            name = node.name
+            if name in add:
+                out = Node(name)
+                edges.append(IdentityEdge().bind(node, out))
+                actual.append(out)
+
+        return actual, edges
+
+    def update(self, mapping: dict) -> 'Context':
+        return BagContext(
+            update_map(self.inputs, mapping),
+            update_map(self.outputs, mapping),
+            self.inherit,
+        )
 
 
 def update_map(nodes, node_map):
@@ -265,3 +321,14 @@ def detect_cycles(adjacency):
         visit(n)
 
     return cycles
+
+
+def is_reachable(inputs: TreeNodes, output: TreeNode):
+    def reachable(x: TreeNode):
+        if x.is_leaf:
+            return x in inputs
+
+        return all(map(reachable, x.parents))
+
+    inputs = set(inputs)
+    return reachable(output)

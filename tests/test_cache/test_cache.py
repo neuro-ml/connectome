@@ -121,7 +121,7 @@ def test_columns_cache_sharding(block_maker, disk_cache_factory):
             if isinstance(size, float):
                 size = ceil(size * total)
 
-            c = cache._container.ram
+            c = cache.ram
             # just one shard must be populated
             assert len(c._cache) == size
 
@@ -134,7 +134,7 @@ def test_columns_cache_sharding(block_maker, disk_cache_factory):
 
 def test_lru():
     def size(layer):
-        c, = layer._container.cache_instances
+        c, = layer._cache_instances
         return len(c._cache)
 
     cache = CacheToRam()

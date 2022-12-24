@@ -1,13 +1,12 @@
 import inspect
 import logging
-from typing import Dict, Any, Iterable, Callable, Type
+from typing import Dict, Any, Iterable, Callable, Type, Tuple, Set
 
 from .edges import EdgeFactory, Function
-from ..containers.base import EdgesBag
+from ..containers.base import EdgesBag, BagContext
 from ..engine.edges import IdentityEdge, ConstantEdge
 from ..exceptions import GraphError, FieldError
-from ..containers.transform import TransformContainer, normalize_inherit
-from ..utils import MultiDict
+from ..utils import MultiDict, check_for_duplicates, node_to_dict, AntiSet
 from .nodes import NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes, NodeType, Default, \
     Intermediate, FinalNodeType, is_private
 from .base import CallableLayer
@@ -305,7 +304,7 @@ class GraphFactory:
             for name, value in self.defaults.items()
         ])
 
-    def build(self, arguments: dict) -> TransformContainer:
+    def build(self, arguments: dict) -> EdgesBag:
         diff = list(set(self.arguments) - set(arguments))
         if diff:
             raise TypeError(f'Missing required arguments: {diff}.')
@@ -314,12 +313,24 @@ class GraphFactory:
             'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
             list(self.inputs), list(self.outputs), list(self.backward_inputs), list(self.backward_outputs),
         )
-        return TransformContainer(
-            list(self.inputs.values()), list(self.outputs.values()),
-            self.edges + list(self._get_constant_edges(arguments)),
-            list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            optional_nodes=self.optional_names, persistent_nodes=self.persistent_names,
-            forward_virtual=self.forward_inherit, backward_virtual=self.backward_inherit,
+
+        inputs = list(self.inputs.values())
+        outputs = list(self.outputs.values())
+        backward_inputs = list(self.backward_inputs.values())
+        backward_outputs = list(self.backward_outputs.values())
+        edges = self.edges + list(self._get_constant_edges(arguments))
+
+        forward_virtual, valid = normalize_inherit(self.forward_inherit, node_to_dict(outputs))
+        assert valid
+        backward_virtual, valid = normalize_inherit(self.backward_inherit, node_to_dict(backward_outputs))
+        assert valid
+
+        check_for_duplicates(inputs)
+        return EdgesBag(
+            inputs, outputs, edges,
+            BagContext(backward_inputs, backward_outputs, backward_virtual),
+            virtual_nodes=forward_virtual, persistent_nodes=self.persistent_names,
+            optional_nodes=self.optional_names,
         )
 
 
@@ -395,3 +406,19 @@ def items_to_container(items, inherit, factory_cls: Type[GraphFactory]):
     if factory.special_methods:
         raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
     return factory.build({}), factory.property_names
+
+
+def normalize_inherit(value, outputs) -> Tuple[Set[str], bool]:
+    if isinstance(value, str):
+        value = [value]
+
+    if isinstance(value, bool):
+        valid = value
+        value = AntiSet(set(outputs))
+    elif isinstance(value, AntiSet):
+        valid = True
+    else:
+        value = set(value)
+        valid = all(isinstance(node_name, str) for node_name in value)
+
+    return value, valid

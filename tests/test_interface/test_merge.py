@@ -31,7 +31,7 @@ class Three(Source):
 
 def test_simple():
     one, two = One(), Two()
-    hash_layer = HashDigest('image')
+    hash_layer = HashDigest('image', 'blake2b')
     merged = Merge(one, two)
     assert set(merged.ids) == set('123456')
 

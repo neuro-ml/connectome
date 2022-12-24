@@ -1,4 +1,4 @@
-from typing import Callable, Sequence, Any
+from typing import Callable, Sequence, Any, Iterable
 
 from tqdm.auto import tqdm
 
@@ -8,6 +8,7 @@ from ..engine.base import Node, TreeNode
 from ..engine.edges import FunctionEdge, StaticEdge, StaticGraph
 from ..engine.graph import Graph
 from ..engine.node_hash import FilterHash
+from ..layers.filter import FilterEdge
 from ..utils import extract_signature, node_to_dict
 
 
@@ -58,20 +59,3 @@ class FilterContainer(Container):
         edges.append(FilterEdge(graph, self.verbose).bind(keys, out))
         return EdgesBag(main.inputs, outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes)
 
-
-class FilterEdge(StaticGraph, StaticEdge):
-    def __init__(self, graph: Graph, verbose: bool):
-        super().__init__(arity=1)
-        self.verbose = verbose
-        self.graph = graph
-        self._hash = self.graph.hash()
-
-    def _make_hash(self, hashes):
-        keys, = hashes
-        return FilterHash(self._hash, keys)
-
-    def _evaluate(self, inputs: Sequence[Any]) -> Any:
-        keys, = inputs
-        return tuple(filter(self.graph.call, tqdm(
-            keys, desc='Filtering', disable=not self.verbose,
-        )))

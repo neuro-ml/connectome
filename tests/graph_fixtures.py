@@ -1,7 +1,6 @@
 import pytest
 
 from connectome.containers.pipeline import PipelineContainer
-from connectome.containers.base import EdgesBag
 
 from connectome.engine.base import Node, BoundEdge
 from connectome.engine.edges import FunctionEdge

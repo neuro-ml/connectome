@@ -1,7 +1,6 @@
 import pytest
 
-from connectome import Source, meta, impure, Transform
-from connectome.interface.blocks import HashDigest, CacheToRam, Merge
+from connectome import Source, meta, impure, Transform, HashDigest, CacheToRam, Merge
 from connectome.interface.complex_edges import hash_by_value
 
 
@@ -24,8 +23,8 @@ class Stripped(Source):
 
 
 def test_hash():
-    one = Computable(length=4) >> HashDigest(['field'])
-    two = Stripped() >> HashDigest(['field'])
+    one = Computable(length=4) >> HashDigest(['field'], 'blake2b')
+    two = Stripped() >> HashDigest(['field'], 'blake2b')
     assert one.field('12345678')[0] == 'received 1234'
     assert one.field('12345678') == one.field('1234----') == two.field('1234')
 
@@ -36,7 +35,7 @@ def test_hash_by_value():
         def x(a, b, c):
             return a + b + c
 
-    ds = A() >> HashDigest(['x'])
+    ds = A() >> HashDigest(['x'], 'blake2b')
     assert ds.x(1, 2, 3) == ds.x(3, 2, 1)
 
 
