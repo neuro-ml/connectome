@@ -33,21 +33,18 @@ class CallableLayer(Layer):
         return method
 
     def _connect(self, previous: EdgesBag) -> EdgesBag:
-        try:
-            # TODO: legacy
-            result = self._container.wrap(previous)
-            warnings.warn(
-                f'The method Container.wrap is deprecated and will be removed soon: {type(self._container).__name__}',
-                UserWarning
-            )
-            warnings.warn(
-                f'The method Container.wrap is deprecated and will be removed soon: {type(self._container).__name__}',
-                DeprecationWarning
-            )
-            return result
-
-        except (NotImplementedError, AttributeError):
+        if not hasattr(self._container, 'wrap'):
             return connect(previous, self._container)
+
+        warnings.warn(
+            f'The method Container.wrap is deprecated and will be removed soon: {type(self._container).__name__}',
+            UserWarning
+        )
+        warnings.warn(
+            f'The method Container.wrap is deprecated and will be removed soon: {type(self._container).__name__}',
+            DeprecationWarning
+        )
+        return self._container.wrap(previous)
 
     def __rshift__(self, layer: Layer) -> 'Chain':
         return Chain(self, layer)
