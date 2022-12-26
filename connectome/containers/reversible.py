@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union, Iterable
 
 from . import BagContext
 from ..engine import Nodes, BoundEdges
@@ -9,7 +9,8 @@ from ..utils import NameSet, node_to_dict, check_for_duplicates, AntiSet
 class ReversibleContainer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
                  backward_outputs: Nodes = (), *, optional_nodes: NameSet = None,
-                 forward_virtual: NameSet, backward_virtual: NameSet, persistent_nodes: NameSet = None):
+                 forward_virtual: Union[NameSet, Iterable[str]], backward_virtual: Union[NameSet, Iterable[str]],
+                 persistent_nodes: NameSet = None):
         forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
         assert valid
         backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(backward_outputs))

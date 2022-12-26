@@ -47,33 +47,33 @@ def connect(head: EdgesBag, *tail: EdgesBag) -> EdgesBag:
 
 
 def _connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
-    current = right.freeze()
-    previous = left.freeze()
+    left = left.freeze()
+    right = right.freeze()
 
-    all_edges = list(previous.edges) + list(current.edges)
-    persistent_nodes = set.union(set(previous.persistent_nodes), set(right.persistent_nodes))
+    all_edges = list(left.edges) + list(right.edges)
+    persistent_nodes = set.union(set(left.persistent_nodes), set(right.persistent_nodes))
     state = LayerConnectionState(
         edges=all_edges,
         cur_used_virtual=set(),
         used_input_names=set(),
         prev_used_virtual=set(),
         used_output_names=set(),
-        inputs=list(previous.inputs),
-        outputs=list(current.outputs),
+        inputs=list(left.inputs),
+        outputs=list(right.outputs),
         cur_virtual=right.virtual_nodes,
         cur_optional=right.optional_nodes,
-        cur_inputs=node_to_dict(current.inputs),
+        cur_inputs=node_to_dict(right.inputs),
         prev_virtual=left.virtual_nodes,
-        prev_outputs=node_to_dict(previous.outputs),
-        prev_persistent=previous.persistent_nodes,
+        prev_outputs=node_to_dict(left.outputs),
+        prev_persistent=left.persistent_nodes,
     )
 
     _connect_common_nodes(state)
     _connect_cur_virtual(state)
     _connect_prev_virtual(state)
 
-    essential_input_names = _get_essential_input_names(current.inputs, current.outputs, current.edges)
-    for o in current.outputs:
+    essential_input_names = _get_essential_input_names(right.inputs, right.outputs, right.edges)
+    for o in right.outputs:
         # drop nodes that depend on inactive inputs
         if any(name not in state.used_input_names for name in essential_input_names[o]):
             state.outputs.remove(o)
@@ -82,16 +82,16 @@ def _connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
     new_virtual_nodes = _merge_virtual_nodes(state)
     return EdgesBag(
         state.inputs, state.outputs, state.edges,
-        ChainContext(previous.context, current.context),
+        ChainContext(left.context, right.context),
         virtual_nodes=new_virtual_nodes, persistent_nodes=persistent_nodes,
-        optional_nodes=None,
+        optional_nodes=left.optional_nodes & right.optional_nodes,
     )
 
 
 def _connect_common_nodes(state: LayerConnectionState):
     cur_inputs = state.cur_inputs
     prev_outputs = state.prev_outputs
-    common_node_names = set(cur_inputs.keys()).intersection(set(prev_outputs.keys()))
+    common_node_names = set(cur_inputs).intersection(set(prev_outputs))
     for name in common_node_names:
         state.used_input_names.add(name)
         state.used_output_names.add(name)
@@ -100,7 +100,7 @@ def _connect_common_nodes(state: LayerConnectionState):
 
 def _connect_cur_virtual(state: LayerConnectionState):
     prev_outputs = state.prev_outputs
-    unused_prev_outputs = set(prev_outputs.keys()).difference(state.used_output_names)
+    unused_prev_outputs = set(prev_outputs).difference(state.used_output_names)
     for name in unused_prev_outputs:
         if name in state.cur_virtual or name in state.prev_persistent:
             output = Node(name)
@@ -112,7 +112,7 @@ def _connect_cur_virtual(state: LayerConnectionState):
 
 def _connect_prev_virtual(state: LayerConnectionState):
     cur_inputs = state.cur_inputs
-    unused_input_names = set(cur_inputs.keys()).difference(state.used_input_names)
+    unused_input_names = set(cur_inputs).difference(state.used_input_names)
     for name in unused_input_names:
         if name in state.prev_virtual:
             input_node = Node(name)

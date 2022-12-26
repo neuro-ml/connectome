@@ -2,7 +2,7 @@ import logging
 import warnings
 from concurrent.futures import Executor
 from operator import itemgetter
-from typing import Optional, Set
+from typing import Optional, Set, AbstractSet
 
 from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
 from ..engine.graph import Graph
@@ -84,6 +84,8 @@ class EdgesBag:
             persistent_nodes = set()
         if optional_nodes is None:
             optional_nodes = set()
+        if not isinstance(optional_nodes, AbstractSet):
+            optional_nodes = set(optional_nodes)
         if context is None:
             context = NoContext()
 
@@ -91,7 +93,7 @@ class EdgesBag:
             inputs, outputs, edges, virtual_nodes, persistent_nodes)
 
         self.persistent_nodes = persistent_nodes
-        self.optional_nodes = optional_nodes
+        self.optional_nodes: NameSet = optional_nodes
         self.context = context
         self.backend = None
 
