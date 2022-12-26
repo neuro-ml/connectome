@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from tarn.config import StorageConfig, init_storage
-from connectome import Source, Transform, Chain, CacheToRam, meta, LazyChain, HashDigest, CacheColumns, Merge
+from connectome import Source, Transform, Chain, CacheToRam, meta, LazyChain, HashDigest, CacheColumns, Merge, optional
 from connectome.exceptions import DependencyError, FieldError
 
 
@@ -247,3 +247,17 @@ def test_dir_duplicates():
 
     items = dir(A() >> B())
     assert len(items) == len(set(items))
+
+
+def test_double_optional():
+    class A(Transform):
+        pass
+
+    class B(Transform):
+        @optional
+        def x(x):
+            pass
+
+    assert dir(A() >> B()) == []
+    assert dir(A() >> B() >> B()) == []
+    assert dir(A() >> (B() >> B())) == []
