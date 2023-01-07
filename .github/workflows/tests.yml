@@ -2,12 +2,15 @@ name: Tests
 
 on: pull_request
 
+env:
+  MODULE_NAME: connectome
+
 jobs:
   test:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: [ 3.6, 3.7, 3.8, 3.9, '3.10' ]
+        python-version: [ '3.6', '3.7', '3.8', '3.9', '3.10', '3.11' ]
 
     services:
       redis:
@@ -40,7 +43,7 @@ jobs:
         if: "! github.event.pull_request.head.repo.fork "
         run: |
           VERSION=$(python -c "from pathlib import Path; import runpy; folder, = {d.parent for d in Path().resolve().glob('*/__init__.py') if d.parent.is_dir() and (d.parent / '__version__.py').exists()}; print(runpy.run_path(folder / '__version__.py')['__version__'])")
-          MATCH=$(pip index versions connectome | grep "Available versions:" | grep $VERSION) || echo
+          MATCH=$(pip index versions $MODULE_NAME | grep "Available versions:" | grep $VERSION) || echo
           echo $MATCH
           if [ "$GITHUB_BASE_REF" = "master" ] && [ "$MATCH" != "" ]; then exit 1; fi
       - name: Build the package
@@ -60,7 +63,7 @@ jobs:
           pip install -r tests/requirements.txt
 
           cd tests
-          export MODULE_PARENT=$(python -c "import connectome, os; print(os.path.dirname(connectome.__path__[0]))")
+          export MODULE_PARENT=$(python -c "import $MODULE_NAME, os; print(os.path.dirname($MODULE_NAME.__path__[0]))")
           export MODULE_PARENT=${MODULE_PARENT%"/"}
           cd ..
           echo $MODULE_PARENT
@@ -68,7 +71,7 @@ jobs:
 
       - name: Test with pytest
         run: |
-          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov="$MODULE_PARENT/connectome" --cov-report=xml --cov-branch
+          pytest tests --junitxml=reports/junit-${{ matrix.python-version }}.xml --cov="$MODULE_PARENT/$MODULE_NAME" --cov-report=xml --cov-branch
       - name: Generate coverage report
         run: |
           coverage xml -o reports/coverage-${{ matrix.python-version }}.xml
