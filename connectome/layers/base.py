@@ -4,7 +4,7 @@ from typing import Callable, Iterable
 
 from .chain import connect
 from ..containers.base import EdgesBag
-from ..exceptions import FieldError
+from ..exceptions import FieldError, DependencyError
 from ..interface.utils import format_arguments
 from ..utils import StringsLike
 
@@ -104,9 +104,14 @@ class Instance:
 class Chain(CallableLayer):
     def __init__(self, head: CallableLayer, *tail: Layer):
         self._layers = [head, *tail]
-        container = head._container
+        container, previous = head._container, head
         for layer in tail:
-            container = layer._connect(container)
+            try:
+                container = layer._connect(container)
+            except DependencyError as e:
+                raise DependencyError(
+                    f'Error while connecting {type(previous).__name__} and {type(layer).__name__}'
+                ) from e
 
         super().__init__(container, head._properties)
 
