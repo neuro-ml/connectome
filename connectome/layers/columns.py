@@ -84,7 +84,8 @@ class CacheColumns(CacheLayer):
                 outputs.append(local)
 
         return EdgesBag(
-            [key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes, optional_nodes=None,
+            [key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes,
+            optional_nodes=main.optional_nodes, virtual_nodes=main.virtual_nodes,
         )
 
 

@@ -4,7 +4,7 @@ from typing import Callable, Iterable
 
 from .chain import connect
 from ..containers.base import EdgesBag
-from ..exceptions import FieldError, DependencyError
+from ..exceptions import FieldError
 from ..interface.utils import format_arguments
 from ..utils import StringsLike
 
@@ -24,7 +24,7 @@ class CallableLayer(Layer):
 
     def __getattr__(self, name):
         try:
-            method = self._methods[name]
+            method = self._compile(name)
         except FieldError as e:
             raise AttributeError(name) from e
 
@@ -53,7 +53,7 @@ class CallableLayer(Layer):
         return Instance(self, args, kwargs)
 
     def __dir__(self):
-        return list(self._methods.outputs)
+        return self._methods.fields()
 
     def _wrap(self, func: Callable, inputs: StringsLike, outputs: StringsLike = None,
               final: StringsLike = None) -> Callable:
@@ -71,7 +71,7 @@ class CallableLayer(Layer):
 
         def decorator(func: Callable) -> Callable:
             loopback = self._container.loopback(func, inputs, outputs)
-            logger.info('Loopback compiled: %s', list(loopback.methods))
+            logger.info('Loopback compiled: %s', loopback.fields())
             return loopback[final]
 
         return decorator
@@ -79,7 +79,7 @@ class CallableLayer(Layer):
     def _compile(self, inputs: StringsLike):
         if not isinstance(inputs, str):
             inputs = tuple(inputs)
-        return self._methods[inputs]
+        return self._methods.compile(inputs)
 
 
 class Instance:
@@ -106,12 +106,7 @@ class Chain(CallableLayer):
         self._layers = [head, *tail]
         container, previous = head._container, head
         for layer in tail:
-            try:
-                container = layer._connect(container)
-            except DependencyError as e:
-                raise DependencyError(
-                    f'Error while connecting {type(previous).__name__} and {type(layer).__name__}'
-                ) from e
+            container = layer._connect(container)
 
         super().__init__(container, head._properties)
 

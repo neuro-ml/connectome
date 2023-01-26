@@ -154,7 +154,7 @@ def test_inheritance():
         ds.f()
 
     with pytest.raises(DependencyError):
-        FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll()
+        dir(FirstInheritAll() >> SecondInheritPart() >> ThirdInheritAll())
 
 
 def test_all_inherit():
@@ -261,3 +261,14 @@ def test_double_optional():
     assert dir(A() >> B()) == []
     assert dir(A() >> B() >> B()) == []
     assert dir(A() >> (B() >> B())) == []
+
+
+def test_inherit_optional():
+    a = Transform()
+    b = Transform(x=optional(lambda x: x))
+    c = Transform(__inherit__='x')
+
+    assert dir(a >> (b >> c)) == []
+    assert dir(a >> (c >> b)) == []
+    assert dir(a >> b >> c) == []
+    assert dir(a >> c >> b) == []

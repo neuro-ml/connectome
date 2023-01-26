@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator
+from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator, Collection, Iterable, Set
 
+from ..exceptions import GraphError
 from .node_hash import NodeHash, NodeHashes
 
 
@@ -62,7 +63,7 @@ class TreeNode:
         return self._edge[1]
 
     @classmethod
-    def from_edges(cls, edges: Sequence['BoundEdge']) -> dict:
+    def from_edges(cls, edges: Iterable['BoundEdge']) -> dict:
         def update(node: Node):
             if node in mapping:
                 return mapping[node]
@@ -78,7 +79,9 @@ class TreeNode:
         # each edge is represented by its output
         for edge in edges:
             # TODO: replace by exception
-            assert edge.output not in bridges, edge
+            if edge.output in bridges:
+                raise GraphError(f'The node "{edge.output.name}" has multiple incoming edges')
+
             bridges[edge.output] = edge
             nodes.add(edge.output)
             nodes.update(edge.inputs)
@@ -89,7 +92,7 @@ class TreeNode:
         return mapping
 
     def __repr__(self):
-        return f'<TreeNode: {self.name}>'
+        return f'<TreeNode: {self.name} ({id(self)})>'
 
 
 class Node:
@@ -105,13 +108,12 @@ class BoundEdge(NamedTuple):
     inputs: 'Nodes'
     output: Node
 
-    __iter__ = None
 
-
-TreeNodes = Sequence[TreeNode]
-Nodes = Sequence[Node]
-BoundEdges = Sequence[BoundEdge]
-Edges = Sequence[Edge]
+TreeNodes = Collection[TreeNode]
+Nodes = Collection[Node]
+NodeSet = Set[Node]
+BoundEdges = Collection[BoundEdge]
+Edges = Collection[Edge]
 
 
 class HashError(RuntimeError):

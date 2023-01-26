@@ -73,7 +73,8 @@ class Filter(Layer):
         graph = self._make_graph(previous)
         edges.append(FilterEdge(graph, self.verbose).bind(keys, out))
         return EdgesBag(
-            main.inputs, outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes, optional_nodes=None,
+            main.inputs, outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes,
+            optional_nodes=main.optional_nodes, virtual_nodes=main.virtual_nodes,
         )
 
 

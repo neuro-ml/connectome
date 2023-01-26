@@ -1,13 +1,10 @@
 import logging
 import warnings
-from concurrent.futures import Executor
 from operator import itemgetter
-from typing import Optional, Set, AbstractSet
+from typing import Optional, AbstractSet
 
-from ..engine.edges import FunctionEdge, ProductEdge, IdentityEdge
-from ..engine.graph import Graph
-from ..engine.base import TreeNode, BoundEdge, Node, Nodes, BoundEdges
-from ..exceptions import GraphError, FieldError
+from ..engine import GraphCompiler, TreeNode, Node, Nodes, BoundEdges, NodeSet, FunctionEdge, ProductEdge, IdentityEdge
+from ..exceptions import GraphError
 from ..utils import node_to_dict, NameSet
 from .context import Context, NoContext, update_map
 
@@ -31,53 +28,10 @@ class Container:
         raise NotImplementedError
 
 
-class GraphCompiler:
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, executor: Executor):
-        tree_node_map = TreeNode.from_edges(edges)
-        self._edges = edges
-        self.inputs = tuple(tree_node_map[x] for x in inputs)
-        self.outputs = node_to_dict(tree_node_map[x] for x in outputs)
-        self.backend = executor
-        self.virtuals = virtuals
-        self.methods = {node.name: self._compile(node) for node in self.outputs.values()}
-
-    def __getitem__(self, item):
-        if item not in self.methods:
-            if isinstance(item, str) and item in self.virtuals:
-                # TODO: signature
-                value = identity
-
-            elif isinstance(item, tuple):
-                inputs, outputs = [], []
-                for name in item:
-                    if name not in self.outputs:
-                        if name in self.virtuals:
-                            output = TreeNode(name, None)
-                            inputs.append(output)
-                        else:
-                            raise FieldError(f'"{name}" is not an available output: {tuple(self.outputs)}')
-                    else:
-                        output = self.outputs[name]
-                    outputs.append(output)
-
-                product = TreeNode('$product', (ProductEdge(len(item)), outputs))
-                value = self._compile(product, tuple(inputs))
-
-            else:
-                raise FieldError(f'"{item}" is not an available output: {tuple(self.outputs)}')
-
-            self.methods[item] = value
-
-        return self.methods[item]
-
-    def _compile(self, node, inputs=()):
-        return Graph(self.inputs + inputs, node, self.backend).call
-
-
 class EdgesBag:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
-                 virtual_nodes: NameSet = None, persistent_nodes: Optional[NameSet],
-                 optional_nodes: Optional[NameSet] = None):
+                 virtual_nodes: Optional[NameSet], persistent_nodes: Optional[NameSet],
+                 optional_nodes: Optional[NodeSet]):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:
@@ -90,10 +44,10 @@ class EdgesBag:
             context = NoContext()
 
         self.inputs, self.outputs, self.edges, self.virtual_nodes = normalize_bag(
-            inputs, outputs, edges, virtual_nodes, persistent_nodes)
+            inputs, outputs, edges, virtual_nodes, optional_nodes, persistent_nodes)
 
-        self.persistent_nodes = persistent_nodes
-        self.optional_nodes: NameSet = optional_nodes
+        self.persistent_nodes: NameSet = persistent_nodes
+        self.optional_nodes: NodeSet = optional_nodes
         self.context = context
         self.backend = None
 
@@ -105,7 +59,7 @@ class EdgesBag:
         for edge in self.edges:
             inputs = update_map(edge.inputs, node_map)
             output, = update_map([edge.output], node_map)
-            edges_copy.append(BoundEdge(edge.edge, inputs, output))
+            edges_copy.append(edge.edge.bind(inputs, output))
 
         return EdgesBag(
             update_map(self.inputs, node_map),
@@ -113,12 +67,15 @@ class EdgesBag:
             edges_copy,
             self.context.update(node_map),
             virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
-            optional_nodes=self.optional_nodes,
+            optional_nodes=update_map(self.optional_nodes, node_map),
         )
 
     def compile(self) -> GraphCompiler:
-        return GraphCompiler(self.inputs, self.outputs, self.edges, self.virtual_nodes, self.backend)
+        return GraphCompiler(
+            self.inputs, self.outputs, self.edges, self.virtual_nodes, self.optional_nodes, self.backend
+        )
 
+    # TODO: this should return a container without compilation
     def loopback(self, func, inputs, output):
         state = self.freeze()
         edges = list(state.edges)
@@ -166,11 +123,7 @@ class EdgesBag:
                 outputs.append(out)
 
         outputs, edges = state.context.reverse(all_inputs, outputs, edges)
-        return GraphCompiler(all_inputs, outputs, edges, set(), self.backend)
-
-
-def identity(x):
-    return x
+        return GraphCompiler(all_inputs, outputs, edges, set(), self.optional_nodes, self.backend)
 
 
 def get_parents(node: TreeNode):
@@ -184,24 +137,26 @@ def get_parents(node: TreeNode):
             yield from get_parents(parent)
 
 
-def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_nodes: Set[str], persistent_nodes):
+def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: NodeSet,
+                  persistent_nodes: NameSet):
     # 1. outputs must only depend on inputs
     # 1a. inputs must have no dependencies
     # 2. each node can only have a single incoming edge
     # 2a. the intersection between outputs and virtual nodes must be empty
     # 3. virtual edges with a present input node become non-virtual
     # 4. the graph must be acyclic
+    # 5. all the optional nodes must be present among the edges' inputs/outputs
     inputs, outputs = node_to_dict(inputs), node_to_dict(outputs)
     edges = list(edges)
 
     # 2a:
-    intersection = virtual_nodes & set(outputs)
+    intersection = virtuals & set(outputs)
     if intersection:
         raise GraphError(f'The nodes {intersection} are both inherited and have defined edges')
 
     # 3:
-    add = (virtual_nodes | persistent_nodes) & set(inputs) - set(outputs)
-    virtual_nodes = virtual_nodes - add
+    add = (virtuals | persistent_nodes) & set(inputs) - set(outputs)
+    virtuals = virtuals - add
     for name in add:
         outputs[name] = Node(name)
         edges.append(IdentityEdge().bind(inputs[name], outputs[name]))
@@ -228,11 +183,18 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtual_node
     if not_leaves:
         raise GraphError(f'The inputs {not_leaves} are not actual inputs - they have dependencies')
     # 1:
-    missing = {node.name for node in set(get_parents(mapping[product])) - tree_inputs}
-    if missing:
-        raise GraphError(f'The nodes {missing} are missing from the inputs')
+    # TODO:
+    # missing = {node.name for node in set(get_parents(mapping[product])) - tree_inputs}
+    # if missing:
+    #     raise GraphError(f'The nodes {missing} are missing from the inputs')
 
-    return tuple(inputs.values()), tuple(outputs.values()), tuple(edges), virtual_nodes
+    # 5:
+    missing_optionals = optionals - set(mapping)
+    if missing_optionals:
+        missing_optionals = {x.name for x in missing_optionals}
+        raise GraphError(f'The nodes {missing_optionals} are marked as optional, but are not present in the graph')
+
+    return tuple(inputs.values()), tuple(outputs.values()), tuple(edges), virtuals
 
 
 def detect_cycles(adjacency):

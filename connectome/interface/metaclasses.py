@@ -91,7 +91,7 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
         super(Transform, self).__init__(*items_to_container(kwargs, __inherit__, TransformFactory), ())
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(self._methods.methods)})"
+        return f"{self.__class__.__name__}({', '.join(self._methods.fields())})"
 
 
 class TransformBase(CallableLayer):

@@ -38,5 +38,4 @@ class Apply(CallableLayer):
 
         super().__init__(ReversibleContainer(
             inputs, outputs, edges, forward_virtual=AntiSet(transform), backward_virtual=AntiSet(),
-            optional_nodes=None, persistent_nodes=None,
         ), ())

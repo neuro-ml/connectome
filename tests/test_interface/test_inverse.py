@@ -1,7 +1,7 @@
 import pytest
 
 from connectome import Transform, Apply, inverse
-from connectome.containers.base import identity
+from connectome.engine.compiler import identity
 from connectome.exceptions import GraphError
 
 
