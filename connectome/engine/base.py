@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator, Collection, Iterable, Set
 
 from ..exceptions import GraphError
+
 from .node_hash import NodeHash, NodeHashes
 
 
@@ -35,7 +36,7 @@ class Edge(ABC):
 
     @abstractmethod
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        pass
+        """ Propagates the graph's hash without any control flow. """
 
     def bind(self, inputs: Union['Node', 'Nodes'], output: 'Node') -> 'BoundEdge':
         if isinstance(inputs, Node):

@@ -1,7 +1,7 @@
 import operator
 
 from ..containers.base import EdgesBag
-from ..containers.goup import GroupContainer, MultiGroupLayer
+from ..containers.group import GroupContainer, MultiGroupLayer
 from ..layers import *  # noqa
 from ..utils import deprecation_warn, StringsLike, to_seq  # noqa
 
