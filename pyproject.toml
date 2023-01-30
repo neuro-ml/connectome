@@ -43,3 +43,17 @@ include = ["connectome"]
 
 [tool.setuptools.dynamic]
 version = { attr = "connectome.__version__.__version__" }
+
+[tool.flake8]
+# W503: line break before binary operator is actually considered best-practice
+# E203: spaces around complex variables in slices are pep-right
+# F401: unused imports in __init__.py-s
+# I251: allow absolute imports in upper files
+# B028: !r is not supported for python<3.8
+ignore = ["W503", "E203", "B028"]
+per-file-ignores = [
+    "**/__init__.py:F401",
+    "tests/*:I251",
+]
+max-line-length = 120
+banned-modules = "connectome.* = Use relative imports"

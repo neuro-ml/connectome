@@ -2,7 +2,7 @@ from concurrent.futures import Executor
 from typing import Union, Tuple
 
 from ..exceptions import FieldError, DependencyError
-from ..utils import NameSet, node_to_dict
+from ..utils import NameSet
 from .base import TreeNode, Nodes, BoundEdges, TreeNodes
 from .edges import ProductEdge
 from .graph import Graph
@@ -64,7 +64,7 @@ class GraphCompiler:
             for name in item:
                 if name not in self._all_outputs:
                     if name in self._virtuals:
-                        output = TreeNode(name, None)
+                        output = TreeNode(name, None, None)
                         inputs.append(output)
                     else:
                         raise FieldError(f'"{name}" is not an available output: {tuple(self._outputs)}')
@@ -72,7 +72,7 @@ class GraphCompiler:
                     output = self._outputs[name]
                 outputs.append(output)
 
-            product = TreeNode('$product', (ProductEdge(len(item)), outputs))
+            product = TreeNode('tuple', (ProductEdge(len(item)), outputs), None)
             return Graph(self._inputs | set(inputs), product, self._executor).call
 
         raise FieldError(f'"{item}" is not an available output: {tuple(self._outputs)}')
@@ -82,6 +82,17 @@ class GraphCompiler:
         return self.compile(item)
 
     def _validate_optionals(self):
+        def pretty(node: TreeNode):
+            result, parents = repr(node.name), []
+            details = node.details
+            while details is not None:
+                parents.append(f'"{details.layer.__name__}"')
+                details = details.parent
+
+            if parents:
+                result += f' (layer {" -> ".join(parents)})'
+            return result
+
         inputs = find_dependencies(self._all_outputs.values())
 
         available = {}
@@ -90,14 +101,14 @@ class GraphCompiler:
             if missing:
                 if output not in self._optionals:
                     raise DependencyError(
-                        f'The output "{output.name}" has unreachable inputs: {tuple(node_to_dict(missing))}'
+                        f'The output {pretty(output)} has unreachable inputs: {", ".join(map(pretty, missing))}'
                     )
 
                 not_optional = missing - self._optionals
                 if not_optional:
                     raise DependencyError(
-                        f'The output "{output.name}" has unreachable inputs: {tuple(node_to_dict(missing))}, '
-                        f'some of which are not optional: {tuple(node_to_dict(not_optional))}'
+                        f'The output {pretty(output)} has unreachable inputs: {", ".join(map(pretty, missing))}, '
+                        f'some of which are not optional: {tuple(map(pretty, not_optional))}'
                     )
 
             else:

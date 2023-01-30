@@ -4,6 +4,7 @@ from typing import Callable, Iterable
 
 from .chain import connect
 from ..containers.base import EdgesBag
+from ..engine import Details
 from ..exceptions import FieldError
 from ..interface.utils import format_arguments
 from ..utils import StringsLike
@@ -13,6 +14,18 @@ logger = logging.getLogger(__name__)
 
 class Layer:
     def _connect(self, previous: EdgesBag) -> EdgesBag:
+        """
+        Connect to a `previous` layer in a chain
+
+        Parameters
+        ----------
+        previous:
+            the contents of the previous layer
+
+        Returns
+        -------
+        The contents of the new merged layer
+        """
         raise NotImplementedError
 
 
@@ -104,10 +117,11 @@ class Instance:
 class Chain(CallableLayer):
     def __init__(self, head: CallableLayer, *tail: Layer):
         self._layers = [head, *tail]
-        container, previous = head._container, head
+        container = head._container
         for layer in tail:
             container = layer._connect(container)
 
+        container = container.freeze(Details(type(self)))
         super().__init__(container, head._properties)
 
     def __getitem__(self, index):
@@ -156,6 +170,7 @@ class LazyChain(Layer):
     def _connect(self, previous: EdgesBag) -> EdgesBag:
         for layer in self._layers:
             previous = layer._connect(previous)
+        previous = previous.freeze(Details(type(self)))
         return previous
 
     def __repr__(self):

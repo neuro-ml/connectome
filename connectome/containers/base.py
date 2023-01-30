@@ -1,9 +1,11 @@
 import logging
 import warnings
 from operator import itemgetter
-from typing import Optional, AbstractSet
+from typing import Optional, AbstractSet, Union
 
-from ..engine import GraphCompiler, TreeNode, Node, Nodes, BoundEdges, NodeSet, FunctionEdge, ProductEdge, IdentityEdge
+from ..engine import (
+    GraphCompiler, TreeNode, Node, Nodes, BoundEdges, NodeSet, FunctionEdge, ProductEdge, IdentityEdge, Details
+)
 from ..exceptions import GraphError
 from ..utils import node_to_dict, NameSet
 from .context import Context, NoContext, update_map
@@ -51,23 +53,29 @@ class EdgesBag:
         self.context = context
         self.backend = None
 
-    def freeze(self) -> 'EdgesBag':
-        # TODO: layer inputs and outputs may not be among the edges
+    def freeze(self, parent: Union[Details, None] = None) -> 'EdgesBag':
+        """
+        Creates a copy of the nodes and edges.
+        If `parent` is not None, increases the nesting of the layers hierarchy by assigning
+        `parent` to top layers and nodes
+        """
         node_map = {}
-        edges_copy = []
+        layers_map = {} if parent is not None else None
 
+        edges = []
         for edge in self.edges:
-            inputs = update_map(edge.inputs, node_map)
-            output, = update_map([edge.output], node_map)
-            edges_copy.append(edge.edge.bind(inputs, output))
+            inputs = update_map(edge.inputs, node_map, parent, layers_map)
+            output, = update_map([edge.output], node_map, parent, layers_map)
+            edges.append(edge.edge.bind(inputs, output))
 
         return EdgesBag(
-            update_map(self.inputs, node_map),
-            update_map(self.outputs, node_map),
-            edges_copy,
+            update_map(self.inputs, node_map, parent, layers_map),
+            update_map(self.outputs, node_map, parent, layers_map),
+            edges,
+            # TODO: should the context also update the nesting?
             self.context.update(node_map),
             virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
-            optional_nodes=update_map(self.optional_nodes, node_map),
+            optional_nodes=update_map(self.optional_nodes, node_map, parent, layers_map),
         )
 
     def compile(self) -> GraphCompiler:
@@ -91,11 +99,13 @@ class EdgesBag:
             raise ValueError(f'The inputs contain duplicates: {inputs}')
 
         input_nodes, all_inputs = [], list(state.inputs)
+        # the function is the parent of these new nodes
+        parent = Details(func)
         for name in inputs:
             if name not in current:
                 if name not in state.virtual_nodes:
                     raise GraphError(f'Node "{name}" is not defined')
-                node = Node(name)
+                node = Node(name, parent)
                 all_inputs.append(node)
             else:
                 node = current[name]
@@ -106,7 +116,7 @@ class EdgesBag:
 
         # single output
         if isinstance(output, str):
-            output = Node(output)
+            output = Node(output, parent)
 
             edges.append(edge.bind(input_nodes, output))
             outputs.append(output)
@@ -115,10 +125,10 @@ class EdgesBag:
         else:
             assert len(set(outputs)) == len(outputs)
 
-            aux = Node('$aux')
+            aux = Node('tuple', parent)
             edges.append(edge.bind(input_nodes, aux))
             for idx, out in enumerate(output):
-                out = Node(out)
+                out = Node(out, parent)
                 edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
                 outputs.append(out)
 
@@ -158,7 +168,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: Na
     add = (virtuals | persistent_nodes) & set(inputs) - set(outputs)
     virtuals = virtuals - add
     for name in add:
-        outputs[name] = Node(name)
+        outputs[name] = inputs[name].clone()
         edges.append(IdentityEdge().bind(inputs[name], outputs[name]))
 
     # 2:
@@ -176,7 +186,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: Na
         )
 
     # 1a:
-    product = Node('$product')
+    product = Node('$product', None)
     mapping = TreeNode.from_edges(edges + [ProductEdge(len(outputs)).bind(tuple(outputs.values()), product)])
     tree_inputs = {mapping[node] for node in inputs.values()}
     not_leaves = {node.output.name for node in tree_inputs if not node.is_leaf}

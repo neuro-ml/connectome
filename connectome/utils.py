@@ -58,7 +58,9 @@ class AntiSet(AbstractSet):
         return item not in self.excluded
 
     def __repr__(self):
-        return f'{{*}} - {self.excluded}'
+        if self.excluded:
+            return f'{{*}} - {self.excluded}'
+        return '{*}'
 
     def __bool__(self) -> bool:
         return True

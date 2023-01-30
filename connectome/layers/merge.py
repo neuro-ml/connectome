@@ -2,7 +2,7 @@ from typing import Sequence, Any, Generator
 
 from ..containers import EdgesBag
 from ..engine import (
-    ConstantEdge, IdentityEdge, Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command
+    ConstantEdge, IdentityEdge, Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command, Details
 )
 from ..engine.node_hash import MergeHash
 from ..utils import node_to_dict
@@ -21,21 +21,21 @@ class Merge(CallableLayer):
         if not properties:
             raise ValueError('The datasets do not contain properties.')
         if len(properties) > 1:
-            raise ValueError(f'Can\'t decide which property to use as ids.')
+            raise ValueError(f'Can\'t decide which property to use as keys.')
         ids_name, = properties
 
-        id2dataset_index = {}
+        id_to_dataset = {}
         for index, dataset in enumerate(layers):
             # TODO: the ids should be computed lazily
-            ids = getattr(dataset, ids_name)
-            intersection = set(ids) & set(id2dataset_index)
+            keys = getattr(dataset, ids_name)
+            intersection = set(keys) & set(id_to_dataset)
             if intersection:
                 raise RuntimeError(f'Ids {intersection} are duplicated in merged datasets.')
 
-            id2dataset_index.update({i: index for i in ids})
+            id_to_dataset.update({i: index for i in keys})
 
         super().__init__(
-            self._merge_containers(id2dataset_index, [layer._container for layer in layers], ids_name),
+            self._merge_containers(id_to_dataset, [layer._container for layer in layers], ids_name),
             properties,
         )
         self._layers = layers
@@ -43,14 +43,15 @@ class Merge(CallableLayer):
     def __repr__(self):
         return 'Merge' + format_arguments(self._layers)
 
-    @staticmethod
-    def _merge_containers(id_to_index: dict, containers: Sequence[EdgesBag], keys_name: str):
+    def _merge_containers(self, id_to_index: dict, containers: Sequence[EdgesBag], keys_name: str):
+        details = Details(type(self))
+
         inputs = []
         groups = []
         edges = []
         # gather parts
         for container in containers:
-            params = container.freeze()
+            params = container.freeze(details)
             if len(params.inputs) != 1:
                 raise ValueError('Each layer must have exactly one input')
             inputs.append(params.inputs[0])
@@ -63,7 +64,7 @@ class Merge(CallableLayer):
             raise ValueError(f'Layer inputs must have the same name: {inp}')
 
         # create the new input
-        inp = Node(inp[0])
+        inp = Node(inp[0], details)
         for node in inputs:
             edges.append(IdentityEdge().bind(inp, node))
 
@@ -71,13 +72,13 @@ class Merge(CallableLayer):
         outputs = []
         common_outputs = set.intersection(*map(set, groups)) - {keys_name}
         for name in common_outputs:
-            node = Node(name)
+            node = Node(name, details)
             branches = [group[name] for group in groups]
             outputs.append(node)
             edges.append(SwitchEdge(id_to_index, len(containers)).bind([inp] + branches, node))
 
         # and the keys
-        ids = Node(keys_name)
+        ids = Node(keys_name, details)
         outputs.append(ids)
         edges.append(ConstantEdge(tuple(sorted(id_to_index))).bind([], ids))
 
@@ -97,7 +98,7 @@ class SwitchEdge(Edge):
         try:
             idx = self.id_to_index[key]
         except KeyError:
-            raise ValueError(f'Identifier {key} not found.') from None
+            raise ValueError(f'Identifier {key!r} not found.') from None
 
         value = yield Command.ParentHash, idx + 1
         return value, idx

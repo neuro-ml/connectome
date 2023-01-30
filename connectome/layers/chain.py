@@ -1,7 +1,7 @@
 from typing import Tuple
 
 from ..containers import Context, EdgesBag
-from ..engine import Node, Nodes, BoundEdges, IdentityEdge
+from ..engine import Nodes, BoundEdges, IdentityEdge
 from ..utils import check_for_duplicates, node_to_dict
 
 
@@ -42,8 +42,8 @@ def _connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
 
     # left virtuals
     for name in left.virtual_nodes & set(right_inputs):
-        inp = Node(name)
         out = right_inputs[name]
+        inp = out.clone()
         edges.append(IdentityEdge().bind(inp, out))
         inputs.add(inp)
         if out in optionals:
@@ -52,7 +52,7 @@ def _connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
     # right virtuals
     for name in set(left_outputs) & (right.virtual_nodes | left.persistent_nodes):
         inp = left_outputs[name]
-        out = Node(name)
+        out = inp.clone()
         edges.append(IdentityEdge().bind(inp, out))
         outputs.add(out)
         if inp in optionals:

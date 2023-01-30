@@ -2,17 +2,19 @@ import inspect
 import logging
 from typing import Dict, Any, Iterable, Callable, Type
 
-from .base import CallableLayer
 from .decorators import Meta, Optional, RuntimeAnnotation
 from .edges import EdgeFactory, Function
 from .factory_utils import add_quals, to_argument
-from .nodes import NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes, NodeType, Default, \
-    Intermediate, FinalNodeType, is_private
+from .nodes import (
+    NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes, NodeType, Default, Intermediate,
+    FinalNodeType, is_private
+)
 from ..containers import EdgesBag, ReversibleContainer
 from ..containers.reversible import normalize_inherit
-from ..engine import IdentityEdge, ConstantEdge
+from ..engine import IdentityEdge, ConstantEdge, Details
 from ..exceptions import GraphError, FieldError
 from ..utils import MultiDict
+from ..layers import CallableLayer
 
 logger = logging.getLogger(__name__)
 
@@ -75,21 +77,21 @@ class FactoryLayer(CallableLayer):
 
 
 class GraphFactory:
-    def __init__(self, scope: MultiDict):
+    def __init__(self, details: Details, scope: MultiDict):
         self.scope = scope
         self.edges = []
         # layer inputs
-        self.inputs = NodeStorage()
-        self.backward_inputs = NodeStorage()
+        self.inputs = NodeStorage(details)
+        self.backward_inputs = NodeStorage(details)
         # layer outputs
-        self.outputs = NodeStorage()
-        self.backward_outputs = NodeStorage()
+        self.outputs = NodeStorage(details)
+        self.backward_outputs = NodeStorage(details)
         # __init__ arguments
-        self.arguments = NodeStorage()
+        self.arguments = NodeStorage(details)
         # their defaults
         self.defaults = {}
         # outputs of transform parameters
-        self.parameters = NodeStorage()
+        self.parameters = NodeStorage(details)
         # names of optional nodes
         self.optional_names = set()
         # names of inherited nodes
@@ -117,8 +119,8 @@ class GraphFactory:
             x.freeze()
 
     @classmethod
-    def make_scope(cls, namespace: MultiDict) -> dict:
-        factory = cls(namespace)
+    def make_scope(cls, details, namespace: MultiDict) -> dict:
+        factory = cls(details, namespace)
         signature = factory.get_init_signature()
         allow_positional = len(signature.parameters)
 
@@ -376,7 +378,7 @@ class TransformFactory(GraphFactory):
         self.forward_inherit = value
 
 
-def items_to_container(items, inherit, factory_cls: Type[GraphFactory]):
+def items_to_container(items, inherit, layer_type, factory_cls: Type[GraphFactory]):
     if isinstance(items, dict):
         items = items.items()
 
@@ -391,7 +393,7 @@ def items_to_container(items, inherit, factory_cls: Type[GraphFactory]):
 
         local[name] = value
 
-    factory = factory_cls(local)
+    factory = factory_cls(Details(layer_type), local)
     if factory.special_methods:
         raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
     return factory.build({}), factory.property_names

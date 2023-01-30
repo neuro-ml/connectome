@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator, Collection, Iterable, Set
+from types import FunctionType
+from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator, Collection, Iterable, Set, Dict, Type
 
 from ..exceptions import GraphError
-
 from .node_hash import NodeHash, NodeHashes
+
+__all__ = (
+    'Command', 'HashOutput', 'Request', 'Response', 'HashError',
+    'Edge', 'Node', 'Nodes', 'NodeSet', 'BoundEdge', 'BoundEdges', 'TreeNode', 'TreeNodes', 'Details',
+)
 
 
 class Command(Enum):
@@ -45,11 +51,35 @@ class Edge(ABC):
         return BoundEdge(self, inputs, output)
 
 
-class TreeNode:
-    __slots__ = 'name', '_edge'
+@dataclass(unsafe_hash=True)
+class Details:
+    layer: Union[Type, FunctionType] = field(hash=True)
+    parent: Optional['Details'] = field(default=None, hash=True)
 
-    def __init__(self, name: str, edge: Optional[Tuple[Edge, Sequence['TreeNode']]]):
-        self.name, self._edge = name, edge
+    def update(self, mapping: Dict['Details', 'Details'], parent: Union['Details', None]):
+        """ Update the whole tree with a sentinel """
+        assert isinstance(parent, Details) or parent is None, parent
+        if self.parent is not None:
+            if self.parent in mapping:
+                parent = mapping[self.parent]
+            else:
+                parent = mapping[self.parent] = self.parent.update(mapping, parent)
+
+        return Details(self.layer, parent)
+
+    def __str__(self):
+        result = f'{self.layer} ({hex(id(self))})'
+        if self.parent is not None:
+            result += ' -> ' + str(self.parent)
+        return result
+
+
+class TreeNode:
+    __slots__ = 'name', '_edge', 'details'
+
+    def __init__(self, name: str, edge: Optional[Tuple[Edge, Sequence['TreeNode']]],
+                 details: Union[Details, None] = None):
+        self.name, self._edge, self.details = name, edge, details
 
     @property
     def is_leaf(self):
@@ -64,15 +94,15 @@ class TreeNode:
         return self._edge[1]
 
     @classmethod
-    def from_edges(cls, edges: Iterable['BoundEdge']) -> dict:
+    def from_edges(cls, edges: Iterable['BoundEdge']) -> Dict['Node', 'TreeNode']:
         def update(node: Node):
             if node in mapping:
                 return mapping[node]
 
             bridge = bridges.get(node)
             if bridge is not None:
-                bridge = bridge.edge, tuple(update(x) for x in bridge.inputs)
-            mapping[node] = new = cls(node.name, bridge)
+                bridge = bridge.edge, tuple(map(update, bridge.inputs))
+            mapping[node] = new = cls(node.name, bridge, node.details)
             return new
 
         nodes = set()
@@ -92,13 +122,44 @@ class TreeNode:
             update(n)
         return mapping
 
+    @staticmethod
+    def to_edges(nodes: Iterable['TreeNode']) -> Sequence['BoundEdge']:
+        def reverse(node) -> Node:
+            if node not in _reversed:
+                _reversed[node] = Node(node.name, node.details)
+            return _reversed[node]
+
+        def visit(node: 'TreeNode'):
+            if node in visited or node.is_leaf:
+                return
+            visited.add(node)
+            for parent in node.parents:
+                visit(parent)
+
+            result.append(BoundEdge(node.edge, list(map(reverse, node.parents)), reverse(node)))
+
+        result = []
+        visited = set()
+        _reversed = {}
+        for n in nodes:
+            visit(n)
+
+        return tuple(result)
+
     def __repr__(self):
-        return f'<TreeNode: {self.name} ({id(self)})>'
+        return f'<TreeNode: {self.name}>'
 
 
 class Node:
-    def __init__(self, name: str):
+    __slots__ = 'name', 'details'
+
+    def __init__(self, name: str, details: Union[Details, None] = None):
+        assert isinstance(details, Details) or details is None, details
         self.name = name
+        self.details = details
+
+    def clone(self):
+        return type(self)(self.name, self.details)
 
     def __repr__(self):
         return f'<Node: {self.name}>'

@@ -14,7 +14,7 @@ from ..containers import EdgesBag, Container, IdentityContext
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..utils import PathLike, StringsLike, node_to_dict, to_seq, AntiSet
-from ..engine import TreeNode, Node, ImpureEdge, CacheEdge, IdentityEdge
+from ..engine import TreeNode, Node, ImpureEdge, CacheEdge, IdentityEdge, Details
 from ..cache import Cache, MemoryCache, DiskCache
 
 PathLikes = Union[PathLike, Sequence[PathLike]]
@@ -57,8 +57,9 @@ class CacheToStorage(CacheLayer):
         previous = previous.freeze()
         forward_outputs = node_to_dict(previous.outputs)
 
+        details = Details(type(self))
         edges = list(previous.edges)
-        outputs = [Node(name) for name in forward_outputs]
+        outputs = [Node(name, details) for name in forward_outputs]
         mapping = TreeNode.from_edges(previous.edges)
         virtuals = previous.virtual_nodes - set(forward_outputs)
 

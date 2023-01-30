@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Sequence, Callable, Any, Generator, Tuple
 
-from .base import NodeHash, Edge, NodeHashes, HashOutput, HashError, Request, Response
+from .base import Edge, HashOutput, HashError, Request, Response
+from .node_hash import NodeHash, NodeHashes
 from .graph import Command
 from .node_hash import LeafHash, ApplyHash, TupleHash
 

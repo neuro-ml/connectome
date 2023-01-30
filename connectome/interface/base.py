@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import TypeVar
 
 from .compat import Generic
@@ -7,7 +8,8 @@ from ..layers.base import CallableLayer, Chain, LazyChain, chained  # noqa
 from ..utils import deprecation_warn
 
 logger = logging.getLogger(__name__)
-
+warnings.warn('This module is deprecated', DeprecationWarning)
+warnings.warn('This module is deprecated', UserWarning)
 T = TypeVar('T', bound=Container)
 
 

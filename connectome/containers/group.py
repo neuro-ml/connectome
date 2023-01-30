@@ -4,7 +4,7 @@ from typing import Sequence, Any, Generator
 
 from .base import EdgesBag, Container
 from ..engine import NodeHash
-from ..engine.base import Node, TreeNode, NodeHashes, Command, Request, Response
+from ..engine import Node, TreeNode, NodeHashes, Command, Request, Response, Details
 from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
 from ..engine.graph import Graph
 from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
@@ -23,14 +23,15 @@ class GroupContainer(Container):
         raise ValueError(f'The previous layer must contain the attribute "{name}"')
 
     def wrap(self, container: EdgesBag) -> EdgesBag:
-        main = container.freeze()
+        parent = Details(type(self))
+        main = container.freeze(parent)
 
         inp, = main.inputs
         edges = list(main.edges)
         outputs = []
         mapping = TreeNode.from_edges(edges)
-        changed_input = Node('id')
-        mapping_node = Node('$mapping')
+        changed_input = Node('id', parent)
+        mapping_node = Node('$mapping', parent)
         ids_node = self._find(main.outputs, 'ids')
         outputs.append(changed_input)
 
@@ -43,16 +44,16 @@ class GroupContainer(Container):
             if node.name in [self.name, 'ids', 'id']:
                 continue
 
-            output = Node(node.name)
+            output = Node(node.name, parent)
             outputs.append(output)
             edges.append(GroupEdge(Graph([mapping[inp]], mapping[node])).bind(
                 [changed_input, mapping_node], output))
 
         if len(outputs) == 1:
-            raise RuntimeError(f'Previous layer must contain at least 2 fields in order to perform a GroupBy operation')
+            raise RuntimeError('Previous layer must contain at least 2 fields in order to perform a GroupBy operation')
 
         # update ids
-        output_ids = Node('ids')
+        output_ids = Node('ids', parent)
         outputs.append(output_ids)
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
@@ -130,7 +131,8 @@ class MultiGroupLayer(Container):
         raise ValueError(f'The previous layer must contain the attribute "{name}"')
 
     def wrap(self, container: EdgesBag) -> EdgesBag:
-        main = container.freeze()
+        parent = Details(type(self))
+        main = container.freeze(parent)
 
         inp, = main.inputs
         edges = list(main.edges)
@@ -147,8 +149,8 @@ class MultiGroupLayer(Container):
         assert [x.name for x in graph_outputs] == self.names
 
         # create a mapping: {new_id: [old_ids]}
-        graph_output = Node('$product')
-        mapping_node = Node('$mapping')
+        graph_output = Node('$product', parent)
+        mapping_node = Node('$mapping', parent)
         ids_node = self._find(main.outputs, 'ids')
         edges.append(ProductEdge(len(graph_outputs)).bind(graph_outputs, graph_output))
         mapping = TreeNode.from_edges(edges)
@@ -157,16 +159,16 @@ class MultiGroupLayer(Container):
             [ids_node], mapping_node))
 
         # evaluate each output
-        changed_input = Node('id')
+        changed_input = Node('id', parent)
         outputs = [changed_input]
         for node in group_outputs:
-            output = Node(node.name)
+            output = Node(node.name, parent)
             outputs.append(output)
             edges.append(GroupEdge(Graph([mapping[inp]], mapping[node])).bind(
                 [changed_input, mapping_node], output))
 
         # update ids
-        output_ids = Node('ids')
+        output_ids = Node('ids', parent)
         outputs.append(output_ids)
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 

@@ -4,7 +4,7 @@ from tqdm.auto import tqdm
 
 from .base import EdgesBag, Layer
 from ..containers import IdentityContext
-from ..engine import Node, TreeNode, Graph, FilterHash, FunctionEdge, StaticEdge, StaticGraph
+from ..engine import Node, TreeNode, Graph, FilterHash, FunctionEdge, StaticEdge, StaticGraph, Details
 from ..utils import extract_signature, node_to_dict
 
 
@@ -48,29 +48,30 @@ class Filter(Layer):
         args = ', '.join(self._names)
         return f'Filter({args})'
 
-    def _make_graph(self, layer):
-        copy = layer.freeze()
+    def _make_graph(self, layer, details):
+        copy = layer.freeze(details)
         edges = list(copy.edges)
         outputs_mapping = node_to_dict(copy.outputs)
-        out = Node('$predicate')
+        out = Node('$predicate', details)
         edges.append(
             FunctionEdge(self.predicate, len(self._names)).bind([outputs_mapping[name] for name in self._names], out))
         mapping = TreeNode.from_edges(edges)
         return Graph([mapping[copy.inputs[0]]], mapping[out])
 
     def _connect(self, previous: EdgesBag) -> EdgesBag:
-        main = previous.freeze()
+        details = Details(type(self))
+        main = previous.freeze(details)
         outputs = list(main.outputs)
         edges = list(main.edges)
 
         # change ids
         keys = _find(outputs, self._keys)
-        out = Node(self._keys)
+        out = Node(self._keys, details)
         outputs.remove(keys)
         outputs.append(out)
 
         # filter
-        graph = self._make_graph(previous)
+        graph = self._make_graph(previous, details)
         edges.append(FilterEdge(graph, self.verbose).bind(keys, out))
         return EdgesBag(
             main.inputs, outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes,

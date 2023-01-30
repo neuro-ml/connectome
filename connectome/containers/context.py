@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, AbstractSet
 
-from ..engine.base import TreeNode, Node, Nodes, BoundEdges, TreeNodes
-from ..engine.edges import IdentityEdge
+from ..engine import TreeNode, Node, Nodes, BoundEdges, TreeNodes, IdentityEdge, Details
 from ..utils import node_to_dict
 
 __all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext'
@@ -61,9 +60,8 @@ class BagContext(Context):
         # add inheritance
         add = self.inherit - set(node_to_dict(actual))
         for name, node in outputs.items():
-            name = node.name
-            if name in add:
-                out = Node(name)
+            if node.name in add:
+                out = node.clone()
                 edges.append(IdentityEdge().bind(node, out))
                 actual.append(out)
 
@@ -77,10 +75,20 @@ class BagContext(Context):
         )
 
 
-def update_map(nodes, node_map):
+def update_map(nodes: Nodes, node_map: dict, parent: Details = None, layer_map: dict = None):
     for node in nodes:
         if node not in node_map:
-            node_map[node] = Node(node.name)
+            details = node.details
+            if details is None:
+                details = parent
+            elif layer_map is not None:
+                if node.details in layer_map:
+                    details = layer_map[node.details]
+                else:
+                    details = layer_map[node.details] = node.details.update(layer_map, parent)
+
+            node_map[node] = Node(node.name, details)
+
     return [node_map[x] for x in nodes]
 
 

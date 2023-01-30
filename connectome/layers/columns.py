@@ -8,7 +8,7 @@ from .cache import CacheLayer, SerializersLike, PathLikes, RemoteStorageLike, _n
 from ..cache import DiskCache, MemoryCache
 from ..containers import EdgesBag, IdentityContext
 from ..engine import (
-    Edge, TreeNode, Node, Graph, Request, Response, HashOutput, Command, TupleHash, NodeHashes, NodeHash
+    Edge, TreeNode, Node, Graph, Request, Response, HashOutput, Command, TupleHash, NodeHashes, NodeHash, Details
 )
 from ..exceptions import DependencyError
 from ..storage import Storage
@@ -64,7 +64,8 @@ class CacheColumns(CacheLayer):
 
         keys = main_outputs[property_name]
 
-        copy = previous.freeze()
+        details = Details(type(self))
+        copy = previous.freeze(details)
         mapping = TreeNode.from_edges(copy.edges)
         outputs_copy = node_to_dict(copy.outputs)
         graph_inputs = [mapping[copy.inputs[0]]]
@@ -76,7 +77,7 @@ class CacheColumns(CacheLayer):
                 outputs.append(output)
 
             else:
-                local = Node(name)
+                local = Node(name, details)
                 # build a graph for each node
                 graph = Graph(graph_inputs, mapping[outputs_copy[name]])
                 edges.append(CachedColumn(
