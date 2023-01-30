@@ -22,7 +22,7 @@ def test_missing_param():
             def f(_param):
                 pass
 
-        A()
+        dir(A())
 
 
 def test_builtin_decorators():

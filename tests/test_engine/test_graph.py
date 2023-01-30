@@ -141,7 +141,7 @@ def test_optional(first_simple, layer_maker):
     second = layer_maker.make_layer(
         first_out=lambda sum, prod: sum * prod,
         second_out=lambda sub: 2 * sub,
-        optional_nodes=['sub']
+        optional_inputs=['sub']
     )
 
     layer = connect(first, second)

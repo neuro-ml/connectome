@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Callable, NamedTuple
 
 from ..engine import Edge, FunctionEdge, ImpureEdge
+from ..exceptions import FieldError
 from .decorators import RuntimeAnnotation
 from .utils import replace_annotation
 from .nodes import *
@@ -12,8 +13,6 @@ __all__ = (
     'Function', 'FunctionWrapper', 'FunctionBase',
     'Inverse', 'inverse', 'Impure', 'impure', 'Positional', 'positional'
 )
-
-from ..exceptions import FieldError
 
 
 class TypedEdge(NamedTuple):
@@ -178,8 +177,8 @@ class Positional(FunctionWrapper):
     def _not_a_function(func):
         if isinstance(func, EdgeFactory):
             raise TypeError(
-                f'"positional" can be used only for functions. '
-                f'If it is in a chain of decorators - it must be the lowest one'
+                '"positional" can be used only for functions. '
+                'If it is in a chain of decorators - it must be the lowest one'
             )
 
     @classmethod

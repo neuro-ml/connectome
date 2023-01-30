@@ -4,7 +4,7 @@ from typing import Generator, Any
 from tarn.cache.storage import key_to_digest
 
 from ..containers import EdgesBag
-from ..engine import Node, Request, Response, Command, StaticGraph, StaticHash, NodeHashes, NodeHash
+from ..engine import Node, Request, Response, Command, StaticGraph, StaticHash, NodeHashes, NodeHash, Details
 from .cache import to_seq
 from ..utils import StringsLike
 from .base import CallableLayer
@@ -16,9 +16,10 @@ class HashDigest(CallableLayer):
             algorithm = getattr(hashlib, algorithm)
 
         names = to_seq(names)
+        details = Details(type(self))
         inputs, outputs, edges = [], [], []
         for name in names:
-            inp, out = Node(name), Node(name)
+            inp, out = Node(name, details), Node(name, details)
             inputs.append(inp)
             outputs.append(out)
             edges.append(HashDigestEdge(algorithm).bind(inp, out))

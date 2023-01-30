@@ -7,7 +7,7 @@ from connectome.utils import extract_signature
 
 class LayerMaker:
     @staticmethod
-    def make_layer(optional_nodes=None, **kwargs):
+    def make_layer(optional_inputs=None, optional_outputs=None, **kwargs):
 
         parameters = {}
         forward_methods = {}
@@ -64,7 +64,8 @@ class LayerMaker:
 
         return ReversibleContainer(
             list(inputs.values()), list(outputs.values()), edges,
-            list(backward_inputs.values()), list(backward_outputs.values()), optional_nodes=optional_nodes,
+            list(backward_inputs.values()), list(backward_outputs.values()),
+            optional_inputs=optional_inputs, optional_outputs=optional_outputs,
             forward_virtual=(), backward_virtual=(),
         )
 
