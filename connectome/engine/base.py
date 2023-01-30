@@ -109,7 +109,6 @@ class TreeNode:
         bridges = {}
         # each edge is represented by its output
         for edge in edges:
-            # TODO: replace by exception
             if edge.output in bridges:
                 raise GraphError(f'The node "{edge.output.name}" has multiple incoming edges')
 

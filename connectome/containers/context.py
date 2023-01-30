@@ -10,11 +10,11 @@ __all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext'
 class Context(ABC):
     @abstractmethod
     def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        pass
+        """ Return the new edges, that need to be added to the graph and the updated outputs  """
 
     @abstractmethod
     def update(self, mapping: dict) -> 'Context':
-        pass
+        """ Update the nodes and edges contained in the context. Used during `EdgesBag.freeze` """
 
 
 class NoContext(Context):

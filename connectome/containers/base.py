@@ -32,8 +32,8 @@ class Container:
 
 class EdgesBag:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
-                 virtual_nodes: Optional[NameSet], persistent_nodes: Optional[NameSet],
-                 optional_nodes: Optional[NodeSet]):
+                 virtual_nodes: Optional[NameSet] = None, persistent_nodes: Optional[NameSet],
+                 optional_nodes: Optional[NodeSet] = None):
         if virtual_nodes is None:
             virtual_nodes = set()
         if persistent_nodes is None:
@@ -134,17 +134,6 @@ class EdgesBag:
 
         outputs, edges = state.context.reverse(all_inputs, outputs, edges)
         return GraphCompiler(all_inputs, outputs, edges, set(), self.optional_nodes, self.backend)
-
-
-def get_parents(node: TreeNode):
-    if node.is_leaf:
-        return
-
-    for parent in node.parents:
-        if parent.is_leaf:
-            yield parent
-        else:
-            yield from get_parents(parent)
 
 
 def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: NodeSet,

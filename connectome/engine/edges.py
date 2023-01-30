@@ -55,7 +55,7 @@ class StaticEdge(StaticHash):
 
     @abstractmethod
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
-        pass
+        """ Computes the output value. """
 
 
 class FunctionEdge(StaticGraph, StaticHash):

@@ -159,7 +159,7 @@ def execute(cmd, node, hashes, cache, executor: Executor):
                 next_frame()
 
         else:
-            raise RuntimeError('Unknown command', cmd)
+            raise RuntimeError('Unknown command', cmd)  # pragma: no cover
 
 
 _CACHE_SENTINEL = object()

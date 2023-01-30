@@ -64,7 +64,7 @@ def detect_optionals(input_names, output_names, inputs, outputs, edges):
     optional_inputs, optional_outputs = set(), set()
     for name in input_names:
         if name not in inputs_mapping:
-            raise GraphError(f'The optional node {name} is not present among the outputs')
+            raise GraphError(f'The optional node {name} is not present among the inputs')
         optional_inputs.add(inputs_mapping[name])
     for name in output_names:
         if name not in outputs_mapping:
