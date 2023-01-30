@@ -272,3 +272,12 @@ def test_inherit_optional():
     assert dir(a >> (c >> b)) == []
     assert dir(a >> b >> c) == []
     assert dir(a >> c >> b) == []
+
+
+def test_new_persistent_field():
+    class A(Source):
+        @meta
+        def ids():
+            return '123'
+
+    A() >> Transform(__inherit__=True, some_field=lambda id: id)

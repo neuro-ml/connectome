@@ -49,8 +49,8 @@ def _connect(left: EdgesBag, right: EdgesBag) -> EdgesBag:
         if out in optionals:
             optionals.add(inp)
 
-    # right virtuals
-    for name in set(left_outputs) & (right.virtual_nodes | left.persistent_nodes):
+    # right virtuals or persistent but unused
+    for name in set(left_outputs) & (right.virtual_nodes | (left.persistent_nodes - {x.name for x in outputs})):
         inp = left_outputs[name]
         out = inp.clone()
         edges.append(IdentityEdge().bind(inp, out))
