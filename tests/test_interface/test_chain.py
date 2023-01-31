@@ -174,7 +174,7 @@ def test_end_to_end_inherit():
 
     ds = A() >> A() >> A()
     assert ds.x(1) == 1
-    f = ds._compile(['x'])
+    ds._compile(['x'])
 
     class B(Transform):
         __inherit__ = 'x'

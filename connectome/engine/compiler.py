@@ -2,7 +2,7 @@ from concurrent.futures import Executor
 from typing import Union, Tuple
 
 from ..exceptions import FieldError, DependencyError
-from ..utils import NameSet
+from ..utils import NameSet, check_for_duplicates
 from .base import TreeNode, Nodes, BoundEdges, TreeNodes
 from .edges import ProductEdge
 from .graph import Graph
@@ -11,6 +11,8 @@ from .graph import Graph
 class GraphCompiler:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: Nodes,
                  executor: Executor):
+        check_for_duplicates(inputs)
+        check_for_duplicates(outputs)
         self._mapping = TreeNode.from_edges(edges)
         # TODO: optimize:
         #  - remove identity edges
@@ -25,13 +27,11 @@ class GraphCompiler:
         self._executor = executor
 
         self._cache = {}
-        # TODO: validate:
-        #  - find unreachable nodes
-        self._outputs = None
+        self._dependencies = self._outputs = None
 
     def fields(self):
         if self._outputs is None:
-            self._outputs = self._validate_optionals()
+            self._validate_optionals()
 
         return list(self._outputs)
 
@@ -40,7 +40,7 @@ class GraphCompiler:
             raise TypeError(f'The name must be either a string or a tuple of strings, not {type(output)}')
 
         if self._outputs is None:
-            self._outputs = self._validate_optionals()
+            self._validate_optionals()
 
         if output not in self._cache:
             self._cache[output] = self._compile(output)
@@ -48,56 +48,53 @@ class GraphCompiler:
         return self._cache[output]
 
     def _compile(self, item):
+        def get_node(out):
+            # either present in the outputs
+            if out in self._outputs:
+                return self._outputs[out]
+            # or it's virtual
+            if out in self._virtuals:
+                return
+            # or it was optional
+            if out in self._all_outputs:
+                missing = self._dependencies[self._all_outputs[out]] - self._inputs
+                raise FieldError(
+                    f'The field "{out}" was discarded because it had unreachable inputs: '
+                    f'{", ".join(map(pretty, missing))}.'
+                )
+            # or it wasn't defined at all
+            raise FieldError(f'The field "{out}" is not defined')
+
         if isinstance(item, str):
-            if item in self._virtuals:
+            node = get_node(item)
+            if node is None:
                 # TODO: signature
                 return identity
 
-            if item not in self._outputs:
-                # TODO:
-                raise FieldError(f'"{item}" is not an available output: {tuple(self._outputs)}')
+            return Graph(self._inputs, node, self._executor).call
 
-            return Graph(self._inputs, self._outputs[item], self._executor).call
+        inputs, outputs = [], []
+        for name in item:
+            node = get_node(name)
+            if node is None:
+                node = TreeNode(name, None, None)
+                inputs.append(node)
 
-        if isinstance(item, tuple):
-            inputs, outputs = [], []
-            for name in item:
-                if name not in self._all_outputs:
-                    if name in self._virtuals:
-                        output = TreeNode(name, None, None)
-                        inputs.append(output)
-                    else:
-                        raise FieldError(f'"{name}" is not an available output: {tuple(self._outputs)}')
-                else:
-                    output = self._outputs[name]
-                outputs.append(output)
+            outputs.append(node)
 
-            product = TreeNode('tuple', (ProductEdge(len(item)), outputs), None)
-            return Graph(self._inputs | set(inputs), product, self._executor).call
-
-        raise FieldError(f'"{item}" is not an available output: {tuple(self._outputs)}')
+        product = TreeNode('tuple', (ProductEdge(len(item)), outputs), None)
+        return Graph(self._inputs | set(inputs), product, self._executor).call
 
     def __getitem__(self, item):
         # TODO: deprecate
         return self.compile(item)
 
     def _validate_optionals(self):
-        def pretty(node: TreeNode):
-            result, parents = repr(node.name), []
-            details = node.details
-            while details is not None:
-                parents.append(f'"{details.layer.__name__}"')
-                details = details.parent
-
-            if parents:
-                result += f' (layer {" -> ".join(parents)})'
-            return result
-
-        inputs = find_dependencies(self._all_outputs.values())
+        self._dependencies = find_dependencies(self._all_outputs.values())
 
         available = {}
         for output in self._all_outputs.values():
-            missing = inputs[output] - self._inputs
+            missing = self._dependencies[output] - self._inputs
             if missing:
                 if output not in self._optionals:
                     raise DependencyError(
@@ -108,17 +105,29 @@ class GraphCompiler:
                 if not_optional:
                     raise DependencyError(
                         f'The output {pretty(output)} has unreachable inputs: {", ".join(map(pretty, missing))}, '
-                        f'some of which are not optional: {tuple(map(pretty, not_optional))}'
+                        f'some of which are not optional: {", ".join(map(pretty, not_optional))}'
                     )
 
             else:
                 available[output.name] = output
 
-        return available
+        self._outputs = available
 
 
 def identity(x):
     return x
+
+
+def pretty(node: TreeNode):
+    result, parents = repr(node.name), []
+    details = node.details
+    while details is not None:
+        parents.append(f'"{details.layer.__name__}"')
+        details = details.parent
+
+    if parents:
+        result += f' (layer {" -> ".join(parents)})'
+    return result
 
 
 def find_dependencies(outputs: TreeNodes):

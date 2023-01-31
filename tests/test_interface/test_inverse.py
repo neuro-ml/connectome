@@ -2,7 +2,7 @@ import pytest
 
 from connectome import Transform, Apply, inverse
 from connectome.engine.compiler import identity
-from connectome.exceptions import GraphError
+from connectome.exceptions import FieldError
 
 
 def test_different_inputs():
@@ -50,7 +50,7 @@ def test_inherit():
 
     assert func(1) == 1
 
-    with pytest.raises(GraphError):
+    with pytest.raises(FieldError):
         ds._wrap(identity, 'some-other-name')
 
     dec = (A() >> Apply(image=lambda image: image))._decorate('image', 'image')

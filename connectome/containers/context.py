@@ -4,7 +4,7 @@ from typing import Tuple, AbstractSet
 from ..engine import TreeNode, Node, Nodes, BoundEdges, TreeNodes, IdentityEdge, Details
 from ..utils import node_to_dict
 
-__all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext'
+__all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext', 'ChainContext'
 
 
 class Context(ABC):
@@ -43,29 +43,22 @@ class BagContext(Context):
     def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
         edges = list(edges)
         outputs = node_to_dict(outputs)
-        # backward transforms
+        new_outputs = node_to_dict(self.outputs)
+        # stitch the layers
         for node in self.inputs:
             name = node.name
             if name in outputs:
                 edges.append(IdentityEdge().bind(outputs[name], node))
 
-        # collect the actual outputs
-        actual = []
-        mapping = TreeNode.from_edges(edges)
-        leaves = [mapping[node] for node in inputs]
-        for node in self.outputs:
-            if is_reachable(leaves, mapping[node]):
-                actual.append(node)
-
         # add inheritance
-        add = self.inherit - set(node_to_dict(actual))
-        for name, node in outputs.items():
-            if node.name in add:
+        for node in outputs.values():
+            name = node.name
+            if name in self.inherit and name not in new_outputs:
                 out = node.clone()
                 edges.append(IdentityEdge().bind(node, out))
-                actual.append(out)
+                new_outputs[name] = out
 
-        return actual, edges
+        return tuple(new_outputs.values()), edges
 
     def update(self, mapping: dict) -> 'Context':
         return BagContext(
@@ -73,6 +66,20 @@ class BagContext(Context):
             update_map(self.outputs, mapping),
             self.inherit,
         )
+
+
+class ChainContext(Context):
+    def __init__(self, previous: Context, current: Context):
+        self.previous = previous
+        self.current = current
+
+    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
+        outputs, edges = self.current.reverse(inputs, outputs, edges)
+        outputs, edges = self.previous.reverse(inputs, outputs, edges)
+        return outputs, edges
+
+    def update(self, mapping: dict) -> 'Context':
+        return ChainContext(self.previous.update(mapping), self.current.update(mapping))
 
 
 def update_map(nodes: Nodes, node_map: dict, parent: Details = None, layer_map: dict = None):
