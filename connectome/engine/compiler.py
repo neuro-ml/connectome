@@ -122,7 +122,7 @@ def pretty(node: TreeNode):
     result, parents = repr(node.name), []
     details = node.details
     while details is not None:
-        parents.append(f'"{details.layer.__name__}"')
+        parents.append(repr(details.layer))
         details = details.parent
 
     if parents:

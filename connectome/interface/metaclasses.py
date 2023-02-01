@@ -1,7 +1,6 @@
 import logging
 from typing import Callable, Dict, Type, Union, Iterable, Tuple
 
-from ..engine import Details
 from ..utils import MultiDict
 from ..layers import CallableLayer
 from .compat import SafeMeta
@@ -42,8 +41,6 @@ class APIMeta(SafeMeta):
 
         logger.info('Compiling the layer "%s" of type %s', class_name, base_name)
 
-        # a temporary crutch, because we don't have the type itself yet, only its type
-        details = Details(class_name)
         if main == Mixin:
             add_from_mixins(namespace, bases)
             scope = add_quals({'__methods__': namespace}, namespace)
@@ -51,11 +48,9 @@ class APIMeta(SafeMeta):
         else:
             factory.validate_before_mixins(namespace)
             add_from_mixins(namespace, bases)
-            scope = factory.make_scope(details, namespace)
+            scope = factory.make_scope(class_name, namespace)
 
-        result = super().__new__(mcs, class_name, (main,), scope, **flags)
-        details.layer = result
-        return result
+        return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 
 class Source(FactoryLayer, metaclass=APIMeta, __factory=SourceFactory):

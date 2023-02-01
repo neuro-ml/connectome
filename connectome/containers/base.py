@@ -1,15 +1,15 @@
 import logging
 import warnings
 from operator import itemgetter
-from typing import Optional, AbstractSet, Union, Callable
+from typing import AbstractSet, Callable, Optional, Union
 
 from ..engine import (
-    GraphCompiler, TreeNode, Node, Nodes, BoundEdges, NodeSet, FunctionEdge, ProductEdge, IdentityEdge, Details
+    BoundEdges, Details, FunctionEdge, GraphCompiler, IdentityEdge, Node, Nodes, NodeSet, ProductEdge, TreeNode
 )
 from ..engine.compiler import find_dependencies
 from ..exceptions import GraphError
-from ..utils import node_to_dict, NameSet, StringsLike, check_for_duplicates, AntiSet
-from .context import Context, NoContext, update_map, ChainContext, BagContext
+from ..utils import NameSet, StringsLike, check_for_duplicates, node_to_dict
+from .context import ChainContext, Context, IdentityContext, NoContext, update_map
 
 __all__ = 'Container', 'EdgesBag'
 
@@ -61,7 +61,9 @@ class EdgesBag:
         `parent` to top layers and nodes
         """
         node_map = {}
-        layers_map = {} if parent is not None else None
+        layers_map = {}
+        # the context must be updated first, because it shouldn't inherit the parent anyway
+        context = self.context.update(node_map, layers_map)
 
         edges = []
         for edge in self.edges:
@@ -72,9 +74,7 @@ class EdgesBag:
         return EdgesBag(
             update_map(self.inputs, node_map, parent, layers_map),
             update_map(self.outputs, node_map, parent, layers_map),
-            edges,
-            # TODO: should the context also update the nesting?
-            self.context.update(node_map),
+            edges, context,
             virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
             optional_nodes=update_map(self.optional_nodes, node_map, parent, layers_map),
         )
@@ -157,7 +157,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: Na
 
 def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) -> EdgesBag:
     # the function is the parent of the nodes
-    parent = Details(func)
+    parent = Details(getattr(func, '__name__', str(func)))
 
     if isinstance(inputs, str):
         inputs = inputs,
@@ -186,7 +186,7 @@ def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) ->
             outputs.append(out)
 
     return EdgesBag(
-        inputs, outputs, edges, BagContext((), (), AntiSet()),
+        inputs, outputs, edges, IdentityContext(),
         virtual_nodes=None, persistent_nodes=None, optional_nodes=None,
     )
 

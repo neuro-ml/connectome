@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, AbstractSet
+from typing import Tuple, AbstractSet, Dict
 
 from ..engine import TreeNode, Node, Nodes, BoundEdges, TreeNodes, IdentityEdge, Details
 from ..utils import node_to_dict
@@ -13,7 +13,7 @@ class Context(ABC):
         """ Return the new edges, that need to be added to the graph and the updated outputs  """
 
     @abstractmethod
-    def update(self, mapping: dict) -> 'Context':
+    def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         """ Update the nodes and edges contained in the context. Used during `EdgesBag.freeze` """
 
 
@@ -21,7 +21,7 @@ class NoContext(Context):
     def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
         raise ValueError('The layer is not reversible')
 
-    def update(self, mapping: dict) -> 'Context':
+    def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         return self
 
 
@@ -30,7 +30,7 @@ class IdentityContext(Context):
         # just propagate everything
         return outputs, edges
 
-    def update(self, mapping: dict) -> 'Context':
+    def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         return self
 
 
@@ -60,10 +60,10 @@ class BagContext(Context):
 
         return tuple(new_outputs.values()), edges
 
-    def update(self, mapping: dict) -> 'Context':
+    def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         return BagContext(
-            update_map(self.inputs, mapping),
-            update_map(self.outputs, mapping),
+            update_map(self.inputs, nodes_map, layers_map=layers_map),
+            update_map(self.outputs, nodes_map, layers_map=layers_map),
             self.inherit,
         )
 
@@ -78,21 +78,21 @@ class ChainContext(Context):
         outputs, edges = self.previous.reverse(inputs, outputs, edges)
         return outputs, edges
 
-    def update(self, mapping: dict) -> 'Context':
-        return ChainContext(self.previous.update(mapping), self.current.update(mapping))
+    def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
+        return ChainContext(self.previous.update(nodes_map, layers_map), self.current.update(nodes_map, layers_map))
 
 
-def update_map(nodes: Nodes, node_map: dict, parent: Details = None, layer_map: dict = None):
+def update_map(nodes: Nodes, node_map: dict, parent: Details = None, layers_map: Dict[Details, Details] = None):
     for node in nodes:
         if node not in node_map:
             details = node.details
             if details is None:
                 details = parent
-            elif layer_map is not None:
-                if node.details in layer_map:
-                    details = layer_map[node.details]
+            elif layers_map is not None:
+                if node.details in layers_map:
+                    details = layers_map[node.details]
                 else:
-                    details = layer_map[node.details] = node.details.update(layer_map, parent)
+                    details = layers_map[node.details] = node.details.update(layers_map, parent)
 
             node_map[node] = Node(node.name, details)
 

@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from enum import Enum
-from types import FunctionType
 from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator, Collection, Iterable, Set, Dict, Type
 
 from ..exceptions import GraphError
@@ -51,13 +49,15 @@ class Edge(ABC):
         return BoundEdge(self, inputs, output)
 
 
-@dataclass(unsafe_hash=True)
 class Details:
-    layer: Union[Type, FunctionType] = field(hash=True)
-    parent: Optional['Details'] = field(default=None, hash=True)
+    def __init__(self, layer: Union[str, Type], parent: Optional['Details'] = None):
+        if isinstance(layer, type):
+            layer = layer.__name__
+        self.layer = layer
+        self.parent = parent
 
     def update(self, mapping: Dict['Details', 'Details'], parent: Union['Details', None]):
-        """ Update the whole tree with a sentinel """
+        """ Update the whole tree based on a mapping """
         assert isinstance(parent, Details) or parent is None, parent
         if self.parent is not None:
             if self.parent in mapping:

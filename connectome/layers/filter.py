@@ -2,13 +2,14 @@ from typing import Callable, Sequence, Any, Iterable
 
 from tqdm.auto import tqdm
 
-from .base import EdgesBag, Layer
-from ..containers import IdentityContext
+from ..containers import BagContext
 from ..engine import Node, TreeNode, Graph, FilterHash, FunctionEdge, StaticEdge, StaticGraph, Details
-from ..utils import extract_signature, node_to_dict
+from ..utils import extract_signature, node_to_dict, AntiSet
+from .base import EdgesBag, Layer
+from .dynamic import DynamicConnectLayer
 
 
-class Filter(Layer):
+class Filter(DynamicConnectLayer, Layer):
     """
     Filters the `ids` of the current pipeline given a ``predicate``.
 
@@ -54,28 +55,22 @@ class Filter(Layer):
         outputs_mapping = node_to_dict(copy.outputs)
         out = Node('$predicate', details)
         edges.append(
-            FunctionEdge(self.predicate, len(self._names)).bind([outputs_mapping[name] for name in self._names], out))
+            FunctionEdge(self.predicate, len(self._names)).bind([outputs_mapping[name] for name in self._names], out)
+        )
         mapping = TreeNode.from_edges(edges)
         return Graph([mapping[copy.inputs[0]]], mapping[out])
 
-    def _connect(self, previous: EdgesBag) -> EdgesBag:
+    def _prepare_container(self, previous: EdgesBag) -> EdgesBag:
         details = Details(type(self))
-        main = previous.freeze(details)
-        outputs = list(main.outputs)
-        edges = list(main.edges)
-
-        # change ids
-        keys = _find(outputs, self._keys)
+        inp = Node(self._keys, details)
         out = Node(self._keys, details)
-        outputs.remove(keys)
-        outputs.append(out)
 
         # filter
         graph = self._make_graph(previous, details)
-        edges.append(FilterEdge(graph, self.verbose).bind(keys, out))
+        edge = FilterEdge(graph, self.verbose).bind(inp, out)
         return EdgesBag(
-            main.inputs, outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes,
-            optional_nodes=main.optional_nodes, virtual_nodes=main.virtual_nodes,
+            [inp], [out], [edge], BagContext((), (), AntiSet((self._keys,))),
+            persistent_nodes=None, optional_nodes=None, virtual_nodes=AntiSet((self._keys,)),
         )
 
 
