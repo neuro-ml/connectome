@@ -72,6 +72,14 @@ class CallableLayer(Layer):
               final: StringsLike = None) -> Callable:
         return self._decorate(inputs, outputs, final)(func)
 
+    def _loopback(self, func: Callable, inputs: StringsLike = None, outputs: StringsLike = None):
+        if outputs is None:
+            outputs = inputs
+        if isinstance(inputs, str):
+            inputs = inputs,
+
+        return CallableLayer(self._container.loopback(func, inputs, outputs), ())
+
     def _decorate(self, inputs: StringsLike, outputs: StringsLike = None, final: StringsLike = None) -> Callable:
         if outputs is None:
             outputs = inputs
@@ -83,7 +91,7 @@ class CallableLayer(Layer):
             inputs = [inputs]
 
         def decorator(func: Callable) -> Callable:
-            loopback = self._container.loopback(func, inputs, outputs)
+            loopback = self._container.loopback(func, inputs, outputs).compile()
             logger.info('Loopback compiled: %s', loopback.fields())
             return loopback[final]
 

@@ -10,11 +10,12 @@ from tarn.cache import CacheIndex
 from tarn.config import init_storage, StorageConfig
 
 from .base import Layer
+from .dynamic import DynamicConnectLayer
 from ..containers import EdgesBag, Container, IdentityContext
 from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
 from ..storage import Storage, Disk
 from ..utils import PathLike, StringsLike, node_to_dict, to_seq, AntiSet
-from ..engine import TreeNode, Node, ImpureEdge, CacheEdge, IdentityEdge, Details
+from ..engine import TreeNode, Node, ImpureEdge, CacheEdge, Details
 from ..cache import Cache, MemoryCache, DiskCache
 
 PathLikes = Union[PathLike, Sequence[PathLike]]
@@ -41,7 +42,7 @@ class CacheLayer(Layer, ABC):
         return self._container.wrap(previous)
 
 
-class CacheToStorage(CacheLayer):
+class CacheToStorage(DynamicConnectLayer, CacheLayer):
     def __init__(self, names: Union[ContainerType[str], None], impure: bool = False):
         super().__init__()
         if names is None:
@@ -53,31 +54,25 @@ class CacheToStorage(CacheLayer):
     def _get_storage(self) -> Cache:
         """ Create a cache storage instance """
 
-    def _connect(self, previous: EdgesBag) -> EdgesBag:
-        previous = previous.freeze()
+    def _prepare_container(self, previous: EdgesBag) -> EdgesBag:
+        mapping = TreeNode.from_edges(previous.edges)
         forward_outputs = node_to_dict(previous.outputs)
 
         details = Details(type(self))
-        edges = list(previous.edges)
-        outputs = [Node(name, details) for name in forward_outputs]
-        mapping = TreeNode.from_edges(previous.edges)
-        virtuals = previous.virtual_nodes - set(forward_outputs)
-
-        for node in outputs:
-            name = node.name
-            output = forward_outputs[name]
-
+        inputs, outputs, edges = [], [], []
+        for name in forward_outputs:
             if name in self.names:
                 if not self.impure:
-                    self._detect_impure(mapping[output], name)
-                edges.append(CacheEdge(self._get_storage()).bind(output, node))
-            else:
-                edges.append(IdentityEdge().bind(output, node))
+                    self._detect_impure(mapping[forward_outputs[name]], name)
 
-        # TODO: proper support for optionals
+                inp, out = Node(name, details), Node(name, details)
+                inputs.append(inp)
+                outputs.append(out)
+                edges.append(CacheEdge(self._get_storage()).bind(inp, out))
+
         return EdgesBag(
-            previous.inputs, outputs, edges, IdentityContext(), persistent_nodes=previous.persistent_nodes,
-            virtual_nodes=virtuals, optional_nodes=None,
+            inputs, outputs, edges, IdentityContext(), persistent_nodes=None,
+            virtual_nodes=AntiSet(node_to_dict(outputs)), optional_nodes=None,
         )
 
     @staticmethod

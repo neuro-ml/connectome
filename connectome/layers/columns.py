@@ -5,6 +5,7 @@ from typing import Union, Generator, Any
 from tqdm.auto import tqdm
 
 from .cache import CacheLayer, SerializersLike, PathLikes, RemoteStorageLike, _normalize_disk_arguments
+from .dynamic import DynamicConnectLayer
 from ..cache import DiskCache, MemoryCache
 from ..containers import EdgesBag, IdentityContext
 from ..engine import (
@@ -12,10 +13,10 @@ from ..engine import (
 )
 from ..exceptions import DependencyError
 from ..storage import Storage
-from ..utils import StringsLike, node_to_dict
+from ..utils import StringsLike, node_to_dict, AntiSet
 
 
-class CacheColumns(CacheLayer):
+class CacheColumns(DynamicConnectLayer, CacheLayer):
     """
     A combination of a persistent cache stored on disk and a memory cache.
     The entries are stored on disk in shards, which speeds up read/write operations for large numbers of small files.
@@ -52,41 +53,38 @@ class CacheColumns(CacheLayer):
         self.disk = DiskCache(local, remote, bool(remote))
         self.ram = MemoryCache(None)
 
-    def _connect(self, previous: EdgesBag) -> EdgesBag:
-        main = previous.freeze()
-        edges = list(main.edges)
-        key, = main.inputs
-        main_outputs = node_to_dict(main.outputs)
-        # TODO: containers must know about property names
-        property_name = 'ids'
-        if property_name not in main_outputs:
-            raise DependencyError(f'The previous layer must contain the "{property_name}" property.')
-
-        keys = main_outputs[property_name]
-
+    def _prepare_container(self, previous: EdgesBag) -> EdgesBag:
         details = Details(type(self))
         copy = previous.freeze(details)
         mapping = TreeNode.from_edges(copy.edges)
         outputs_copy = node_to_dict(copy.outputs)
+
+        # TODO: containers must know about property names
+        property_name = 'ids'
+        if property_name not in outputs_copy:
+            raise DependencyError(f'The previous layer must contain the "{property_name}" property.')
+        keys = Node(property_name, details)
+
+        if len(copy.inputs) != 1:
+            raise DependencyError(f'The previous layer must have exactly one input')
+        key = Node(copy.inputs[0].name, details)
         graph_inputs = [mapping[copy.inputs[0]]]
 
-        outputs = []
-        for output in main.outputs:
-            name = output.name
-            if name not in self.names:
-                outputs.append(output)
-
-            else:
-                local = Node(name, details)
+        inputs, outputs, edges = [key, keys], [], []
+        for name in outputs_copy:
+            if name in self.names:
+                inp, out = Node(name, details), Node(name, details)
+                inputs.append(inp)
+                outputs.append(out)
                 # build a graph for each node
                 graph = Graph(graph_inputs, mapping[outputs_copy[name]])
-                edges.append(CachedColumn(
-                    self.disk, self.ram, graph, self.verbose, self.shard_size).bind([output, key, keys], local))
-                outputs.append(local)
+                edges.append(
+                    CachedColumn(self.disk, self.ram, graph, self.verbose, self.shard_size).bind([inp, key, keys], out)
+                )
 
         return EdgesBag(
-            [key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes,
-            optional_nodes=main.optional_nodes, virtual_nodes=main.virtual_nodes,
+            inputs, outputs, edges, IdentityContext(),
+            persistent_nodes=None, optional_nodes=None, virtual_nodes=AntiSet(node_to_dict(outputs)),
         )
 
 

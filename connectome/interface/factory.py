@@ -77,15 +77,17 @@ class FactoryLayer(CallableLayer):
 
 
 class GraphFactory:
-    def __init__(self, details: Details, scope: MultiDict):
+    def __init__(self, layer: str, scope: MultiDict):
+        details = Details(layer)
+        backward_details = Details(f'{layer}(backward)')
         self.scope = scope
         self.edges = []
         # layer inputs
         self.inputs = NodeStorage(details)
-        self.backward_inputs = NodeStorage(details)
+        self.backward_inputs = NodeStorage(backward_details)
         # layer outputs
         self.outputs = NodeStorage(details)
-        self.backward_outputs = NodeStorage(details)
+        self.backward_outputs = NodeStorage(backward_details)
         # __init__ arguments
         self.arguments = NodeStorage(details)
         # their defaults
@@ -119,8 +121,8 @@ class GraphFactory:
             x.freeze()
 
     @classmethod
-    def make_scope(cls, details, namespace: MultiDict) -> dict:
-        factory = cls(details, namespace)
+    def make_scope(cls, layer: str, namespace: MultiDict) -> dict:
+        factory = cls(layer, namespace)
         signature = factory.get_init_signature()
         allow_positional = len(signature.parameters)
 
@@ -393,7 +395,7 @@ def items_to_container(items, inherit, layer_type, factory_cls: Type[GraphFactor
 
         local[name] = value
 
-    factory = factory_cls(Details(layer_type), local)
+    factory = factory_cls(layer_type.__name__, local)
     if factory.special_methods:
         raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
     return factory.build({}), factory.property_names

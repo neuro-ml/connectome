@@ -29,7 +29,9 @@ class ReversibleContainer(EdgesBag):
         inputs, outputs, edges, forward_virtual = normalize_bag(
             inputs, outputs, edges, forward_virtual, set(), persistent_nodes
         )
-        optional_nodes = detect_optionals(optional_inputs, optional_outputs, inputs, outputs, edges)
+        optional_nodes = detect_optionals(
+            optional_inputs, optional_outputs, inputs, outputs, backward_inputs, backward_outputs, edges
+        )
         check_for_duplicates(inputs)
         super().__init__(
             inputs, outputs, edges,
@@ -55,7 +57,7 @@ def normalize_inherit(value, outputs) -> Tuple[NameSet, bool]:
     return value, valid
 
 
-def detect_optionals(input_names, output_names, inputs, outputs, edges):
+def detect_optionals(input_names, output_names, inputs, outputs, backward_inputs, backward_outputs, edges):
     mapping = TreeNode.from_edges(edges)
     inverse = {v: k for k, v in mapping.items()}
     inputs_mapping = node_to_dict(inputs)
@@ -93,4 +95,4 @@ def detect_optionals(input_names, output_names, inputs, outputs, edges):
 
     # TODO: warn
     # if not optional_inputs:
-    return optional_outputs | optional_inputs
+    return optional_outputs | optional_inputs | set(backward_inputs) | set(backward_outputs)

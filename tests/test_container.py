@@ -59,6 +59,6 @@ def test_missing_dependencies():
         x = lambda x, y, z: 2
 
     with pytest.raises(DependencyError, match=re.escape(
-            '''The output 'x' (layer "D" -> "Chain") has unreachable inputs: 'z' (layer "D" -> "Chain")'''
+            '''The output 'x' (layer 'D' -> 'Chain') has unreachable inputs: 'z' (layer 'D' -> 'Chain')'''
     )):
         dir(A() >> B() >> C() >> D())

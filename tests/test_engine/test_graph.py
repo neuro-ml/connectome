@@ -109,10 +109,10 @@ def test_backward_methods(first_backward, second_backward):
 def test_loopback(first_backward, second_backward, layer_maker):
     layer = connect(first_backward, second_backward)
 
-    wrapped = layer.loopback(lambda x: x, 'prod', 'prod')
+    wrapped = layer.loopback(lambda x: x, 'prod', 'prod').compile()
     assert wrapped['prod'](4) == 4
 
-    wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod')
+    wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod').compile()
     assert wrapped['prod'](4) == 49
 
     def counter():
@@ -128,7 +128,7 @@ def test_loopback(first_backward, second_backward, layer_maker):
     )
 
     layer = connect(layer, cross_pipes_checker)
-    wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod')
+    wrapped = layer.loopback(lambda x: x * 2, 'prod', 'prod').compile()
     assert wrapped['prod'](4) == 49
     assert count == 1
 

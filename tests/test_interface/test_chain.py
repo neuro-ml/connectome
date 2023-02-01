@@ -174,7 +174,7 @@ def test_end_to_end_inherit():
 
     ds = A() >> A() >> A()
     assert ds.x(1) == 1
-    f = ds._compile(['x'])
+    ds._compile(['x'])
 
     class B(Transform):
         __inherit__ = 'x'
@@ -272,3 +272,12 @@ def test_inherit_optional():
     assert dir(a >> (c >> b)) == []
     assert dir(a >> b >> c) == []
     assert dir(a >> c >> b) == []
+
+
+def test_new_persistent_field():
+    class A(Source):
+        @meta
+        def ids():
+            return '123'
+
+    A() >> Transform(__inherit__=True, some_field=lambda id: id)

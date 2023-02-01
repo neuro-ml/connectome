@@ -1,14 +1,15 @@
 import logging
 import warnings
 from operator import itemgetter
-from typing import Optional, AbstractSet, Union
+from typing import AbstractSet, Callable, Optional, Union
 
 from ..engine import (
-    GraphCompiler, TreeNode, Node, Nodes, BoundEdges, NodeSet, FunctionEdge, ProductEdge, IdentityEdge, Details
+    BoundEdges, Details, FunctionEdge, GraphCompiler, IdentityEdge, Node, Nodes, NodeSet, ProductEdge, TreeNode
 )
+from ..engine.compiler import find_dependencies
 from ..exceptions import GraphError
-from ..utils import node_to_dict, NameSet
-from .context import Context, NoContext, update_map
+from ..utils import NameSet, StringsLike, check_for_duplicates, node_to_dict
+from .context import ChainContext, Context, NoContext, update_map, BagContext
 
 __all__ = 'Container', 'EdgesBag'
 
@@ -60,7 +61,9 @@ class EdgesBag:
         `parent` to top layers and nodes
         """
         node_map = {}
-        layers_map = {} if parent is not None else None
+        layers_map = {}
+        # the context must be updated first, because it shouldn't inherit the parent anyway
+        context = self.context.update(node_map, layers_map)
 
         edges = []
         for edge in self.edges:
@@ -71,9 +74,7 @@ class EdgesBag:
         return EdgesBag(
             update_map(self.inputs, node_map, parent, layers_map),
             update_map(self.outputs, node_map, parent, layers_map),
-            edges,
-            # TODO: should the context also update the nesting?
-            self.context.update(node_map),
+            edges, context,
             virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
             optional_nodes=update_map(self.optional_nodes, node_map, parent, layers_map),
         )
@@ -83,61 +84,17 @@ class EdgesBag:
             self.inputs, self.outputs, self.edges, self.virtual_nodes, self.optional_nodes, self.backend
         )
 
-    # TODO: this should return a container without compilation
-    def loopback(self, func, inputs, output):
-        state = self.freeze()
-        edges = list(state.edges)
-        current = node_to_dict(state.outputs)
-
-        # connect forward outputs with bridge
-        outputs = []
-        if isinstance(inputs, str):
-            inputs = inputs,
-        inputs = tuple(inputs)
-
-        if len(set(inputs)) != len(inputs):
-            raise ValueError(f'The inputs contain duplicates: {inputs}')
-
-        input_nodes, all_inputs = [], list(state.inputs)
-        # the function is the parent of these new nodes
-        parent = Details(func)
-        for name in inputs:
-            if name not in current:
-                if name not in state.virtual_nodes:
-                    raise GraphError(f'Node "{name}" is not defined')
-                node = Node(name, parent)
-                all_inputs.append(node)
-            else:
-                node = current[name]
-
-            input_nodes.append(node)
-
-        edge = FunctionEdge(func, len(input_nodes))
-
-        # single output
-        if isinstance(output, str):
-            output = Node(output, parent)
-
-            edges.append(edge.bind(input_nodes, output))
-            outputs.append(output)
-
-        # multiple outputs
-        else:
-            assert len(set(outputs)) == len(outputs)
-
-            aux = Node('tuple', parent)
-            edges.append(edge.bind(input_nodes, aux))
-            for idx, out in enumerate(output):
-                out = Node(out, parent)
-                edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
-                outputs.append(out)
-
-        outputs, edges = state.context.reverse(all_inputs, outputs, edges)
-        return GraphCompiler(all_inputs, outputs, edges, set(), self.optional_nodes, self.backend)
+    def loopback(self, func: Callable, inputs: StringsLike, output: StringsLike) -> 'EdgesBag':
+        state = connect_bags(self, function_to_bag(func, inputs, output))
+        outputs, new_edges, new_optionals = state.context.reverse(state.outputs)
+        return EdgesBag(
+            state.inputs, outputs, list(state.edges) + list(new_edges), None,
+            virtual_nodes=None, persistent_nodes=None, optional_nodes=state.optional_nodes | new_optionals,
+        )
 
 
 def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: NodeSet,
-                  persistent_nodes: NameSet):
+                  persistent_nodes: NameSet, allow_missing_inputs: bool = True):
     # 1. outputs must only depend on inputs
     # 1a. inputs must have no dependencies
     # 2. each node can only have a single incoming edge
@@ -182,10 +139,11 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: Na
     if not_leaves:
         raise GraphError(f'The inputs {not_leaves} are not actual inputs - they have dependencies')
     # 1:
-    # TODO:
-    # missing = {node.name for node in set(get_parents(mapping[product])) - tree_inputs}
-    # if missing:
-    #     raise GraphError(f'The nodes {missing} are missing from the inputs')
+    if not allow_missing_inputs:
+        product_tree = mapping[product]
+        missing = {node.name for node in find_dependencies([product_tree])[product_tree] - tree_inputs}
+        if missing:
+            raise GraphError(f'The nodes {missing} are missing from the inputs')
 
     # 5:
     missing_optionals = optionals - set(mapping)
@@ -194,6 +152,42 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: Na
         raise GraphError(f'The nodes {missing_optionals} are marked as optional, but are not present in the graph')
 
     return tuple(inputs.values()), tuple(outputs.values()), tuple(edges), virtuals
+
+
+def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) -> EdgesBag:
+    # the function is the parent of the nodes
+    parent = Details(getattr(func, '__name__', str(func)))
+
+    if isinstance(inputs, str):
+        inputs = inputs,
+    if len(set(inputs)) != len(inputs):
+        raise ValueError(f'The inputs contain duplicates: {inputs}')
+    inputs = [Node(name, parent) for name in inputs]
+
+    edges, outputs = [], []
+    edge = FunctionEdge(func, len(inputs))
+    # single output
+    if isinstance(output, str):
+        output = Node(output, parent)
+        outputs.append(output)
+        edges.append(edge.bind(inputs, output))
+
+    # multiple outputs
+    else:
+        if len(set(output)) != len(output):
+            raise ValueError(f'The outputs contain duplicates: {outputs}')
+
+        aux = Node('tuple', parent)
+        edges.append(edge.bind(inputs, aux))
+        for idx, out in enumerate(output):
+            out = Node(out, parent)
+            edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
+            outputs.append(out)
+
+    return EdgesBag(
+        inputs, outputs, edges, BagContext((), (), set(node_to_dict(outputs))),
+        virtual_nodes=None, persistent_nodes=None, optional_nodes=None,
+    )
 
 
 def detect_cycles(adjacency):
@@ -219,3 +213,46 @@ def detect_cycles(adjacency):
         visit(n)
 
     return cycles
+
+
+def connect_bags(left: EdgesBag, right: EdgesBag) -> EdgesBag:
+    left = left.freeze()
+    right = right.freeze()
+
+    inputs, outputs = set(left.inputs), set(right.outputs)
+    edges = list(left.edges) + list(right.edges)
+    optionals = left.optional_nodes | right.optional_nodes
+
+    right_inputs = node_to_dict(right.inputs)
+    left_outputs = node_to_dict(left.outputs)
+
+    # common
+    for name in set(left_outputs) & set(right_inputs):
+        edges.append(IdentityEdge().bind(left_outputs[name], right_inputs[name]))
+
+    # left virtuals
+    for name in left.virtual_nodes & set(right_inputs):
+        out = right_inputs[name]
+        inp = out.clone()
+        edges.append(IdentityEdge().bind(inp, out))
+        inputs.add(inp)
+        if out in optionals:
+            optionals.add(inp)
+
+    # right virtuals or persistent but unused
+    for name in set(left_outputs) & (right.virtual_nodes | (left.persistent_nodes - {x.name for x in outputs})):
+        inp = left_outputs[name]
+        out = inp.clone()
+        edges.append(IdentityEdge().bind(inp, out))
+        outputs.add(out)
+        if inp in optionals:
+            optionals.add(out)
+
+    check_for_duplicates(outputs)
+    return EdgesBag(
+        inputs, outputs, edges,
+        ChainContext(left.context, right.context),
+        virtual_nodes=left.virtual_nodes & right.virtual_nodes,
+        optional_nodes=optionals,
+        persistent_nodes=left.persistent_nodes | right.persistent_nodes,
+    )
