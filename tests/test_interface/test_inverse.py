@@ -49,6 +49,32 @@ def test_different_inputs():
     assert func(x=1, y=2) == (3, 12)
 
 
+def test_unused():
+    class A(Transform):
+        def x(x):
+            return x
+
+        @inverse
+        def y(y):
+            return y
+
+        @inverse
+        def z(z):
+            return z
+
+    class B(Transform):
+        __inherit__ = 'z'
+
+        def x(x):
+            return x
+
+        @inverse
+        def y(y):
+            return y
+
+    assert (B() >> A())._wrap(lambda x: x, 'x', 'y')(1) == 1
+
+
 def test_errors():
     with pytest.raises(ValueError, match='duplicates'):
         Transform()._wrap(lambda x: x, ('x', 'x'), 'y')

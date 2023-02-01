@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, AbstractSet, Dict
 
-from ..engine import Node, Nodes, BoundEdges, IdentityEdge, Details
+from ..engine import Node, Nodes, BoundEdges, IdentityEdge, Details, NodeSet
 from ..utils import node_to_dict
 
 __all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext', 'ChainContext'
@@ -9,8 +9,10 @@ __all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext', 'ChainContext
 
 class Context(ABC):
     @abstractmethod
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        """ Return the new edges, that need to be added to the graph and the updated outputs  """
+    def reverse(self, outputs: Nodes) -> Tuple[Nodes, BoundEdges, NodeSet]:
+        """
+        Return the updated outputs, additional edges, that need to be added to the graph, and additional optional nodes
+        """
 
     @abstractmethod
     def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
@@ -18,7 +20,7 @@ class Context(ABC):
 
 
 class NoContext(Context):
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
+    def reverse(self, outputs: Nodes) -> Tuple[Nodes, BoundEdges, NodeSet]:
         raise ValueError('The layer is not reversible')
 
     def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
@@ -26,9 +28,9 @@ class NoContext(Context):
 
 
 class IdentityContext(Context):
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
+    def reverse(self, outputs: Nodes) -> Tuple[Nodes, BoundEdges, NodeSet]:
         # just propagate everything
-        return outputs, edges
+        return outputs, [], set()
 
     def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         return self
@@ -40,8 +42,8 @@ class BagContext(Context):
         self.outputs = outputs
         self.inherit = inherit
 
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        edges = list(edges)
+    def reverse(self, outputs: Nodes) -> Tuple[Nodes, BoundEdges, NodeSet]:
+        edges, optionals = [], set()
         outputs = node_to_dict(outputs)
         new_outputs = node_to_dict(self.outputs)
         # stitch the layers
@@ -55,10 +57,11 @@ class BagContext(Context):
             name = node.name
             if name in self.inherit and name not in new_outputs:
                 out = node.clone()
+                optionals.add(out)
                 edges.append(IdentityEdge().bind(node, out))
                 new_outputs[name] = out
 
-        return tuple(new_outputs.values()), edges
+        return tuple(new_outputs.values()), edges, optionals
 
     def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         return BagContext(
@@ -73,10 +76,10 @@ class ChainContext(Context):
         self.previous = previous
         self.current = current
 
-    def reverse(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges) -> Tuple[Nodes, BoundEdges]:
-        outputs, edges = self.current.reverse(inputs, outputs, edges)
-        outputs, edges = self.previous.reverse(inputs, outputs, edges)
-        return outputs, edges
+    def reverse(self, outputs: Nodes) -> Tuple[Nodes, BoundEdges, NodeSet]:
+        outputs, current_edges, current_optionals = self.current.reverse(outputs)
+        outputs, previous_edges, previous_optionals = self.previous.reverse(outputs)
+        return outputs, list(current_edges) + list(previous_edges), current_optionals | previous_optionals
 
     def update(self, nodes_map: Dict[Node, Node], layers_map: Dict[Details, Details]) -> 'Context':
         return ChainContext(self.previous.update(nodes_map, layers_map), self.current.update(nodes_map, layers_map))

@@ -9,7 +9,7 @@ from ..engine import (
 from ..engine.compiler import find_dependencies
 from ..exceptions import GraphError
 from ..utils import NameSet, StringsLike, check_for_duplicates, node_to_dict
-from .context import ChainContext, Context, IdentityContext, NoContext, update_map
+from .context import ChainContext, Context, NoContext, update_map, BagContext
 
 __all__ = 'Container', 'EdgesBag'
 
@@ -86,11 +86,10 @@ class EdgesBag:
 
     def loopback(self, func: Callable, inputs: StringsLike, output: StringsLike) -> 'EdgesBag':
         state = connect_bags(self, function_to_bag(func, inputs, output))
-        state_inputs = state.inputs
-        outputs, edges = state.context.reverse(state_inputs, state.outputs, state.edges)
+        outputs, new_edges, new_optionals = state.context.reverse(state.outputs)
         return EdgesBag(
-            state_inputs, outputs, edges, None,
-            virtual_nodes=None, persistent_nodes=None, optional_nodes=state.optional_nodes,
+            state.inputs, outputs, list(state.edges) + list(new_edges), None,
+            virtual_nodes=None, persistent_nodes=None, optional_nodes=state.optional_nodes | new_optionals,
         )
 
 
@@ -186,7 +185,7 @@ def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) ->
             outputs.append(out)
 
     return EdgesBag(
-        inputs, outputs, edges, IdentityContext(),
+        inputs, outputs, edges, BagContext((), (), set(node_to_dict(outputs))),
         virtual_nodes=None, persistent_nodes=None, optional_nodes=None,
     )
 
