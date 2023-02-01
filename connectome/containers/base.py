@@ -175,7 +175,7 @@ def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) ->
 
     # multiple outputs
     else:
-        if len(set(outputs)) != len(outputs):
+        if len(set(output)) != len(output):
             raise ValueError(f'The outputs contain duplicates: {outputs}')
 
         aux = Node('tuple', parent)

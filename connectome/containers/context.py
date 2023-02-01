@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, AbstractSet, Dict
 
-from ..engine import TreeNode, Node, Nodes, BoundEdges, TreeNodes, IdentityEdge, Details
+from ..engine import Node, Nodes, BoundEdges, IdentityEdge, Details
 from ..utils import node_to_dict
 
 __all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext', 'ChainContext'
@@ -97,14 +97,3 @@ def update_map(nodes: Nodes, node_map: dict, parent: Details = None, layers_map:
             node_map[node] = Node(node.name, details)
 
     return [node_map[x] for x in nodes]
-
-
-def is_reachable(inputs: TreeNodes, output: TreeNode):
-    def reachable(x: TreeNode):
-        if x.is_leaf:
-            return x in inputs
-
-        return all(map(reachable, x.parents))
-
-    inputs = set(inputs)
-    return reachable(output)

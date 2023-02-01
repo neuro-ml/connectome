@@ -90,11 +90,3 @@ class FilterEdge(StaticGraph, StaticEdge):
         return tuple(filter(self.graph.call, tqdm(
             keys, desc='Filtering', disable=not self.verbose,
         )))
-
-
-def _find(nodes, name):
-    for node in nodes:
-        if node.name == name:
-            return node
-
-    raise ValueError(f'The previous layer must contain the attribute "{name}"')
