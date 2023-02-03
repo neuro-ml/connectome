@@ -49,6 +49,7 @@ def normalize_inherit(value, outputs) -> Tuple[NameSet, bool]:
         valid = value
         value = AntiSet(set(outputs))
     elif isinstance(value, AntiSet):
+        value = value - set(outputs)
         valid = True
     else:
         value = set(value)

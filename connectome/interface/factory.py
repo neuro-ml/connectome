@@ -13,7 +13,7 @@ from ..containers import EdgesBag, ReversibleContainer
 from ..containers.reversible import normalize_inherit
 from ..engine import IdentityEdge, ConstantEdge, Details
 from ..exceptions import GraphError, FieldError
-from ..utils import MultiDict
+from ..utils import MultiDict, AntiSet
 from ..layers import CallableLayer
 
 logger = logging.getLogger(__name__)
@@ -358,13 +358,23 @@ class SourceFactory(GraphFactory):
 
 
 class TransformFactory(GraphFactory):
+    def __init__(self, layer: str, scope: MultiDict):
+        self._exclude = None
+        super().__init__(layer, scope)
+
     def _before_collect(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit
+        self.magic_dispatch['__exclude__'] = self._process_exclude
 
     def _after_collect(self):
+        if self.forward_inherit and self._exclude:
+            raise ValueError('Can specify either "__inherit__" or "__exclude__" but not both')
+        if self._exclude:
+            self.forward_inherit = AntiSet(self._exclude)
+
         forward, valid = normalize_inherit(self.forward_inherit, self.outputs)
         if not valid:
-            raise ValueError(f'"__inherit__" can be either True, a string, or a sequence of strings, but got {forward}')
+            raise TypeError(f'"__inherit__" can be either True, a string, or a sequence of strings, but got {forward}')
 
         backward, valid = normalize_inherit(self.forward_inherit, self.backward_outputs)
         assert valid
@@ -379,14 +389,22 @@ class TransformFactory(GraphFactory):
         # save this value for final step
         self.forward_inherit = value
 
+    def _process_exclude(self, value):
+        if isinstance(value, str):
+            value = value,
+        value = tuple(value)
+        if not all(isinstance(x, str) for x in value):
+            raise TypeError('"__exclude__" must be either a string or a sequence of strings')
+        self._exclude = value
 
-def items_to_container(items, inherit, layer_type, factory_cls: Type[GraphFactory]):
+
+def items_to_container(items, layer_type, factory_cls: Type[GraphFactory], **scope):
     if isinstance(items, dict):
         items = items.items()
 
     local = MultiDict()
-    if inherit is not None:
-        local['__inherit__'] = inherit
+    for name in scope:
+        local[name] = scope[name]
     for name, value in items:
         if not is_detectable(value) and not isinstance(value, RuntimeAnnotation):
             raise TypeError(
