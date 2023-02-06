@@ -323,7 +323,7 @@ class GraphFactory:
             self.edges + list(self._get_constant_edges(arguments)),
             list(self.backward_inputs.values()), list(self.backward_outputs.values()),
             optional_outputs=self.optional_names, forward_virtual=self.forward_inherit,
-            backward_virtual=self.backward_inherit, persistent_nodes=self.persistent_names,
+            backward_virtual=self.backward_inherit, persistent=self.persistent_names,
         )
 
 

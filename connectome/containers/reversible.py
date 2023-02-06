@@ -13,7 +13,7 @@ class ReversibleContainer(EdgesBag):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes = (),
                  backward_outputs: Nodes = (), *, optional_inputs: NameSet = None, optional_outputs: NameSet = None,
                  forward_virtual: Union[NameSet, Iterable[str]], backward_virtual: Union[NameSet, Iterable[str]],
-                 persistent_nodes: NameSet = None):
+                 persistent: NameSet = None):
         forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
         assert valid
         backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(backward_outputs))
@@ -23,21 +23,20 @@ class ReversibleContainer(EdgesBag):
             optional_inputs = set()
         if optional_outputs is None:
             optional_outputs = set()
-        if persistent_nodes is None:
-            persistent_nodes = set()
+        if persistent is None:
+            persistent = set()
 
         inputs, outputs, edges, forward_virtual = normalize_bag(
-            inputs, outputs, edges, forward_virtual, set(), persistent_nodes
+            inputs, outputs, edges, forward_virtual, set(), persistent
         )
-        optional_nodes = detect_optionals(
+        optional = detect_optionals(
             optional_inputs, optional_outputs, inputs, outputs, backward_inputs, backward_outputs, edges
         )
         check_for_duplicates(inputs)
         super().__init__(
             inputs, outputs, edges,
             BagContext(backward_inputs, backward_outputs, backward_virtual),
-            virtual_nodes=forward_virtual, persistent_nodes=persistent_nodes,
-            optional_nodes=optional_nodes,
+            virtual=forward_virtual, persistent=persistent, optional=optional,
         )
 
 

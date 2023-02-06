@@ -77,7 +77,7 @@ class Filter(DynamicConnectLayer, Layer):
         edge = FilterEdge(graph, self.verbose).bind(inp, out)
         return EdgesBag(
             [inp], [out], [edge], BagContext((), (), AntiSet((self._keys,))),
-            persistent_nodes=None, optional_nodes=None, virtual_nodes=AntiSet((self._keys,)),
+            persistent=None, optional=None, virtual=AntiSet((self._keys,)),
         )
 
 

@@ -26,7 +26,7 @@ class HashDigest(CallableLayer):
 
         super().__init__(EdgesBag(
             inputs, outputs, edges,
-            context=None, virtual_nodes=None, persistent_nodes=None, optional_nodes=None,
+            context=None, virtual=None, persistent=None, optional=None,
         ), ())
 
 

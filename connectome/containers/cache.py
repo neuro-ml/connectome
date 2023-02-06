@@ -42,8 +42,8 @@ class CacheContainer(CacheBase, ABC):  # pragma: no cover
                 edges.append(IdentityEdge().bind(forward_outputs[node.name], node))
 
         return EdgesBag(
-            state.inputs, outputs, edges, IdentityContext(), persistent_nodes=state.persistent_nodes,
-            optional_nodes=None,
+            state.inputs, outputs, edges, IdentityContext(), persistent=state.persistent,
+            optional=None,
         )
 
     @staticmethod
@@ -125,5 +125,5 @@ class CacheColumnsContainer(CacheBase):  # pragma: no cover
                 outputs.append(local)
 
         return EdgesBag(
-            [key], outputs, edges, IdentityContext(), persistent_nodes=main.persistent_nodes, optional_nodes=None
+            [key], outputs, edges, IdentityContext(), persistent=main.persistent, optional=None
         )

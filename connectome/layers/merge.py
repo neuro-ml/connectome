@@ -83,8 +83,8 @@ class Merge(CallableLayer):
         edges.append(ConstantEdge(tuple(sorted(id_to_index))).bind([], ids))
 
         return EdgesBag(
-            [inp], outputs, edges, context=None, optional_nodes=None, virtual_nodes=None,
-            persistent_nodes=set.intersection(*(set(c.persistent_nodes) for c in containers)),
+            [inp], outputs, edges, context=None, optional=None, virtual=None,
+            persistent=set.intersection(*(set(c.persistent) for c in containers)),
         )
 
 
