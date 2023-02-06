@@ -72,7 +72,7 @@ class CacheToStorage(DynamicConnectLayer, CacheLayer):
 
         return EdgesBag(
             inputs, outputs, edges, IdentityContext(), persistent_nodes=None,
-            virtual_nodes=AntiSet(node_to_dict(outputs)), optional_nodes=None,
+            virtual_nodes=AntiSet(node_to_dict(outputs)), optional_nodes=set(inputs) | set(outputs),
         )
 
     @staticmethod

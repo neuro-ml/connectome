@@ -1,6 +1,7 @@
 import pytest
 from connectome import Chain, Filter, Source, meta, impure
 from connectome.engine.base import HashError
+from connectome.exceptions import DependencyError
 from connectome.interface.blocks import HashDigest
 
 
@@ -43,3 +44,18 @@ def test_impure():
 
     with pytest.raises(HashError):
         A() >> Filter(lambda f: f)
+
+
+def test_wrong_predicate():
+    class A(Source):
+        @meta
+        def ids():
+            return ()
+
+        def x(i):
+            pass
+
+    with pytest.raises(DependencyError):
+        A() >> Filter(lambda y: y)
+    with pytest.raises(DependencyError):
+        A() >> Filter(lambda x, y: y)

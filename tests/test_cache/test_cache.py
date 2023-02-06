@@ -10,7 +10,7 @@ import pytest
 from tarn.config import init_storage, StorageConfig
 from tarn.tools import GlobalThreadLocker
 
-from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform
+from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform, optional
 from connectome.cache import MemoryCache, DiskCache
 from connectome.containers.cache import CachedColumn
 from connectome.engine.edges import CacheEdge
@@ -249,3 +249,8 @@ def test_silent_arguments():
     assert counter.n == 2
     assert ds.x(2, 22) == 2
     assert counter.n == 2
+
+
+def test_optional():
+    ds = Transform(x=lambda x: x) >> Transform(x=lambda x: x, y=optional(lambda y: y)) >> CacheToRam()
+    assert dir(ds) == ['x']

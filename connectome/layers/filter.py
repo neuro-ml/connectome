@@ -4,6 +4,7 @@ from tqdm.auto import tqdm
 
 from ..containers import BagContext
 from ..engine import Node, TreeNode, Graph, FilterHash, FunctionEdge, StaticEdge, StaticGraph, Details
+from ..exceptions import DependencyError
 from ..utils import extract_signature, node_to_dict, AntiSet
 from .base import EdgesBag, Layer
 from .dynamic import DynamicConnectLayer
@@ -53,6 +54,12 @@ class Filter(DynamicConnectLayer, Layer):
         copy = layer.freeze(details)
         edges = list(copy.edges)
         outputs_mapping = node_to_dict(copy.outputs)
+        missing = set(self._names) - set(outputs_mapping)
+        if missing:
+            raise DependencyError(
+                f'The previous layer is missing the fields {missing}, which are required by the predicate'
+            )
+
         out = Node('$predicate', details)
         edges.append(
             FunctionEdge(self.predicate, len(self._names)).bind([outputs_mapping[name] for name in self._names], out)
