@@ -20,11 +20,11 @@ class Container:
     def __init__(self):
         warnings.warn(
             'The container interface is deprecated and will be merged with `EdgesBag` soon',
-            UserWarning
+            UserWarning, stacklevel=2
         )
         warnings.warn(
             'The container interface is deprecated and will be merged with `EdgesBag` soon',
-            DeprecationWarning
+            DeprecationWarning, stacklevel=2
         )
 
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
@@ -38,15 +38,15 @@ class EdgesBag:
                  optional_nodes: Optional[NodeSet] = None, optional: Optional[NodeSet] = None):
         if virtual_nodes is not None:
             assert virtual is None
-            warnings.warn('The "virtual_nodes" argument is deprecated. Use `virtual` instead')
+            warnings.warn('The "virtual_nodes" argument is deprecated. Use `virtual` instead', stacklevel=2)
             virtual = virtual_nodes
         if optional_nodes is not None:
             assert optional is None
-            warnings.warn('The "optional_nodes" argument is deprecated. Use `optional` instead')
+            warnings.warn('The "optional_nodes" argument is deprecated. Use `optional` instead', stacklevel=2)
             optional = optional_nodes
         if persistent_nodes is not None:
             assert persistent is None
-            warnings.warn('The "persistent_nodes" argument is deprecated. Use `persistent` instead')
+            warnings.warn('The "persistent_nodes" argument is deprecated. Use `persistent` instead', stacklevel=2)
             persistent = persistent_nodes
 
         if virtual is None:
