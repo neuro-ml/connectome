@@ -1,7 +1,7 @@
 import logging
 import warnings
 from operator import itemgetter
-from typing import AbstractSet, Callable, Optional, Union
+from typing import Callable, Optional, Union
 
 from ..engine import (
     BoundEdges, Details, FunctionEdge, GraphCompiler, IdentityEdge, Node, Nodes, NodeSet, ProductEdge, TreeNode
@@ -20,11 +20,11 @@ class Container:
     def __init__(self):
         warnings.warn(
             'The container interface is deprecated and will be merged with `EdgesBag` soon',
-            UserWarning
+            UserWarning, stacklevel=2
         )
         warnings.warn(
             'The container interface is deprecated and will be merged with `EdgesBag` soon',
-            DeprecationWarning
+            DeprecationWarning, stacklevel=2
         )
 
     def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
@@ -33,24 +33,36 @@ class Container:
 
 class EdgesBag:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
-                 virtual_nodes: Optional[NameSet] = None, persistent_nodes: Optional[NameSet],
-                 optional_nodes: Optional[NodeSet] = None):
-        if virtual_nodes is None:
-            virtual_nodes = set()
-        if persistent_nodes is None:
-            persistent_nodes = set()
-        if optional_nodes is None:
-            optional_nodes = set()
-        if not isinstance(optional_nodes, AbstractSet):
-            optional_nodes = set(optional_nodes)
+                 virtual_nodes: Optional[NameSet] = None, virtual: Optional[NameSet] = None,
+                 persistent_nodes: Optional[NameSet] = None, persistent: Optional[NameSet] = None,
+                 optional_nodes: Optional[NodeSet] = None, optional: Optional[NodeSet] = None):
+        if virtual_nodes is not None:
+            assert virtual is None
+            warnings.warn('The "virtual_nodes" argument is deprecated. Use `virtual` instead', stacklevel=2)
+            virtual = virtual_nodes
+        if optional_nodes is not None:
+            assert optional is None
+            warnings.warn('The "optional_nodes" argument is deprecated. Use `optional` instead', stacklevel=2)
+            optional = optional_nodes
+        if persistent_nodes is not None:
+            assert persistent is None
+            warnings.warn('The "persistent_nodes" argument is deprecated. Use `persistent` instead', stacklevel=2)
+            persistent = persistent_nodes
+
+        if virtual is None:
+            virtual = set()
+        if persistent is None:
+            persistent = set()
+        if optional is None:
+            optional = set()
         if context is None:
             context = NoContext()
 
-        self.inputs, self.outputs, self.edges, self.virtual_nodes = normalize_bag(
-            inputs, outputs, edges, virtual_nodes, optional_nodes, persistent_nodes)
+        self.inputs, self.outputs, self.edges, self.virtual = normalize_bag(
+            inputs, outputs, edges, virtual, optional, persistent)
 
-        self.persistent_nodes: NameSet = persistent_nodes
-        self.optional_nodes: NodeSet = optional_nodes
+        self.persistent: NameSet = persistent
+        self.optional: NodeSet = optional
         self.context = context
         self.backend = None
 
@@ -75,13 +87,13 @@ class EdgesBag:
             update_map(self.inputs, node_map, parent, layers_map),
             update_map(self.outputs, node_map, parent, layers_map),
             edges, context,
-            virtual_nodes=self.virtual_nodes, persistent_nodes=self.persistent_nodes,
-            optional_nodes=update_map(self.optional_nodes, node_map, parent, layers_map),
+            virtual=self.virtual, persistent=self.persistent,
+            optional=set(update_map(self.optional, node_map, parent, layers_map)),
         )
 
     def compile(self) -> GraphCompiler:
         return GraphCompiler(
-            self.inputs, self.outputs, self.edges, self.virtual_nodes, self.optional_nodes, self.backend
+            self.inputs, self.outputs, self.edges, self.virtual, self.optional, self.backend
         )
 
     def loopback(self, func: Callable, inputs: StringsLike, output: StringsLike) -> 'EdgesBag':
@@ -89,8 +101,24 @@ class EdgesBag:
         outputs, new_edges, new_optionals = state.context.reverse(state.outputs)
         return EdgesBag(
             state.inputs, outputs, list(state.edges) + list(new_edges), None,
-            virtual_nodes=None, persistent_nodes=None, optional_nodes=state.optional_nodes | new_optionals,
+            virtual=None, persistent=None, optional=state.optional | new_optionals,
         )
+
+    # TODO: deprecated
+    @property
+    def persistent_nodes(self):
+        warnings.warn('This attribute is deprecated. Use `persistent` instead', stacklevel=2)
+        return self.persistent
+
+    @property
+    def optional_nodes(self):
+        warnings.warn('This attribute is deprecated. Use `optional` instead', stacklevel=2)
+        return self.optional
+
+    @property
+    def virtual_nodes(self):
+        warnings.warn('This attribute is deprecated. Use `virtual` instead', stacklevel=2)
+        return self.virtual
 
 
 def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: NodeSet,
@@ -186,7 +214,7 @@ def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) ->
 
     return EdgesBag(
         inputs, outputs, edges, BagContext((), (), set(node_to_dict(outputs))),
-        virtual_nodes=None, persistent_nodes=None, optional_nodes=None,
+        virtual=None, persistent=None, optional=None,
     )
 
 
@@ -221,7 +249,7 @@ def connect_bags(left: EdgesBag, right: EdgesBag) -> EdgesBag:
 
     inputs, outputs = set(left.inputs), set(right.outputs)
     edges = list(left.edges) + list(right.edges)
-    optionals = left.optional_nodes | right.optional_nodes
+    optionals = left.optional | right.optional
 
     right_inputs = node_to_dict(right.inputs)
     left_outputs = node_to_dict(left.outputs)
@@ -231,7 +259,7 @@ def connect_bags(left: EdgesBag, right: EdgesBag) -> EdgesBag:
         edges.append(IdentityEdge().bind(left_outputs[name], right_inputs[name]))
 
     # left virtuals
-    for name in left.virtual_nodes & set(right_inputs):
+    for name in left.virtual & set(right_inputs):
         out = right_inputs[name]
         inp = out.clone()
         edges.append(IdentityEdge().bind(inp, out))
@@ -240,7 +268,7 @@ def connect_bags(left: EdgesBag, right: EdgesBag) -> EdgesBag:
             optionals.add(inp)
 
     # right virtuals or persistent but unused
-    for name in set(left_outputs) & (right.virtual_nodes | (left.persistent_nodes - {x.name for x in outputs})):
+    for name in set(left_outputs) & (right.virtual | (left.persistent - {x.name for x in outputs})):
         inp = left_outputs[name]
         out = inp.clone()
         edges.append(IdentityEdge().bind(inp, out))
@@ -250,9 +278,6 @@ def connect_bags(left: EdgesBag, right: EdgesBag) -> EdgesBag:
 
     check_for_duplicates(outputs)
     return EdgesBag(
-        inputs, outputs, edges,
-        ChainContext(left.context, right.context),
-        virtual_nodes=left.virtual_nodes & right.virtual_nodes,
-        optional_nodes=optionals,
-        persistent_nodes=left.persistent_nodes | right.persistent_nodes,
+        inputs, outputs, edges, ChainContext(left.context, right.context),
+        virtual=left.virtual & right.virtual, optional=optionals, persistent=left.persistent | right.persistent,
     )

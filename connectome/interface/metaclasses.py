@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Dict, Type, Union, Iterable, Tuple
+from typing import Callable, Dict, Type, Union, Iterable, Tuple, Collection
 
 from ..utils import MultiDict
 from ..layers import CallableLayer
@@ -64,7 +64,7 @@ class Source(FactoryLayer, metaclass=APIMeta, __factory=SourceFactory):
 
 class SourceBase(CallableLayer):
     def __init__(self, items: Union[Iterable[Tuple[str, Callable]], Dict[str, Callable]]):
-        super().__init__(*items_to_container(items, None, type(self), SourceFactory))
+        super().__init__(*items_to_container(items, type(self), SourceFactory))
 
 
 class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
@@ -84,14 +84,18 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
     # inplace transforms
     >>> Transform(image=lambda image: zoom(image, scale_factor=2))
     """
-    __inherit__: Union[str, Iterable[str], bool] = ()
+    __inherit__: Union[str, Collection[str], bool] = ()
+    __exclude__: Union[str, Collection[str]] = ()
 
-    def __init__(*args, __inherit__: Union[str, Iterable[str], bool] = (), **kwargs: Callable):
+    def __init__(*args, __inherit__: Union[str, Collection[str], bool] = (),
+                 __exclude__: Union[str, Collection[str]] = (), **kwargs: Callable):
         assert args
         if len(args) > 1:
             raise TypeError('This constructor accepts only keyword arguments.')
         self, = args
-        super(Transform, self).__init__(*items_to_container(kwargs, __inherit__, type(self), TransformFactory), ())
+        super(Transform, self).__init__(*items_to_container(
+            kwargs, type(self), TransformFactory, __inherit__=__inherit__, __exclude__=__exclude__
+        ), ())
 
     def __repr__(self):
         return f"{self.__class__.__name__}({', '.join(self._methods.fields())})"
@@ -99,8 +103,10 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
 
 class TransformBase(CallableLayer):
     def __init__(self, items: Union[Iterable[Tuple[str, Callable]], Dict[str, Callable]],
-                 inherit: Union[str, Iterable[str], bool] = ()):
-        super().__init__(*items_to_container(items, inherit, type(self), TransformFactory))
+                 inherit: Union[str, Collection[str], bool] = (), exclude: Union[str, Collection[str]] = ()):
+        super().__init__(*items_to_container(
+            items, type(self), TransformFactory, __inherit__=inherit, __exclude__=exclude
+        ))
 
 
 class Mixin(FactoryLayer, metaclass=APIMeta, __factory=None):

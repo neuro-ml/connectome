@@ -87,3 +87,48 @@ def test_multiple_keys():
 
             def f(x, y):
                 return
+
+
+def test_exclude():
+    class A(Transform):
+        __exclude__ = 'a', 'b'
+
+    a = A()
+    assert a.f(1) == 1
+    with pytest.raises(AttributeError):
+        a.a(1)
+
+    # multiple values
+    a = Transform(__exclude__=('a', 'b'))
+    assert a.f(1) == 1
+    with pytest.raises(AttributeError):
+        a.a(1)
+
+    # single value
+    a = Transform(__exclude__='a')
+    assert a.f(1) == 1
+    with pytest.raises(AttributeError):
+        a.a(1)
+
+
+def test_bad_exclude():
+    with pytest.raises(TypeError):
+        class A(Transform):
+            __exclude__ = 1
+    with pytest.raises(TypeError):
+        class B(Transform):
+            __exclude__ = 1, 2, 3
+    with pytest.raises(ValueError):
+        class C(Transform):
+            __inherit__ = 'a'
+            __exclude__ = 'b'
+
+
+def test_bad_inherit():
+    with pytest.raises(TypeError):
+        class A(Transform):
+            __inherit__ = 1
+
+    with pytest.raises(TypeError):
+        class B(Transform):
+            __inherit__ = 1, 2, 3

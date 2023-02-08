@@ -3,7 +3,6 @@
 [![pypi](https://img.shields.io/pypi/v/connectome?logo=pypi&label=PyPi)](https://pypi.org/project/connectome/)
 ![License](https://img.shields.io/github/license/neuro-ml/connectome)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/connectome)](https://pypi.org/project/connectome/)
-![GitHub branch checks state](https://img.shields.io/github/checks-status/neuro-ml/connectome/master)
 
 Connectome is a framework for datasets management with strong emphasis on simplicity, composability and reusability.
 

@@ -58,8 +58,8 @@ class GroupContainer(Container):
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
         return EdgesBag(
-            [changed_input], outputs, edges, None, persistent_nodes=main.persistent_nodes,
-            optional_nodes=main.optional_nodes, virtual_nodes=None,
+            [changed_input], outputs, edges, None, persistent=main.persistent,
+            optional=main.optional, virtual=None,
         )
 
 
@@ -173,8 +173,8 @@ class MultiGroupLayer(Container):
         edges.append(FunctionEdge(extract_keys, arity=1).bind(mapping_node, output_ids))
 
         return EdgesBag(
-            [changed_input], outputs, edges, None, persistent_nodes=main.persistent_nodes,
-            optional_nodes=main.optional_nodes, virtual_nodes=None,
+            [changed_input], outputs, edges, None, persistent=main.persistent,
+            optional=main.optional, virtual=None,
         )
 
 

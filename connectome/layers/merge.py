@@ -45,18 +45,18 @@ class Merge(CallableLayer):
 
     def _merge_containers(self, id_to_index: dict, containers: Sequence[EdgesBag], keys_name: str):
         details = Details(type(self))
+        containers = [container.freeze(details) for container in containers]
 
         inputs = []
         groups = []
         edges = []
         # gather parts
         for container in containers:
-            params = container.freeze(details)
-            if len(params.inputs) != 1:
+            if len(container.inputs) != 1:
                 raise ValueError('Each layer must have exactly one input')
-            inputs.append(params.inputs[0])
-            groups.append(node_to_dict(params.outputs))
-            edges.extend(params.edges)
+            inputs.append(container.inputs[0])
+            groups.append(node_to_dict(container.outputs))
+            edges.extend(container.edges)
 
         # validate inputs
         inp = [x.name for x in inputs]
@@ -70,11 +70,15 @@ class Merge(CallableLayer):
 
         # create new outputs
         outputs = []
+        optional = set.union(*(c.optional for c in containers))
         common_outputs = set.intersection(*map(set, groups)) - {keys_name}
         for name in common_outputs:
             node = Node(name, details)
-            branches = [group[name] for group in groups]
             outputs.append(node)
+            branches = [group[name] for group in groups]
+            # if all the outputs are optional - make this one too
+            if set(branches) <= optional:
+                optional.add(node)
             edges.append(SwitchEdge(id_to_index, len(containers)).bind([inp] + branches, node))
 
         # and the keys
@@ -83,8 +87,9 @@ class Merge(CallableLayer):
         edges.append(ConstantEdge(tuple(sorted(id_to_index))).bind([], ids))
 
         return EdgesBag(
-            [inp], outputs, edges, context=None, optional_nodes=None, virtual_nodes=None,
-            persistent_nodes=set.intersection(*(set(c.persistent_nodes) for c in containers)),
+            [inp], outputs, edges, context=None, virtual=None,
+            optional=optional,
+            persistent=set.intersection(*(set(c.persistent) for c in containers)),
         )
 
 

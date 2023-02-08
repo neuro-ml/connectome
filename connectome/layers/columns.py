@@ -84,7 +84,7 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
 
         return EdgesBag(
             inputs, outputs, edges, IdentityContext(),
-            persistent_nodes=None, optional_nodes=None, virtual_nodes=AntiSet(node_to_dict(outputs)),
+            persistent=None, optional=None, virtual=AntiSet(node_to_dict(outputs)),
         )
 
 
