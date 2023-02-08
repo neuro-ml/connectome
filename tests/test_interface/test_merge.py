@@ -1,5 +1,6 @@
 import pytest
-from connectome import Source, Merge, Transform, Chain, positional, meta, impure
+from connectome import Source, Merge, Transform, Chain, positional, meta, impure, optional
+from connectome.exceptions import DependencyError
 from connectome.interface.blocks import HashDigest
 
 
@@ -192,3 +193,42 @@ def test_collisions():
 
     with pytest.raises(ValueError):
         Merge(E())
+
+
+def test_optional():
+    class A(Source):
+        @meta
+        def ids():
+            return '012'
+
+        def x(x):
+            pass
+
+    class B(Source):
+        @meta
+        def ids():
+            return '345'
+
+        def x(x):
+            pass
+
+        @optional
+        def y(y):
+            pass
+
+    class C(Source):
+        @meta
+        def ids():
+            return '678'
+
+        def x(x):
+            pass
+
+        def y(y):
+            pass
+
+    opt = Transform(x=lambda x: x, y=optional(lambda y: y))
+
+    assert set(dir(Merge(A() >> opt, B() >> opt))) == {'x', 'id', 'ids'}
+    with pytest.raises(DependencyError):
+        dir(Merge(A() >> opt, C()))
