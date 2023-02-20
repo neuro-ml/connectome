@@ -254,3 +254,29 @@ def test_silent_arguments():
 def test_optional():
     ds = Transform(x=lambda x: x) >> Transform(x=lambda x: x, y=optional(lambda y: y)) >> CacheToRam()
     assert dir(ds) == ['x']
+
+
+def get_cached_names(layer):
+    return {edge.output.name for edge in layer._container.edges if isinstance(edge.edge, CacheEdge)}
+
+
+def test_inherited(transform_maker):
+    assert get_cached_names(
+        transform_maker('a', 'b') >> CacheToRam()
+    ) == {'a', 'b'}
+    assert get_cached_names(
+        transform_maker('a', 'b', 'c') >> CacheToRam(('a', 'b'))
+    ) == {'a', 'b'}
+
+    assert get_cached_names(
+        (transform_maker('a', 'b') >> transform_maker(inherit=True)) >> CacheToRam()
+    ) == {'a', 'b'}
+    assert get_cached_names(
+        transform_maker('a', 'b') >> (transform_maker(inherit=True) >> CacheToRam())
+    ) == {'a', 'b'}
+    assert get_cached_names(
+        (transform_maker('a', 'b', 'c') >> transform_maker(inherit=['a', 'b'])) >> CacheToRam()
+    ) == {'a', 'b'}
+    assert get_cached_names(
+        transform_maker('a', 'b', 'c') >> (transform_maker(inherit=['a', 'b']) >> CacheToRam())
+    ) == {'a', 'b'}

@@ -1,7 +1,8 @@
 import re
 import pytest
 
-from connectome import Source, Transform, inverse, optional, positional, meta
+from connectome import Source, Transform, inverse, optional, positional, meta, Function
+from connectome.engine.compiler import identity
 
 
 class FirstDS(Source):
@@ -134,3 +135,11 @@ class BlockMaker:
 @pytest.fixture(scope='module')
 def block_maker():
     return BlockMaker
+
+
+@pytest.fixture
+def transform_maker():
+    def maker(*names, inherit=()):
+        return Transform(__inherit__=inherit, **{k: Function(identity, k) for k in names})
+
+    return maker
