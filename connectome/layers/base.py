@@ -1,3 +1,4 @@
+import functools
 import logging
 import warnings
 from typing import Callable, Iterable
@@ -124,13 +125,19 @@ class Instance:
 
 class Chain(CallableLayer):
     def __init__(self, head: CallableLayer, *tail: Layer):
-        self._layers = [head, *tail]
-        container = head._container
+        self._layers = (head, *tail)
+        container = self._apply_chain(head._container, tail)
+        super().__init__(container, head._properties)
+
+    def _apply_chain(self, container, tail):
         for layer in tail:
             container = layer._connect(container)
 
-        container = container.freeze(Details(type(self)))
-        super().__init__(container, head._properties)
+        return container.freeze(Details(type(self)))
+
+    def _connect(self, previous: EdgesBag) -> EdgesBag:
+        # this version flattens the chain, because the head layer might have some custom connection logic
+        return self._apply_chain(previous, self._layers)
 
     def __getitem__(self, index):
         if isinstance(index, int):
@@ -188,11 +195,12 @@ class LazyChain(Layer):
 def chained(*layers: CallableLayer, lazy: bool = False):
     base = LazyChain if lazy else Chain
 
-    def decorator(klass):
+    def decorator(cls):
         class Chained(base):
             def __init__(self, *args, **kwargs):
-                super().__init__(klass(*args, **kwargs), *layers)
+                super().__init__(cls(*args, **kwargs), *layers)
 
+        functools.update_wrapper(Chained, cls, updated=())
         return Chained
 
     return decorator
