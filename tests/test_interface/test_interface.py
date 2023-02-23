@@ -247,3 +247,18 @@ def test_plain_inheritance():
     assert a.x(1) == 2
     assert b.ids == ['0']
     assert b.x('0') == 1
+
+
+def test_wrong_arg_type():
+    with pytest.raises(TypeError, match='The parameter "a" must be "positional or keyword"'):
+        class A(Transform):
+            def f(*, a):
+                pass
+    with pytest.raises(TypeError, match='The parameter "a" must be "positional or keyword"'):
+        class A(Transform):
+            def f(*a):
+                pass
+    with pytest.raises(TypeError, match='The parameter "a" must be "positional or keyword"'):
+        class A(Transform):
+            def f(**a):
+                pass

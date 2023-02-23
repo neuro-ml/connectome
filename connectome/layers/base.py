@@ -127,7 +127,12 @@ class Chain(CallableLayer):
     def __init__(self, head: CallableLayer, *tail: Layer):
         self._layers = (head, *tail)
         container = self._apply_chain(head._container, tail)
-        super().__init__(container, head._properties)
+        props = head._properties.copy()
+        for layer in tail:
+            if isinstance(layer, CallableLayer):
+                props.update(layer._properties)
+
+        super().__init__(container, props)
 
     def _apply_chain(self, container, tail):
         for layer in tail:
@@ -192,7 +197,7 @@ class LazyChain(Layer):
         return 'LazyChain' + format_arguments(self._layers)
 
 
-def chained(*layers: CallableLayer, lazy: bool = False):
+def chained(*layers: Layer, lazy: bool = False):
     base = LazyChain if lazy else Chain
 
     def decorator(cls):

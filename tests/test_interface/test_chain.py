@@ -281,3 +281,21 @@ def test_new_persistent_field():
             return '123'
 
     A() >> Transform(__inherit__=True, some_field=lambda id: id)
+
+
+def test_new_meta_field():
+    class A(Source):
+        @meta
+        def ids():
+            return '123'
+
+    class B(Transform):
+        @meta
+        def other_ids():
+            return '456'
+
+    layer = A() >> B()
+    assert set(dir(layer)) == {'ids', 'other_ids', 'id'}
+    assert set(layer._properties) == {'ids', 'other_ids'}
+    assert layer.ids == '123'
+    assert layer.other_ids == '456'
