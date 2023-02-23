@@ -12,7 +12,7 @@ from .dynamic import DynamicConnectLayer
 
 class Filter(DynamicConnectLayer, Layer):
     """
-    Filters the `ids` of the current pipeline given a ``predicate``.
+    Filters the `keys` of the current pipeline given a `predicate`.
 
     Examples
     --------
@@ -22,9 +22,8 @@ class Filter(DynamicConnectLayer, Layer):
     ... )
     """
 
-    def __init__(self, predicate: Callable, verbose: bool = False):
-        # TODO: remove default
-        self._keys: str = 'ids'
+    def __init__(self, predicate: Callable, verbose: bool = False, keys: str = 'ids'):
+        self._keys = keys
         self._names, _ = extract_signature(predicate)
         self.predicate = predicate
         self.verbose = verbose

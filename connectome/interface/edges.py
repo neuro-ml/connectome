@@ -56,8 +56,10 @@ class FunctionBase(EdgeFactory, ABC):
                 )
 
             is_positional = idx == 0 and parameter.kind == parameter.POSITIONAL_ONLY
-            if not is_positional:
-                assert parameter.kind == parameter.POSITIONAL_OR_KEYWORD, parameter
+            if not is_positional and parameter.kind != parameter.POSITIONAL_OR_KEYWORD:
+                raise TypeError(
+                    f'The parameter {parameter.name} must be "positional or keyword", not {parameter.kind.name.lower()}'
+                )
 
             args.append(replace_annotation(
                 cls._process_annotation, parameter.annotation, parameter.name, is_positional
