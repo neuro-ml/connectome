@@ -1,5 +1,6 @@
 import inspect
 import logging
+import warnings
 from typing import Dict, Any, Iterable, Callable, Type
 
 from .decorators import Meta, Optional, RuntimeAnnotation
@@ -14,7 +15,7 @@ from ..containers.reversible import normalize_inherit
 from ..engine import IdentityEdge, ConstantEdge, Details
 from ..exceptions import GraphError, FieldError
 from ..utils import MultiDict, AntiSet
-from ..layers import CallableLayer
+from ..layers import Layer, CallableLayer
 
 logger = logging.getLogger(__name__)
 
@@ -59,24 +60,14 @@ BUILTIN_DECORATORS = staticmethod, classmethod, property
 
 class FactoryLayer(CallableLayer):
     def __init__(self, container: EdgesBag, properties: Iterable[str], special_methods: Iterable[str]):
-        self._special_methods = set(special_methods)
+        warnings.warn('This class is deprecated', DeprecationWarning)
+        warnings.warn('This class is deprecated', UserWarning)
         super().__init__(container, properties)
-
-    def __getattribute__(self, name):
-        if name in super().__getattribute__('_special_methods'):
-            raise AttributeError(f'"{name}" is accessible only through the class object, not its instance')
-
-        return super().__getattribute__(name)
-
-    def __repr__(self):
-        kls = type(self)
-        if hasattr(kls, '__qualname__'):
-            args = ', '.join(kls.__signature__.parameters if hasattr(kls, '__signature__') else [])
-            return f'{kls.__qualname__}({args})'
-        return super(type(self), self).__repr__()
 
 
 class GraphFactory:
+    layer_cls: Type[Layer] = CallableLayer
+
     def __init__(self, layer: str, scope: MultiDict):
         details = Details(layer)
         backward_details = Details(f'{layer}(backward)')
@@ -120,6 +111,9 @@ class GraphFactory:
         for x in [self.parameters, self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
             x.freeze()
 
+    def _prepare_layer_arguments(self, container: EdgesBag, properties: Iterable[str]):
+        return container, properties
+
     @classmethod
     def make_scope(cls, layer: str, namespace: MultiDict) -> dict:
         factory = cls(layer, namespace)
@@ -134,9 +128,8 @@ class GraphFactory:
 
             arguments = signature.bind_partial(*args, **kwargs)
             arguments.apply_defaults()
-            FactoryLayer.__init__(
-                self, factory.build(arguments.arguments),
-                factory.property_names, factory.special_methods
+            factory.layer_cls.__init__(
+                self, *factory._prepare_layer_arguments(factory.build(arguments.arguments), factory.property_names)
             )
 
         __init__.__signature__ = signature

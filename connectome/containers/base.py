@@ -243,16 +243,17 @@ def detect_cycles(adjacency):
     return cycles
 
 
-def connect_bags(left: EdgesBag, right: EdgesBag) -> EdgesBag:
-    left = left.freeze()
-    right = right.freeze()
+def connect_bags(left: EdgesBag, right: EdgesBag, freeze: bool = True) -> EdgesBag:
+    if freeze:
+        left = left.freeze()
+        right = right.freeze()
 
     inputs, outputs = set(left.inputs), set(right.outputs)
     edges = list(left.edges) + list(right.edges)
     optionals = left.optional | right.optional
 
-    right_inputs = node_to_dict(right.inputs)
     left_outputs = node_to_dict(left.outputs)
+    right_inputs = node_to_dict(right.inputs)
 
     # common
     for name in set(left_outputs) & set(right_inputs):
