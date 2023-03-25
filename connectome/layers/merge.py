@@ -2,9 +2,9 @@ from typing import Sequence, Any, Generator
 
 from ..containers import EdgesBag
 from ..engine import (
-    ConstantEdge, IdentityEdge, Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command, Details
+    ConstantEdge, IdentityEdge, Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command, Details,
+    CustomHash,
 )
-from ..engine.node_hash import MergeHash
 from ..utils import node_to_dict
 from ..interface.utils import format_arguments
 from .base import CallableLayer
@@ -114,4 +114,4 @@ class SwitchEdge(Edge):
         return value
 
     def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
-        return MergeHash(*inputs)
+        return CustomHash('connectome.SwitchEdge', *inputs)

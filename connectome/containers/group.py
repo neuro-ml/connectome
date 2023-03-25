@@ -7,7 +7,7 @@ from ..engine import NodeHash
 from ..engine import Node, TreeNode, NodeHashes, Command, Request, Response, Details
 from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
 from ..engine.graph import Graph
-from ..engine.node_hash import LeafHash, GroupByHash, DictFromKeys, MultiMappingHash
+from ..engine.node_hash import LeafHash, CustomHash
 
 
 class GroupContainer(Container):
@@ -74,7 +74,7 @@ class MappingEdge(StaticGraph, StaticHash):
         self._hash = self.graph.hash()
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return GroupByHash(self._hash, *inputs)
+        return CustomHash('connectome.MappingEdge', self._hash, *inputs)
 
     def evaluate(self) -> Generator[Request, Response, Any]:
         if self._mapping is not None:
@@ -96,7 +96,7 @@ class GroupEdge(StaticGraph, StaticEdge):
         self._hash = self.graph.hash()
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return DictFromKeys(self._hash, *inputs)
+        return CustomHash('connectome.GroupEdge', self._hash, *inputs)
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         """ arguments: id, mapping """
@@ -188,8 +188,8 @@ class HashMappingEdge(StaticGraph, StaticHash):
         self._graph_hash = self.graph.hash()
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return MultiMappingHash(
-            *inputs, *(LeafHash(x) for x in self.comparators), LeafHash(self.hasher),
+        return CustomHash(
+            'connectome.HashMappingEdge', *inputs, *(LeafHash(x) for x in self.comparators), LeafHash(self.hasher),
             self._graph_hash,
         )
 

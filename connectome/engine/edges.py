@@ -4,12 +4,12 @@ from typing import Sequence, Callable, Any, Generator, Tuple
 from .base import Edge, HashOutput, HashError, Request, Response
 from .node_hash import NodeHash, NodeHashes
 from .graph import Command
-from .node_hash import LeafHash, ApplyHash, TupleHash
+from .node_hash import LeafHash, ApplyHash
 
 __all__ = (
     'StaticHash', 'StaticGraph', 'StaticEdge',
     'ImpureEdge', 'CacheEdge', 'IdentityEdge', 'FunctionEdge', 'ComputableHashEdge',
-    'ConstantEdge', 'ComputableHashBase', 'ProductEdge',
+    'ConstantEdge', 'ComputableHashBase', 'ProductEdge', 'HashBarrier',
 )
 
 
@@ -29,7 +29,7 @@ class StaticHash(Edge):
 
 
 class StaticGraph:
-    """ Mixin for edges which share a the same hash computation for `_compute_hash` and `_hash_graph`. """
+    """ Mixin for edges which share the same hash computation for `_compute_hash` and `_hash_graph`. """
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
         raise NotImplementedError
@@ -181,7 +181,27 @@ class CacheEdge(StaticGraph, StaticHash):
 
 class ProductEdge(StaticGraph, StaticEdge):
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return TupleHash(*inputs)
+        return ApplyHash(tuple, *inputs)
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         return tuple(inputs)
+
+
+class HashBarrier(Edge):
+    """
+    Overwrite the subgraph's hash by replacing it with the real node's value
+    """
+
+    def __init__(self):
+        super().__init__(1)
+
+    def compute_hash(self) -> Generator[Request, Response, HashOutput]:
+        value = yield Command.ParentValue, 0
+        return LeafHash(value), value
+
+    def evaluate(self) -> Generator[Request, Response, Any]:
+        value = yield Command.Payload,
+        return value
+
+    def _hash_graph(self, inputs: NodeHashes) -> NodeHash:
+        return inputs[0]

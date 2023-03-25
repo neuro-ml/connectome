@@ -3,7 +3,8 @@ from typing import Callable, Sequence, Any, Iterable
 from tqdm.auto import tqdm
 
 from ..containers import BagContext
-from ..engine import Node, TreeNode, Graph, FilterHash, FunctionEdge, StaticEdge, StaticGraph, Details
+from ..engine import Node, TreeNode, Graph, FunctionEdge, StaticEdge, StaticGraph, Details
+from ..engine.node_hash import ApplyHash
 from ..exceptions import DependencyError
 from ..utils import extract_signature, node_to_dict, AntiSet
 from .base import EdgesBag, Layer
@@ -89,7 +90,7 @@ class FilterEdge(StaticGraph, StaticEdge):
 
     def _make_hash(self, hashes):
         keys, = hashes
-        return FilterHash(self._hash, keys)
+        return ApplyHash(filter, self._hash, keys)
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         keys, = inputs
