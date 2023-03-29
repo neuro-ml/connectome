@@ -47,6 +47,7 @@ class JoinContainer(EdgesBag):
     def __init__(self, left: EdgesBag, right: EdgesBag, on: Strings,
                  combiner: Callable, cache: Edge, verbose: bool, how: JoinMode):
         assert len(set(on)) == len(on), on
+        on = set(on)
         details = Details(type(self))
         left, right = left.freeze(details), right.freeze(details)
         edges = [*left.edges, *right.edges]
@@ -65,8 +66,12 @@ class JoinContainer(EdgesBag):
         outputs_left.pop(left_key.name)
         outputs_right.pop(right_key.name)
 
+        join_on_keys = {left_key.name, right_key.name} & on
+        if join_on_keys:
+            raise ValueError(f'Join on the kay values os not supported yet: {join_on_keys}')
+
         intersection = set(outputs_left) & set(outputs_right)
-        missing = set(on) - intersection
+        missing = on - intersection
         if missing:
             raise ValueError(f'Fields {missing} are missing')
         conflict = intersection - set(on)
@@ -123,7 +128,7 @@ class JoinContainer(EdgesBag):
 
         left_nodes = [outputs_left[x] for x in set(outputs_left) - intersection]
         right_nodes = [outputs_right[x] for x in set(outputs_right) - intersection]
-        if how in [JoinMode.left, JoinMode.outer]:
+        if how in [JoinMode.right, JoinMode.outer]:
             for node in left_nodes:
                 local = Node(node.name, details)
                 edges.append(SwitchMissing(0).bind([inp, mapping, node], local))
@@ -131,7 +136,7 @@ class JoinContainer(EdgesBag):
         else:
             outputs.extend(left_nodes)
 
-        if how in [JoinMode.right, JoinMode.outer]:
+        if how in [JoinMode.left, JoinMode.outer]:
             for node in right_nodes:
                 local = Node(node.name, details)
                 edges.append(SwitchMissing(1).bind([inp, mapping, node], local))
@@ -148,8 +153,7 @@ class JoinContainer(EdgesBag):
     def _make_graph(key, outputs, edges, on, details):
         edges = list(edges)
         output = Node('$output', details)
-        edges.append(ProductEdge(len(on)).bind(
-            [outputs[x] for x in on], output))
+        edges.append(ProductEdge(len(on)).bind([outputs[x] for x in on], output))
         mapping = TreeNode.from_edges(edges)
         return Graph([mapping[key]], mapping[output])
 
