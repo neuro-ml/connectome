@@ -47,7 +47,6 @@ class JoinContainer(EdgesBag):
     def __init__(self, left: EdgesBag, right: EdgesBag, on: Strings,
                  combiner: Callable, cache: Edge, verbose: bool, how: JoinMode):
         assert len(set(on)) == len(on), on
-        on = set(on)
         details = Details(type(self))
         left, right = left.freeze(details), right.freeze(details)
         edges = [*left.edges, *right.edges]
@@ -66,12 +65,12 @@ class JoinContainer(EdgesBag):
         outputs_left.pop(left_key.name)
         outputs_right.pop(right_key.name)
 
-        join_on_keys = {left_key.name, right_key.name} & on
+        join_on_keys = {left_key.name, right_key.name} & set(on)
         if join_on_keys:
             raise ValueError(f'Join on the kay values os not supported yet: {join_on_keys}')
 
         intersection = set(outputs_left) & set(outputs_right)
-        missing = on - intersection
+        missing = set(on) - intersection
         if missing:
             raise ValueError(f'Fields {missing} are missing')
         conflict = intersection - set(on)
