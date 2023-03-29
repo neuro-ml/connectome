@@ -2,3 +2,4 @@ numpy
 tqdm
 pylru
 tarn>=0.1.0,<1.0.0
+jboc<1.0.0

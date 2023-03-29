@@ -64,11 +64,9 @@ def test_builtin_decorators():
     assert c.g() == 10
 
     assert C.util(1) == 10
-    # instances don't have access to them
-    with pytest.raises(AttributeError):
-        c.add_one(0)
-    with pytest.raises(AttributeError):
-        c.util(0)
+    # instances have access to them too
+    assert c.util(2) == 20
+    assert c.add_one(0)
 
 
 def test_explicit_definitions():

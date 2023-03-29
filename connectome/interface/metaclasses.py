@@ -2,14 +2,14 @@ import logging
 from typing import Callable, Dict, Type, Union, Iterable, Tuple, Collection
 
 from ..utils import MultiDict
-from ..layers import CallableLayer
+from ..layers import Layer, CallableLayer
 from .compat import SafeMeta
 from .factory import (
-    SourceFactory, TransformFactory, FactoryLayer, add_from_mixins, add_quals, GraphFactory, items_to_container
+    SourceFactory, TransformFactory, add_from_mixins, add_quals, GraphFactory, items_to_container
 )
 
 logger = logging.getLogger(__name__)
-BASES: Dict[Type[FactoryLayer], GraphFactory] = {}
+BASES: Dict[Type[Layer], GraphFactory] = {}
 
 
 class APIMeta(SafeMeta):
@@ -20,7 +20,6 @@ class APIMeta(SafeMeta):
     def __new__(mcs, class_name, bases, namespace, **flags):
         if '__factory' in flags:
             factory = flags.pop('__factory')
-            assert bases == (FactoryLayer,)
             scope = namespace.to_dict()
             base = super().__new__(mcs, class_name, bases, scope, **flags)
             BASES[base] = factory  # noqa
@@ -53,7 +52,7 @@ class APIMeta(SafeMeta):
         return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 
-class Source(FactoryLayer, metaclass=APIMeta, __factory=SourceFactory):
+class Source(CallableLayer, metaclass=APIMeta, __factory=SourceFactory):
     """
     Base class for all sources.
     """
@@ -67,7 +66,7 @@ class SourceBase(CallableLayer):
         super().__init__(*items_to_container(items, type(self), SourceFactory))
 
 
-class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
+class Transform(CallableLayer, metaclass=APIMeta, __factory=TransformFactory):
     """
     Base class for all transforms.
 
@@ -95,7 +94,7 @@ class Transform(FactoryLayer, metaclass=APIMeta, __factory=TransformFactory):
         self, = args
         super(Transform, self).__init__(*items_to_container(
             kwargs, type(self), TransformFactory, __inherit__=__inherit__, __exclude__=__exclude__
-        ), ())
+        ))
 
     def __repr__(self):
         return f"{self.__class__.__name__}({', '.join(self._methods.fields())})"
@@ -109,7 +108,7 @@ class TransformBase(CallableLayer):
         ))
 
 
-class Mixin(FactoryLayer, metaclass=APIMeta, __factory=None):
+class Mixin(metaclass=APIMeta, __factory=None):
     """
     Base class for all Mixins.
     """

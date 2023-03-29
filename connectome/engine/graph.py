@@ -50,10 +50,10 @@ class Graph:
         result, _ = compute_hash(self.output, hashes, cache, self.executor)
         return result, (hashes, cache)
 
-    def get_value(self, hashes, cache):
+    def get_value(self, hashes, cache) -> Any:
         return evaluate(self.output, hashes, cache, self.executor)
 
-    def hash(self):
+    def hash(self) -> GraphHash:
         return GraphHash(hash_graph(self.inputs, self.output))
 
 

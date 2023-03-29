@@ -9,8 +9,9 @@ from .dynamic import DynamicConnectLayer
 from ..cache import DiskCache, MemoryCache
 from ..containers import EdgesBag, IdentityContext
 from ..engine import (
-    Edge, TreeNode, Node, Graph, Request, Response, HashOutput, Command, TupleHash, NodeHashes, NodeHash, Details
+    Edge, TreeNode, Node, Graph, Request, Response, HashOutput, Command, NodeHashes, NodeHash, Details
 )
+from ..engine.node_hash import ApplyHash
 from ..exceptions import DependencyError
 from ..storage import Storage
 from ..utils import StringsLike, node_to_dict, AntiSet
@@ -148,7 +149,7 @@ class CachedColumn(Edge):
             if k == key:
                 assert output == h, (output, h)
         # TODO: hash the graph?
-        compound = TupleHash(*hashes)
+        compound = ApplyHash(tuple, *hashes)
 
         digest, context = self.disk.prepare(compound)
         values, exists = self.disk.get(digest, context)
