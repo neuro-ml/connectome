@@ -2,12 +2,11 @@ import hashlib
 import itertools
 from collections import defaultdict
 from enum import Enum
-from typing import Generator, Any, Callable, Union, Sequence
+from typing import Any, Callable, Generator, Sequence, Union
 
 from jboc import composed
 from tqdm.auto import tqdm
 
-from .cache import MemoryCache
 from ..containers import EdgesBag
 from ..engine import (
     Request, Response, Command, Node, Edge, TreeNode, StaticGraph, StaticHash, FunctionEdge, ProductEdge, CacheEdge,
@@ -15,7 +14,8 @@ from ..engine import (
 )
 from ..interface.blocks import to_seq
 from ..layers import CallableLayer
-from ..utils import Strings, node_to_dict, StringsLike
+from ..utils import Strings, StringsLike, node_to_dict
+from .cache import MemoryCache
 
 
 class JoinMode(Enum):

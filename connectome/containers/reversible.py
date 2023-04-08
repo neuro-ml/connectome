@@ -1,10 +1,10 @@
 from collections import defaultdict
-from typing import Tuple, Union, Iterable
+from typing import Iterable, Tuple, Union
 
-from ..engine import Nodes, BoundEdges, TreeNode
+from ..engine import BoundEdges, Nodes, TreeNode
 from ..engine.compiler import find_dependencies
 from ..exceptions import GraphError
-from ..utils import NameSet, node_to_dict, check_for_duplicates, AntiSet
+from ..utils import AntiSet, NameSet, check_for_duplicates, node_to_dict
 from .base import EdgesBag, normalize_bag
 from .context import BagContext
 

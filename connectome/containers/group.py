@@ -1,13 +1,12 @@
 from collections import defaultdict
 from hashlib import sha256
-from typing import Sequence, Any, Generator
+from typing import Any, Generator, Sequence
 
-from .base import EdgesBag, Container
-from ..engine import NodeHash
-from ..engine import Node, TreeNode, NodeHashes, Command, Request, Response, Details
-from ..engine.edges import FunctionEdge, ProductEdge, StaticHash, StaticGraph, StaticEdge
+from ..engine import Command, Details, Node, NodeHash, NodeHashes, Request, Response, TreeNode
+from ..engine.edges import FunctionEdge, ProductEdge, StaticEdge, StaticGraph, StaticHash
 from ..engine.graph import Graph
-from ..engine.node_hash import LeafHash, CustomHash
+from ..engine.node_hash import CustomHash, LeafHash
+from .base import Container, EdgesBag
 
 
 class GroupContainer(Container):

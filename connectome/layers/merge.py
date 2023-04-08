@@ -1,12 +1,12 @@
-from typing import Sequence, Any, Generator
+from typing import Any, Generator, Sequence
 
 from ..containers import EdgesBag
 from ..engine import (
     ConstantEdge, IdentityEdge, Node, NodeHash, Edge, NodeHashes, HashOutput, Request, Response, Command, Details,
     CustomHash,
 )
-from ..utils import node_to_dict
 from ..interface.utils import format_arguments
+from ..utils import node_to_dict
 from .base import CallableLayer
 
 

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Sequence, Tuple, Union, NamedTuple, Optional, Any, Generator, Collection, Iterable, Set, Dict, Type
+from typing import Any, Collection, Dict, Generator, Iterable, NamedTuple, Optional, Sequence, Set, Tuple, Type, Union
 
 from ..exceptions import GraphError
 from .node_hash import NodeHash, NodeHashes

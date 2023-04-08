@@ -1,7 +1,7 @@
 from typing import Callable
 
 from ..containers import ReversibleContainer
-from ..engine import Node, FunctionEdge, Details
+from ..engine import Details, FunctionEdge, Node
 from ..utils import AntiSet
 from .base import CallableLayer
 

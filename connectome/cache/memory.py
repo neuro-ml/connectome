@@ -1,10 +1,10 @@
 from threading import Lock
-from typing import Union, Any, Tuple
+from typing import Any, Tuple, Union
 
 from pylru import lrucache
 
-from .base import Cache
 from ..engine import NodeHash
+from .base import Cache
 
 
 class MemoryCache(Cache):

@@ -5,16 +5,17 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
+
+from tarn import HashKeyStorage
 from tarn.config import init_storage, StorageConfig
 
 from connectome import CacheToDisk
-from connectome.storage import Storage, Disk
 
 
 @pytest.fixture
 def storage_factory():
     @contextmanager
-    def factory(locker=None, group=None, names=('storage',)) -> Iterator[Storage]:
+    def factory(locker=None, group=None, names=('storage',)) -> Iterator[HashKeyStorage]:
         with tempfile.TemporaryDirectory() as root:
             roots = []
             for name in names:
@@ -25,7 +26,7 @@ def storage_factory():
                     root, group=group,
                 )
 
-            yield Storage(list(map(Disk, roots)))
+            yield HashKeyStorage(roots)
 
     return factory
 

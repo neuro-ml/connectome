@@ -1,13 +1,13 @@
 import hashlib
-from typing import Generator, Any
+from typing import Any, Generator
 
 from tarn.cache.storage import key_to_digest
 
 from ..containers import EdgesBag
-from ..engine import Node, Request, Response, Command, StaticGraph, StaticHash, NodeHashes, NodeHash, Details
-from .cache import to_seq
+from ..engine import Command, Details, Node, NodeHash, NodeHashes, Request, Response, StaticGraph, StaticHash
 from ..utils import StringsLike
 from .base import CallableLayer
+from .cache import to_seq
 
 
 class HashDigest(CallableLayer):

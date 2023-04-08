@@ -1,7 +1,7 @@
 from concurrent.futures import Executor
 
 from .base import Command
-from .executor import Frame, AsyncLoop
+from .executor import AsyncLoop, Frame
 
 
 # TODO: replace cache by a thunk tree

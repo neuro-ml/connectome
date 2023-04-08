@@ -1,12 +1,10 @@
 import logging
-from typing import Callable, Dict, Type, Union, Iterable, Tuple, Collection
+from typing import Callable, Collection, Dict, Iterable, Tuple, Type, Union
 
+from ..layers import CallableLayer, Layer
 from ..utils import MultiDict
-from ..layers import Layer, CallableLayer
 from .compat import SafeMeta
-from .factory import (
-    SourceFactory, TransformFactory, add_from_mixins, add_quals, GraphFactory, items_to_container
-)
+from .factory import GraphFactory, SourceFactory, TransformFactory, add_from_mixins, add_quals, items_to_container
 
 logger = logging.getLogger(__name__)
 BASES: Dict[Type[Layer], GraphFactory] = {}

@@ -1,14 +1,13 @@
 import functools
 import logging
-import warnings
 from typing import Callable, Iterable
 
-from .chain import connect
 from ..containers.base import EdgesBag
 from ..engine import Details
 from ..exceptions import FieldError
 from ..interface.utils import format_arguments
 from ..utils import StringsLike
+from .chain import connect
 
 logger = logging.getLogger(__name__)
 
@@ -47,18 +46,7 @@ class CallableLayer(Layer):
         return method
 
     def _connect(self, previous: EdgesBag) -> EdgesBag:
-        if not hasattr(self._container, 'wrap'):
-            return connect(previous, self._container)
-
-        warnings.warn(
-            f'The method Container.wrap is deprecated and will be removed soon: {type(self._container).__name__}',
-            UserWarning
-        )
-        warnings.warn(
-            f'The method Container.wrap is deprecated and will be removed soon: {type(self._container).__name__}',
-            DeprecationWarning
-        )
-        return self._container.wrap(previous)
+        return connect(previous, self._container)
 
     def __rshift__(self, layer: Layer) -> 'Chain':
         return Chain(self, layer)

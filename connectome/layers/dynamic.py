@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 
 from ..containers import EdgesBag
-from .chain import connect
 from .base import Layer
+from .chain import connect
 
 
 class DynamicConnectLayer(Layer, ABC):

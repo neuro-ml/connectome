@@ -16,29 +16,17 @@ def setup_cache(temp_dir):
 
 def test_corrupted_cleanup(temp_dir):
     ds, index = setup_cache(temp_dir)
+    default = set(index.glob('*/*'))
     # fill the cache
-    ds.x(1)
-    path, = index.glob('*/*')
+    assert ds.x(1) == 1
+    index_path, = set(index.glob('*/*')) - default
     # make it corrupted
-    hash_path = path / 'hash.bin'
-    os.remove(hash_path)
-    assert not hash_path.exists()
+    os.chmod(index_path, 0o777)
+    open(index_path, 'wb').close()
+    assert index_path.read_text() == ''
     # now it should be restored
-    ds.x(1)
-    assert hash_path.exists()
-
-
-def test_corrupted_error(temp_dir):
-    ds, index = setup_cache(temp_dir)
-    ds.x(1)
-    path, = index.glob('*/*')
-    hash_path = path / 'hash.bin'
-    os.chmod(hash_path, 0o777)
-    with open(hash_path, 'wb') as file:
-        file.write(b'\x00')
-
-    with pytest.raises(StorageCorruption, match='You may want to delete'):
-        ds.x(1)
+    assert ds.x(1) == 1
+    assert index_path.exists() and index_path.read_text() != ''
 
 
 # this test is allowed to fail, because we can't possibly cover all changes in all versions

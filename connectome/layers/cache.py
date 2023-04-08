@@ -1,45 +1,27 @@
-import warnings
 import weakref
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Union, Sequence, Container as ContainerType
+from typing import Container as ContainerType, Sequence, Union
 
 import numpy as np
-from tarn import RemoteStorage
-from tarn.cache import CacheIndex
-from tarn.config import init_storage, StorageConfig
+from tarn import DiskDict, HashKeyStorage, PickleKeyStorage
+from tarn.config import StorageConfig, init_storage
 
+from ..cache import Cache, DiskCache, MemoryCache
+from ..containers import EdgesBag, IdentityContext
+from ..engine import CacheEdge, Details, ImpureEdge, Node, TreeNode
+from ..serializers import ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer, Serializer
+from ..utils import AntiSet, PathLike, StringsLike, node_to_dict, to_seq
 from .base import Layer
 from .dynamic import DynamicConnectLayer
-from ..containers import EdgesBag, Container, IdentityContext
-from ..serializers import Serializer, ChainSerializer, JsonSerializer, NumpySerializer, PickleSerializer
-from ..storage import Storage, Disk
-from ..utils import PathLike, StringsLike, node_to_dict, to_seq, AntiSet
-from ..engine import TreeNode, Node, ImpureEdge, CacheEdge, Details
-from ..cache import Cache, MemoryCache, DiskCache
 
 PathLikes = Union[PathLike, Sequence[PathLike]]
-RemoteStorageLike = Union[RemoteStorage, Sequence[RemoteStorage]]
 SerializersLike = Union[Serializer, Sequence[Serializer]]
 
 
 class CacheLayer(Layer, ABC):
-    def __init__(self, container: Container = None):
-        # TODO: legacy
-        if container is not None:
-            warnings.warn('Passing a container to CacheLayer is deprecated', UserWarning)
-            warnings.warn('Passing a container to CacheLayer is deprecated', DeprecationWarning)
-
-        self._container = container
-
     def __repr__(self):
         return self.__class__.__name__
-
-    def _connect(self, previous: EdgesBag) -> EdgesBag:
-        if self._container is None:
-            raise NotImplementedError
-        # TODO: legacy
-        return self._container.wrap(previous)
 
 
 class CacheToStorage(DynamicConnectLayer, CacheLayer):
@@ -131,11 +113,11 @@ class CacheToDisk(CacheToStorage):
         remote locations that are used to fetch the cache from (if available)
     """
 
-    def __init__(self, index: PathLikes, storage: Storage, serializer: SerializersLike, names: StringsLike, *,
-                 impure: bool = False, remote: RemoteStorageLike = ()):
-        names, local, remote = _normalize_disk_arguments(index, remote, names, serializer, storage)
+    def __init__(self, index: PathLikes, storage: HashKeyStorage, serializer: SerializersLike, names: StringsLike, *,
+                 impure: bool = False):
         super().__init__(names=names, impure=impure)
-        self.storage = DiskCache(local, remote, fetch=bool(remote))
+        names, serializer = _normalize_disk_arguments(names, serializer)
+        self.storage = DiskCache(PickleKeyStorage(index, storage, serializer))
 
     def _get_storage(self) -> Cache:
         return self.storage
@@ -176,18 +158,11 @@ class CacheToDisk(CacheToStorage):
                 PickleSerializer(),
             )
 
-        return cls(index, Storage([Disk(storage)]), serializer, names)
+        return cls(index, HashKeyStorage(DiskDict(storage)), serializer, names)
 
 
-def _normalize_disk_arguments(local, remote, names, serializer, storage):
-    names = to_seq(names)
-    serializer = _resolve_serializer(serializer)
-    if isinstance(local, (str, Path)):
-        local = local,
-    if isinstance(remote, RemoteStorage):
-        remote = remote,
-    local = [CacheIndex(root, storage, serializer) for root in local]
-    return names, local, remote
+def _normalize_disk_arguments(names, serializer):
+    return to_seq(names), _resolve_serializer(serializer)
 
 
 def _resolve_serializer(serializer):

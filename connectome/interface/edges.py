@@ -1,12 +1,12 @@
 import inspect
 from abc import ABC, abstractmethod
-from typing import Iterable, Callable, NamedTuple
+from typing import Callable, Iterable, NamedTuple
 
 from ..engine import Edge, FunctionEdge, ImpureEdge
 from ..exceptions import FieldError
 from .decorators import RuntimeAnnotation
-from .utils import replace_annotation
 from .nodes import *
+from .utils import replace_annotation
 
 __all__ = (
     'TypedEdge', 'EdgeFactory',

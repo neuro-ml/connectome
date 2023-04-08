@@ -1,9 +1,9 @@
 from concurrent.futures import Executor
-from typing import Union, Tuple
+from typing import Tuple, Union
 
-from ..exceptions import FieldError, DependencyError
+from ..exceptions import DependencyError, FieldError
 from ..utils import NameSet, check_for_duplicates
-from .base import TreeNode, Nodes, BoundEdges, TreeNodes
+from .base import BoundEdges, Nodes, TreeNode, TreeNodes
 from .edges import ProductEdge
 from .graph import Graph
 

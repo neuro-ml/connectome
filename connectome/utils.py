@@ -2,7 +2,7 @@ import inspect
 import warnings
 from collections import Counter
 from pathlib import Path
-from typing import Union, Dict, List, Sequence, AbstractSet, Iterable
+from typing import AbstractSet, Dict, Iterable, List, Sequence, Union
 
 PathLike = Union[Path, str]
 Strings = Sequence[str]
