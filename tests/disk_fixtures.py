@@ -39,7 +39,7 @@ def disk_cache_factory(storage_factory):
 
     @contextmanager
     def factory(names, serializer, locker=None, storage=None, root=None, cls=CacheToDisk, **kwargs):
-        with tempfile.TemporaryDirectory() as _root, storage_factory() as _storage:
+        with tempfile.TemporaryDirectory() as _root, storage_factory(locker=locker) as _storage:
             if root is None:
                 root = _root
             if storage is None:
