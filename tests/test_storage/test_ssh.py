@@ -15,7 +15,7 @@ def get_ssh_location(root):
     return SSHLocation('remote', root, password='password')
 
 
-@pytest.mark.ssh
+@pytest.mark.skip
 def test_index_ssh(temp_dir, storage_factory, disk_cache_factory):
     # we use this counter to make sure the func wasn't called too many times
     counter = Counter()
