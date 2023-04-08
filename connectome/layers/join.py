@@ -12,9 +12,8 @@ from ..engine import (
     Request, Response, Command, Node, Edge, TreeNode, StaticGraph, StaticHash, FunctionEdge, ProductEdge, CacheEdge,
     Graph, HashOutput, NodeHashes, Details, IdentityEdge, NodeHash, LeafHash, CustomHash, HashBarrier
 )
-from ..interface.blocks import to_seq
 from ..layers import CallableLayer
-from ..utils import Strings, StringsLike, node_to_dict
+from ..utils import Strings, StringsLike, node_to_dict, to_seq
 from .cache import MemoryCache
 
 
