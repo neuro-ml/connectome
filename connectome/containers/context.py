@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, AbstractSet, Dict
+from typing import AbstractSet, Dict, Tuple
 
-from ..engine import Node, Nodes, BoundEdges, IdentityEdge, Details, NodeSet
+from ..engine import BoundEdges, Details, IdentityEdge, Node, Nodes, NodeSet
 from ..utils import node_to_dict
 
 __all__ = 'Context', 'NoContext', 'IdentityContext', 'BagContext', 'ChainContext'

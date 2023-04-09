@@ -9,7 +9,7 @@ from ..engine import (
 from ..engine.compiler import find_dependencies
 from ..exceptions import GraphError
 from ..utils import NameSet, StringsLike, check_for_duplicates, node_to_dict
-from .context import ChainContext, Context, NoContext, update_map, BagContext
+from .context import BagContext, ChainContext, Context, NoContext, update_map
 
 __all__ = 'Container', 'EdgesBag'
 

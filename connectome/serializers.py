@@ -1,2 +1,2 @@
 # TODO: legacy support
-from tarn.cache.serializers import *
+from tarn.serializers import *

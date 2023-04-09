@@ -1,11 +1,11 @@
 import inspect
 from collections import defaultdict
 from concurrent.futures import Executor
-from typing import Sequence, Any
+from typing import Any, Sequence
 
-from .base import TreeNode, NodeHash, TreeNodes, Command
+from .base import Command, TreeNode, TreeNodes
 from .executor import DefaultExecutor
-from .node_hash import LeafHash, GraphHash
+from .node_hash import GraphHash, LeafHash, NodeHash
 from .utils import EvictionCache
 from .vm import execute
 

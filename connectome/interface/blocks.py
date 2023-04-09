@@ -3,7 +3,7 @@ import operator
 from ..containers.base import EdgesBag
 from ..containers.group import GroupContainer, MultiGroupLayer
 from ..layers import *  # noqa
-from ..utils import deprecation_warn, StringsLike, to_seq  # noqa
+from ..utils import StringsLike, deprecation_warn, to_seq  # noqa
 
 
 class LegacyContainer(Layer):

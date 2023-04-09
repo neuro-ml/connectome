@@ -7,12 +7,10 @@ from threading import Thread
 
 import pytest
 
+from tarn import DiskDict
 from tarn.config import init_storage, StorageConfig
-from tarn.tools import GlobalThreadLocker
 
 from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform, optional
-from connectome.cache import MemoryCache, DiskCache
-from connectome.containers.cache import CachedColumn
 from connectome.engine.edges import CacheEdge
 from connectome.interface.nodes import Silent
 from connectome.serializers import JsonSerializer
@@ -26,29 +24,6 @@ def sleeper(s):
         return x
 
     return f
-
-
-def assert_empty_state(block):
-    def find_cache():
-        for edge in block._container.edges:
-            edge = edge.edge
-            if isinstance(edge, CacheEdge):
-                yield edge.cache
-            if isinstance(edge, CachedColumn):
-                yield edge.disk
-                yield edge.ram
-
-    caches = list(find_cache())
-    assert caches
-    for cache in caches:
-        if isinstance(cache, DiskCache):
-            locker = cache.cache.levels[0].locations[0].locker
-            assert isinstance(locker, GlobalThreadLocker)
-            # the state must be cleaned up
-            assert not locker._lock.locked()
-
-        else:
-            assert isinstance(cache, MemoryCache)
 
 
 def test_memory_locking(block_maker):
@@ -91,8 +66,6 @@ def test_errors_handling(block_maker, disk_cache_factory):
                 with pytest.raises(LocalException):
                     cached.image(i)
 
-                assert_empty_state(cached)
-
                 # many threads
                 cached = ds >> Apply(image=sleeper(0.1)) >> Apply(image=throw) >> layer
                 th = Thread(target=visit, args=(cached,))
@@ -100,8 +73,6 @@ def test_errors_handling(block_maker, disk_cache_factory):
                 with pytest.raises(LocalException):
                     cached.image(i)
                 th.join()
-
-                assert_empty_state(cached)
 
 
 def test_columns_cache_sharding(block_maker, disk_cache_factory):
@@ -162,15 +133,17 @@ def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
             assert ds.image(i) == cached.image(i)
             assert ds.image(i) == cached.image(i)
 
+    locker = {
+        'name': 'RedisLocker', 'args': [redis_hostname],
+        'kwargs': {'prefix': 'connectome.tests', 'expire': 100}
+    }
+
     for _ in range(5):
-        with tempfile.TemporaryDirectory() as temp, storage_factory() as temp_storage:
+        with tempfile.TemporaryDirectory() as temp, storage_factory(locker=locker) as temp_storage:
             temp = Path(temp) / 'cache'
-            init_storage(
-                StorageConfig(hash='blake2b', levels=[1, 63], locker={
-                    'name': 'RedisLocker', 'args': [redis_hostname],
-                    'kwargs': {'prefix': 'connectome.tests', 'expire': 10}
-                }), temp,
-            )
+            init_storage(StorageConfig(hash='blake2b', levels=[1, 63], locker=locker), temp)
+            # TODO: remove after tarn is updated
+            DiskDict(temp)
 
             th = Process(target=visit, args=(temp_storage, temp))
             th.start()

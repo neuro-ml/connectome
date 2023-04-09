@@ -1,8 +1,8 @@
 from typing import Callable, Iterable
 
-from .edges import EdgeFactory, TypedEdge, Function, FunctionWrapper, FunctionBase
-from .nodes import Intermediate, Default, NodeTypes, NodeType
-from ..engine import Edge, ComputableHashEdge
+from ..engine import ComputableHashEdge, Edge
+from .edges import EdgeFactory, Function, FunctionBase, FunctionWrapper, TypedEdge
+from .nodes import Default, Intermediate, NodeType, NodeTypes
 
 
 class HashByValue(FunctionWrapper):

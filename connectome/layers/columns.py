@@ -1,20 +1,18 @@
 from itertools import starmap
 from math import ceil
-from typing import Union, Generator, Any
+from typing import Any, Generator, Union
 
+from tarn import HashKeyStorage, PickleKeyStorage
 from tqdm.auto import tqdm
 
-from .cache import CacheLayer, SerializersLike, PathLikes, RemoteStorageLike, _normalize_disk_arguments
-from .dynamic import DynamicConnectLayer
 from ..cache import DiskCache, MemoryCache
 from ..containers import EdgesBag, IdentityContext
-from ..engine import (
-    Edge, TreeNode, Node, Graph, Request, Response, HashOutput, Command, NodeHashes, NodeHash, Details
-)
+from ..engine import Command, Details, Edge, Graph, HashOutput, Node, NodeHash, NodeHashes, Request, Response, TreeNode
 from ..engine.node_hash import ApplyHash
 from ..exceptions import DependencyError
-from ..storage import Storage
-from ..utils import StringsLike, node_to_dict, AntiSet
+from ..utils import AntiSet, StringsLike, node_to_dict
+from .cache import CacheLayer, PathLikes, SerializersLike, _normalize_disk_arguments
+from .dynamic import DynamicConnectLayer
 
 
 class CacheColumns(DynamicConnectLayer, CacheLayer):
@@ -42,16 +40,17 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
         if None - all the entries are grouped in a single shard
     """
 
-    def __init__(self, index: PathLikes, storage: Storage, serializer: SerializersLike, names: StringsLike, *,
-                 verbose: bool = False, shard_size: Union[int, float, None] = None, remote: RemoteStorageLike = ()):
+    def __init__(self, index: PathLikes, storage: HashKeyStorage, serializer: SerializersLike, names: StringsLike, *,
+                 verbose: bool = False, shard_size: Union[int, float, None] = None):
         if shard_size == 1:
             raise ValueError(f'Shard size of 1 is ambiguous. Use None if you want to have a single shard')
-        names, local, remote = _normalize_disk_arguments(index, remote, names, serializer, storage)
+        names, serializer = _normalize_disk_arguments(names, serializer)
+
         super().__init__()
         self.names = names
         self.shard_size = shard_size
         self.verbose = verbose
-        self.disk = DiskCache(local, remote, bool(remote))
+        self.disk = DiskCache(PickleKeyStorage(index, storage, serializer))
         self.ram = MemoryCache(None)
 
     def _prepare_container(self, previous: EdgesBag) -> EdgesBag:

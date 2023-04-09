@@ -1,7 +1,5 @@
-from .metaclasses import Source, Transform, Mixin
 from .blocks import GroupBy
 from .decorators import *
 from .edges import *
-from .nodes import Input, Output, InverseInput, InverseOutput, Parameter
-# TODO: legacy
-from ..layers import Chain, chained, CacheToRam, CacheToDisk, CacheColumns, Apply, Merge, Filter  # noqa
+from .metaclasses import Mixin, Source, Transform
+from .nodes import Input, InverseInput, InverseOutput, Output, Parameter

@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Sequence, Callable, Any, Generator, Tuple
+from typing import Any, Callable, Generator, Sequence, Tuple
 
-from .base import Edge, HashOutput, HashError, Request, Response
-from .node_hash import NodeHash, NodeHashes
+from .base import Edge, HashError, HashOutput, Request, Response
 from .graph import Command
-from .node_hash import LeafHash, ApplyHash
+from .node_hash import ApplyHash, LeafHash, NodeHash, NodeHashes
 
 __all__ = (
     'StaticHash', 'StaticGraph', 'StaticEdge',

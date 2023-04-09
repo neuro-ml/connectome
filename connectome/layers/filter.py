@@ -1,12 +1,12 @@
-from typing import Callable, Sequence, Any, Iterable
+from typing import Any, Callable, Iterable, Sequence
 
 from tqdm.auto import tqdm
 
 from ..containers import BagContext
-from ..engine import Node, TreeNode, Graph, FunctionEdge, StaticEdge, StaticGraph, Details
+from ..engine import Details, FunctionEdge, Graph, Node, StaticEdge, StaticGraph, TreeNode
 from ..engine.node_hash import ApplyHash
 from ..exceptions import DependencyError
-from ..utils import extract_signature, node_to_dict, AntiSet
+from ..utils import AntiSet, extract_signature, node_to_dict
 from .base import EdgesBag, Layer
 from .dynamic import DynamicConnectLayer
 

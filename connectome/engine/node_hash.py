@@ -1,5 +1,5 @@
 import warnings
-from typing import Sequence, Callable, Tuple, Any
+from typing import Any, Callable, Sequence, Tuple
 
 NODE_TYPES = set()
 

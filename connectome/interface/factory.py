@@ -1,8 +1,14 @@
 import inspect
 import logging
 import warnings
-from typing import Dict, Any, Iterable, Callable, Type
+from typing import Any, Callable, Dict, Iterable, Type
 
+from ..containers import EdgesBag, ReversibleContainer
+from ..containers.reversible import normalize_inherit
+from ..engine import ConstantEdge, Details, IdentityEdge
+from ..exceptions import FieldError, GraphError
+from ..layers import CallableLayer, Layer
+from ..utils import AntiSet, MultiDict
 from .decorators import Meta, Optional, RuntimeAnnotation
 from .edges import EdgeFactory, Function
 from .factory_utils import add_quals, to_argument
@@ -10,12 +16,6 @@ from .nodes import (
     NodeStorage, Input, InverseInput, Parameter, InverseOutput, Output, NodeTypes, NodeType, Default, Intermediate,
     FinalNodeType, is_private
 )
-from ..containers import EdgesBag, ReversibleContainer
-from ..containers.reversible import normalize_inherit
-from ..engine import IdentityEdge, ConstantEdge, Details
-from ..exceptions import GraphError, FieldError
-from ..utils import MultiDict, AntiSet
-from ..layers import Layer, CallableLayer
 
 logger = logging.getLogger(__name__)
 
