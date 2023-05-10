@@ -1,17 +1,21 @@
 import hashlib
-from typing import Any, Generator
+from typing import Any, Generator, Union, Type
 
-from tarn.cache.storage import key_to_digest
+from tarn.pickler import dumps
+from tarn.compat import HashAlgorithm
 
 from ..containers import EdgesBag
-from ..engine import Command, Details, Node, NodeHash, NodeHashes, Request, Response, StaticGraph, StaticHash
+from ..engine import (
+    Command, Details, Node, NodeHash, NodeHashes, Request, Response, StaticGraph, StaticHash, CustomHash, LeafHash
+)
 from ..utils import StringsLike
 from .base import CallableLayer
 from .cache import to_seq
 
 
 class HashDigest(CallableLayer):
-    def __init__(self, names: StringsLike, algorithm):
+    def __init__(self, names: StringsLike, algorithm: Union[Type[HashAlgorithm], str, None] = None,
+                 return_value: bool = False):
         if isinstance(algorithm, str):
             algorithm = getattr(hashlib, algorithm)
 
@@ -22,7 +26,7 @@ class HashDigest(CallableLayer):
             inp, out = Node(name, details), Node(name, details)
             inputs.append(inp)
             outputs.append(out)
-            edges.append(HashDigestEdge(algorithm).bind(inp, out))
+            edges.append(HashDigestEdge(algorithm, return_value).bind(inp, out))
 
         super().__init__(EdgesBag(
             inputs, outputs, edges,
@@ -31,16 +35,27 @@ class HashDigest(CallableLayer):
 
 
 class HashDigestEdge(StaticGraph, StaticHash):
-    def __init__(self, algorithm):
+    def __init__(self, algorithm, return_value):
         super().__init__(arity=1)
         self.algorithm = algorithm
+        self.return_value = return_value
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return inputs[0]
+        return CustomHash('connectome.HashDigest', LeafHash(self.algorithm), LeafHash(self.return_value), *inputs)
 
     def evaluate(self) -> Generator[Request, Response, Any]:
-        value = yield Command.ParentValue, 0
-        output = yield Command.CurrentHash,
+        result = []
+        if self.return_value:
+            value = yield Command.ParentValue, 0
+            result.append(value)
 
-        pickled, digest = key_to_digest(self.algorithm, output.value)
-        return value, output.value, digest, pickled
+        node_hash = yield Command.CurrentHash,
+        node_hash = node_hash.value
+        result.append(node_hash)
+
+        pickled = dumps(node_hash)
+        result.append(pickled)
+        if self.algorithm is not None:
+            result.append(self.algorithm(pickled).digest())
+
+        return tuple(result)
