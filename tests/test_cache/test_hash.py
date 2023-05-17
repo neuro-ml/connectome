@@ -8,7 +8,7 @@ from connectome.serializers import JsonSerializer
 
 
 def test_hash(block_maker, storage_factory):
-    hash_layer = HashDigest(['image'], 'blake2b')
+    hash_layer = HashDigest(['image'], 'blake2b', return_value=True)
     pipeline = Chain(
         block_maker.first_ds(first_constant=2, ids_arg=15),
         block_maker.crop(),

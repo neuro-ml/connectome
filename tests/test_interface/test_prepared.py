@@ -23,8 +23,8 @@ class Stripped(Source):
 
 
 def test_hash():
-    one = Computable(length=4) >> HashDigest(['field'], 'blake2b')
-    two = Stripped() >> HashDigest(['field'], 'blake2b')
+    one = Computable(length=4) >> HashDigest(['field'], 'blake2b', return_value=True)
+    two = Stripped() >> HashDigest(['field'], 'blake2b', return_value=True)
     assert one.field('12345678')[0] == 'received 1234'
     assert one.field('12345678') == one.field('1234----') == two.field('1234')
 
@@ -35,7 +35,7 @@ def test_hash_by_value():
         def x(a, b, c):
             return a + b + c
 
-    ds = A() >> HashDigest(['x'], 'blake2b')
+    ds = A() >> HashDigest(['x'], 'blake2b', return_value=True)
     assert ds.x(1, 2, 3) == ds.x(3, 2, 1)
 
 

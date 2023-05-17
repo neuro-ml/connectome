@@ -7,7 +7,6 @@ from threading import Thread
 
 import pytest
 
-from tarn import DiskDict
 from tarn.config import init_storage, StorageConfig
 
 from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform, optional
@@ -142,8 +141,6 @@ def test_disk_locking_processes(block_maker, storage_factory, redis_hostname):
         with tempfile.TemporaryDirectory() as temp, storage_factory(locker=locker) as temp_storage:
             temp = Path(temp) / 'cache'
             init_storage(StorageConfig(hash='blake2b', levels=[1, 63], locker=locker), temp)
-            # TODO: remove after tarn is updated
-            DiskDict(temp)
 
             th = Process(target=visit, args=(temp_storage, temp))
             th.start()

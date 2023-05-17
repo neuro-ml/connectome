@@ -18,7 +18,7 @@ def test_filter(block_maker):
     ids = pipeline.ids
     assert ids == ('4', '14')
 
-    hash_layer = HashDigest(['image', 'lungs', 'spacing'], 'blake2b')
+    hash_layer = HashDigest(['image', 'lungs', 'spacing'], 'blake2b', return_value=True)
     hashed = Chain(block, hash_layer)
     pipeline = Chain(
         block, Filter(lambda image: image.endswith('4')), hash_layer,
