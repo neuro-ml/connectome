@@ -1,7 +1,8 @@
 import re
+
 import pytest
 
-from connectome import Source, Transform, inverse, optional, positional, meta, Function
+from connectome import Function, Source, Transform, inverse, meta, optional, positional
 from connectome.engine.compiler import identity
 
 

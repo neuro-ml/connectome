@@ -1,5 +1,6 @@
 import pytest
-from connectome import Source, Merge, Transform, Chain, positional, meta, impure, optional
+
+from connectome import Chain, Merge, Source, Transform, impure, meta, optional, positional
 from connectome.exceptions import DependencyError
 from connectome.interface.blocks import HashDigest
 
@@ -33,7 +34,7 @@ class Three(Source):
 
 def test_simple():
     one, two = One(), Two()
-    hash_layer = HashDigest('image', 'blake2b')
+    hash_layer = HashDigest('image', 'blake2b', return_value=True)
     merged = Merge(one, two)
     assert set(merged.ids) == set('123456')
 

@@ -1,5 +1,6 @@
 import pytest
-from connectome import Source, Filter
+
+from connectome import Filter, Source
 
 
 def test_default_args():

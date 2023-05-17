@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pytest
 
-from connectome import Transform, Function, Source, meta
+from connectome import Function, Source, Transform, meta
 from connectome.exceptions import FieldError, GraphError
 
 

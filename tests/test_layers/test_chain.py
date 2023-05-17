@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 from tarn.config import StorageConfig, init_storage
-from connectome import Source, Transform, Chain, CacheToRam, meta, LazyChain, HashDigest, CacheColumns, Merge, optional
+
+from connectome import CacheColumns, CacheToRam, Chain, HashDigest, LazyChain, Merge, Source, Transform, meta, optional
 from connectome.exceptions import DependencyError, FieldError
 
 
@@ -33,7 +34,7 @@ def test_chain():
 def test_nested(block_maker):
     one = block_maker.first_ds(first_constant=2, ids_arg=15)
     two = block_maker.crop()
-    hash_layer = HashDigest('image', 'blake2b')
+    hash_layer = HashDigest('image', 'blake2b', return_value=True)
 
     base, *variants = [
         Chain(one, two, hash_layer),

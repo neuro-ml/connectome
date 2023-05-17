@@ -1,7 +1,8 @@
 from hashlib import sha256
 
 import pytest
-from connectome import Source, GroupBy, meta, impure
+
+from connectome import GroupBy, Source, impure, meta
 from connectome.engine.base import HashError
 
 

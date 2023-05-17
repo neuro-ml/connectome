@@ -2,8 +2,8 @@ from collections import Counter
 
 import pytest
 
-from connectome import positional, Source, Chain, Transform, Merge, meta, Output
-from connectome.interface.metaclasses import TransformBase, SourceBase
+from connectome import Chain, Merge, Output, Source, Transform, meta, positional
+from connectome.interface.metaclasses import SourceBase, TransformBase
 
 
 def test_single_with_params():
