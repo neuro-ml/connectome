@@ -3,6 +3,7 @@ from math import ceil
 from typing import Any, Generator, Union
 
 from tarn import HashKeyStorage, PickleKeyStorage
+from tarn.interface import MaybeLabels
 from tqdm.auto import tqdm
 
 from ..cache import DiskCache, MemoryCache
@@ -41,7 +42,7 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
     """
 
     def __init__(self, index: PathLikes, storage: HashKeyStorage, serializer: SerializersLike, names: StringsLike, *,
-                 verbose: bool = False, shard_size: Union[int, float, None] = None):
+                 verbose: bool = False, shard_size: Union[int, float, None] = None, labels: MaybeLabels = None):
         if shard_size == 1:
             raise ValueError(f'Shard size of 1 is ambiguous. Use None if you want to have a single shard')
         names, serializer = _normalize_disk_arguments(names, serializer)
@@ -50,7 +51,7 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
         self.names = names
         self.shard_size = shard_size
         self.verbose = verbose
-        self.disk = DiskCache(PickleKeyStorage(index, storage, serializer))
+        self.disk = DiskCache(PickleKeyStorage(index, storage, serializer), labels=labels)
         self.ram = MemoryCache(None)
 
     def _prepare_container(self, previous: EdgesBag) -> EdgesBag:

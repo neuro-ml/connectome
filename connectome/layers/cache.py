@@ -6,6 +6,7 @@ from typing import Container as ContainerType, Sequence, Union
 import numpy as np
 from tarn import DiskDict, HashKeyStorage, PickleKeyStorage
 from tarn.config import StorageConfig, init_storage
+from tarn.interface import MaybeLabels
 
 from ..cache import Cache, DiskCache, MemoryCache
 from ..containers import EdgesBag, IdentityContext
@@ -114,16 +115,17 @@ class CacheToDisk(CacheToStorage):
     """
 
     def __init__(self, index: PathLikes, storage: HashKeyStorage, serializer: SerializersLike, names: StringsLike, *,
-                 impure: bool = False):
+                 impure: bool = False, labels: MaybeLabels = None):
         super().__init__(names=names, impure=impure)
         names, serializer = _normalize_disk_arguments(names, serializer)
-        self.storage = DiskCache(PickleKeyStorage(index, storage, serializer))
+        self.storage = DiskCache(PickleKeyStorage(index, storage, serializer), labels=labels)
 
     def _get_storage(self) -> Cache:
         return self.storage
 
     @classmethod
-    def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None):
+    def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None, 
+               labels: MaybeLabels = None):
         """
         A simple version of caching to disk with adequate default settings.
 
@@ -158,7 +160,7 @@ class CacheToDisk(CacheToStorage):
                 PickleSerializer(),
             )
 
-        return cls(index, HashKeyStorage(DiskDict(storage)), serializer, names)
+        return cls(index, HashKeyStorage(DiskDict(storage)), serializer, names, labels=labels)
 
 
 def _normalize_disk_arguments(names, serializer):
