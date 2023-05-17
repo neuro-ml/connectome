@@ -1,6 +1,6 @@
 import pytest
 
-from connectome import Mixin, Source, meta, Transform, Output, inverse
+from connectome import Mixin, Output, Source, Transform, inverse, meta
 
 
 class SizeMixin(Mixin):

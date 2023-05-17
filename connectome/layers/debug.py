@@ -1,8 +1,8 @@
 import hashlib
-from typing import Any, Generator, Union, Type
+from typing import Any, Generator, Type, Union
 
-from tarn.pickler import dumps
 from tarn.compat import HashAlgorithm
+from tarn.pickler import dumps
 
 from ..containers import EdgesBag
 from ..engine import (

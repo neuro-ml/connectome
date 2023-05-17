@@ -1,5 +1,6 @@
 import pytest
-from connectome import Source, Merge, Transform, Chain, positional, meta, impure, optional
+
+from connectome import Chain, Merge, Source, Transform, impure, meta, optional, positional
 from connectome.exceptions import DependencyError
 from connectome.interface.blocks import HashDigest
 

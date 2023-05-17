@@ -1,4 +1,4 @@
-from connectome import Transform, CacheToRam
+from connectome import CacheToRam, Transform
 
 
 def test_nested_virtual():

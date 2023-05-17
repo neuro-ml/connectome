@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 from tarn.config import StorageConfig, init_storage
-from connectome import Source, Transform, Chain, CacheToRam, meta, LazyChain, HashDigest, CacheColumns, Merge, optional
+
+from connectome import CacheColumns, CacheToRam, Chain, HashDigest, LazyChain, Merge, Source, Transform, meta, optional
 from connectome.exceptions import DependencyError, FieldError
 
 

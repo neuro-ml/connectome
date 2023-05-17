@@ -1,5 +1,6 @@
 import pytest
-from connectome import Chain, Filter, Source, meta, impure
+
+from connectome import Chain, Filter, Source, impure, meta
 from connectome.engine.base import HashError
 from connectome.exceptions import DependencyError
 from connectome.interface.blocks import HashDigest

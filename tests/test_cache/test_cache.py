@@ -6,15 +6,13 @@ from pathlib import Path
 from threading import Thread
 
 import pytest
+from tarn.config import StorageConfig, init_storage
+from utils import Counter
 
-from tarn.config import init_storage, StorageConfig
-
-from connectome import CacheToRam, Apply, CacheToDisk, CacheColumns, Transform, optional
+from connectome import Apply, CacheColumns, CacheToDisk, CacheToRam, Transform, optional
 from connectome.engine.edges import CacheEdge
 from connectome.interface.nodes import Silent
 from connectome.serializers import JsonSerializer
-
-from utils import Counter
 
 
 def sleeper(s):

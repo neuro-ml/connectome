@@ -1,9 +1,9 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from tarn.config import init_storage, StorageConfig
+from tarn.config import StorageConfig, init_storage
 
-from connectome import Chain, CacheToRam, CacheToDisk, CacheColumns, HashDigest
+from connectome import CacheColumns, CacheToDisk, CacheToRam, Chain, HashDigest
 from connectome.serializers import JsonSerializer
 
 

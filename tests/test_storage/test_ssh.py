@@ -1,9 +1,9 @@
 import pytest
+from tarn import SSHLocation
+from utils import Counter
 
 from connectome import Transform
 from connectome.serializers import JsonSerializer
-from tarn import SSHLocation
-from utils import Counter
 
 
 def load_text(path):

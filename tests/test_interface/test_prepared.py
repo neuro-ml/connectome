@@ -1,6 +1,6 @@
 import pytest
 
-from connectome import Source, meta, impure, Transform, HashDigest, CacheToRam, Merge
+from connectome import CacheToRam, HashDigest, Merge, Source, Transform, impure, meta
 from connectome.interface.complex_edges import hash_by_value
 
 

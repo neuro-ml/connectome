@@ -1,11 +1,11 @@
 import os
 
 import pytest
+from tarn.cache.pickler import LATEST_VERSION
 
-from connectome import Transform, CacheToDisk
+from connectome import CacheToDisk, Transform
 from connectome.exceptions import StorageCorruption
 from connectome.serializers import JsonSerializer
-from tarn.cache.pickler import LATEST_VERSION
 
 
 def setup_cache(temp_dir):

@@ -3,7 +3,7 @@ import re
 import pytest
 
 from connectome import Transform
-from connectome.exceptions import GraphError, DependencyError
+from connectome.exceptions import DependencyError, GraphError
 
 
 def test_normalization():

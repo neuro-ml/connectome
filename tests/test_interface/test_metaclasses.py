@@ -1,6 +1,6 @@
 import pytest
 
-from connectome import Source, Transform, Mixin
+from connectome import Mixin, Source, Transform
 
 
 def test_subclasses():

@@ -1,7 +1,7 @@
 import pytest
 
 from connectome.containers import ReversibleContainer
-from connectome.engine import Node, BoundEdge, FunctionEdge
+from connectome.engine import BoundEdge, FunctionEdge, Node
 from connectome.utils import extract_signature
 
 

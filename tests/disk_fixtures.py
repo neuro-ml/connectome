@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-
 from tarn import HashKeyStorage
-from tarn.config import init_storage, StorageConfig
+from tarn.config import StorageConfig, init_storage
 
 from connectome import CacheToDisk
 

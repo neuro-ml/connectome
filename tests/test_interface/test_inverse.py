@@ -1,6 +1,6 @@
 import pytest
 
-from connectome import Transform, Apply, inverse
+from connectome import Apply, Transform, inverse
 from connectome.engine.compiler import identity
 from connectome.exceptions import FieldError
 
