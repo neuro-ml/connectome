@@ -1,3 +1,4 @@
+import pickle
 import tempfile
 import time
 from math import ceil
@@ -6,6 +7,9 @@ from pathlib import Path
 from threading import Thread
 
 import pytest
+
+from connectome.cache import MemoryCache
+from connectome.engine import LeafHash
 from tarn.config import StorageConfig, init_storage
 from utils import Counter
 
@@ -248,3 +252,17 @@ def test_inherited(transform_maker):
     assert get_cached_names(
         transform_maker('a', 'b', 'c') >> (transform_maker(inherit=['a', 'b']) >> CacheToRam())
     ) == {'a', 'b'}
+
+
+def test_pickleable():
+    a = MemoryCache(None)
+    b = MemoryCache(10)
+    args = LeafHash('a'), 'b', None
+    a.set(*args)
+    b.set(*args)
+
+    aa = pickle.loads(pickle.dumps(a))
+    bb = pickle.loads(pickle.dumps(b))
+
+    assert a.size is aa.size is None
+    assert b.size == bb.size == 10
