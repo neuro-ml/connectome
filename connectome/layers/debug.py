@@ -50,8 +50,8 @@ class HashDigestEdge(StaticGraph, StaticHash):
             result.append(value)
 
         node_hash = yield Command.CurrentHash,
-        node_hash = node_hash.value
         result.append(node_hash)
+        node_hash = node_hash.value
 
         pickled = dumps(node_hash)
         result.append(pickled)
