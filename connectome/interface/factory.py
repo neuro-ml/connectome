@@ -69,6 +69,7 @@ class GraphFactory:
     layer_cls: Type[Layer] = CallableLayer
 
     def __init__(self, layer: str, scope: MultiDict):
+        self.name = layer
         details = Details(layer)
         backward_details = Details(f'{layer}(backward)')
         self.scope = scope
@@ -186,7 +187,8 @@ class GraphFactory:
 
         # gather private fields from annotations
         # TODO: detect duplicates
-        for name, value in self.scope.get(ANN_MAGIC, [{}])[0].items():
+        annotations = self.scope.get(ANN_MAGIC, [{}])[0]
+        for name, value in annotations.items():
             if not is_private(name):
                 raise FieldError(f'Only private fields can be defined via type annotations ({name})')
             if name not in private:
@@ -202,7 +204,29 @@ class GraphFactory:
                 raise FieldError(f"{type(value).__name__} objects can't be private ({name}).")
 
             self.parameters.add(name)
-            if not is_detectable(value) or value is inspect.Parameter.empty:
+            # we have 2 edge cases here:
+            is_argument = False
+            if callable(value):
+                #  1. a callable argument without annotation: x = some_func
+                inside_body = getattr(value, '__qualname__', '').startswith(self.name)
+                if name not in annotations:
+                    if not inside_body:
+                        warnings.warn(
+                            f'The parameter {name} is defined outside of the class body. Are you trying to pass '
+                            f'a default value for an argument? If so, add a type annotation: "{name}: Callable = ..."',
+                            UserWarning,
+                        )
+                # a function defined inside the body, which also has a type annotation
+                else:
+                    is_argument = True
+                    if not inside_body:
+                        warnings.warn(
+                            f'The default value for the argument {name} is a function, defined inside of the '
+                            f'class body. Did you forget to remove the type annotation?',
+                            UserWarning,
+                        )
+
+            if is_argument or not is_detectable(value) or value is inspect.Parameter.empty:
                 constants.add(name)
                 arg_name = to_argument(name)
                 self.edges.append(IdentityEdge().bind(self.arguments[arg_name], self.parameters[name]))
