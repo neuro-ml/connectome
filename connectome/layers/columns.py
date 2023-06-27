@@ -31,18 +31,19 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
         the serializer used to save and load the data
     names
         field names that will be cached
-    remote
-        remote locations that are used to fetch the cache from (if available)
     verbose
         whether to show a progressbar during cache generation
     shard_size
         the size of a disk storage shard. If int - an absolute size value is used,
         if float - a portion relative to the dataset is used,
         if None - all the entries are grouped in a single shard
+    impure
+        whether to allow caching of `impure` functions
     """
 
     def __init__(self, index: PathLikes, storage: HashKeyStorage, serializer: SerializersLike, names: StringsLike, *,
-                 verbose: bool = False, shard_size: Union[int, float, None] = None, labels: MaybeLabels = None):
+                 verbose: bool = False, shard_size: Union[int, float, None] = None, labels: MaybeLabels = None,
+                 impure: bool = False):
         if shard_size == 1:
             raise ValueError(f'Shard size of 1 is ambiguous. Use None if you want to have a single shard')
         names, serializer = _normalize_disk_arguments(names, serializer)
@@ -50,6 +51,7 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
         super().__init__()
         self.names = names
         self.shard_size = shard_size
+        self.impure = impure
         self.verbose = verbose
         self.disk = DiskCache(PickleKeyStorage(index, storage, serializer), labels=labels)
         self.ram = MemoryCache(None)
@@ -64,21 +66,26 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
         property_name = 'ids'
         if property_name not in outputs_copy:
             raise DependencyError(f'The previous layer must contain the "{property_name}" property.')
+        # TODO: drop all properties?
+        outputs_copy.pop(property_name)
         keys = Node(property_name, details)
 
         if len(copy.inputs) != 1:
             raise DependencyError(f'The previous layer must have exactly one input')
         key = Node(copy.inputs[0].name, details)
-        graph_inputs = [mapping[copy.inputs[0]]]
 
         inputs, outputs, edges = [key, keys], [], []
         for name in outputs_copy:
             if name in self.names:
+                if not self.impure:
+                    self._detect_impure(mapping[outputs_copy[name]], name)
+
                 inp, out = Node(name, details), Node(name, details)
                 inputs.append(inp)
                 outputs.append(out)
                 # build a graph for each node
-                graph = Graph(graph_inputs, mapping[outputs_copy[name]])
+                # TODO: this is ridiculous
+                graph = copy.compile().compile(name)
                 edges.append(
                     CachedColumn(self.disk, self.ram, graph, self.verbose, self.shard_size).bind([inp, key, keys], out)
                 )

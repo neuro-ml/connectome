@@ -82,7 +82,7 @@ class CallableLayer(Layer):
         def decorator(func: Callable) -> Callable:
             loopback = self._container.loopback(func, inputs, outputs).compile()
             logger.info('Loopback compiled: %s', loopback.fields())
-            return loopback[final]
+            return loopback.compile(final)
 
         return decorator
 

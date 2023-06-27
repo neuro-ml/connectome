@@ -174,11 +174,11 @@ class JoinMapping(StaticGraph, StaticHash):
         reverse_left, reverse_right = {}, {}
         # TODO: optimize these loops?
         for i in tqdm(left_keys, desc='Computing left join keys', disable=not self.verbose):
-            key = reverse_func(self.to_key, self.left.call(i), reverse_left)
+            key = reverse_func(self.to_key, self.left(i), reverse_left)
             precomputed_left[key].append(i)
 
         for i in tqdm(right_keys, desc='Computing right join keys', disable=not self.verbose):
-            key = reverse_func(self.to_key, self.right.call(i), reverse_right)
+            key = reverse_func(self.to_key, self.right(i), reverse_right)
             precomputed_right[key].append(i)
 
         left, right = set(precomputed_left), set(precomputed_right)

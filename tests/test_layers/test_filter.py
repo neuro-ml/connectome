@@ -1,9 +1,8 @@
 import pytest
 
-from connectome import Chain, Filter, Source, impure, meta
-from connectome.engine.base import HashError
+from connectome import Chain, Filter, Source, impure, meta, HashDigest
+from connectome.engine import HashError
 from connectome.exceptions import DependencyError
-from connectome.interface.blocks import HashDigest
 
 
 def test_filter(block_maker):

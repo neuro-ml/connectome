@@ -3,14 +3,13 @@ from typing import Callable, Collection, Dict, Iterable, Tuple, Type, Union
 
 from ..layers import CallableLayer, Layer
 from ..utils import MultiDict
-from .compat import SafeMeta
 from .factory import GraphFactory, SourceFactory, TransformFactory, add_from_mixins, add_quals, items_to_container
 
 logger = logging.getLogger(__name__)
 BASES: Dict[Type[Layer], GraphFactory] = {}
 
 
-class APIMeta(SafeMeta):
+class APIMeta(type):
     @classmethod
     def __prepare__(mcs, *args, **kwargs):
         return MultiDict()

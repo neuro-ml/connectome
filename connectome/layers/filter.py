@@ -7,11 +7,11 @@ from ..engine import Details, FunctionEdge, Graph, Node, StaticEdge, StaticGraph
 from ..engine.node_hash import ApplyHash
 from ..exceptions import DependencyError
 from ..utils import AntiSet, extract_signature, node_to_dict
-from .base import EdgesBag, Layer
+from .base import EdgesBag
 from .dynamic import DynamicConnectLayer
 
 
-class Filter(DynamicConnectLayer, Layer):
+class Filter(DynamicConnectLayer):
     """
     Filters the `keys` of the current pipeline given a `predicate`.
 
@@ -94,6 +94,6 @@ class FilterEdge(StaticGraph, StaticEdge):
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         keys, = inputs
-        return tuple(filter(self.graph.call, tqdm(
+        return tuple(filter(self.graph, tqdm(
             keys, desc='Filtering', disable=not self.verbose,
         )))

@@ -1,4 +1,6 @@
+import warnings
 from collections import Counter
+from typing import Callable
 
 import pytest
 
@@ -137,7 +139,8 @@ def test_optional(block_maker):
     assert optional.first_optional(10) == 11
     assert optional.second_optional(10) == '10'
 
-    func = optional._container.loopback(lambda x: x, 'first_optional', 'first_optional').compile()['first_optional']
+    func = optional._container.loopback(
+        lambda x: x, 'first_optional', 'first_optional').compile().compile('first_optional')
     assert func(100500) == 100500
 
 
@@ -231,6 +234,30 @@ def test_constructor():
         A(1)
 
     B(1)
+
+
+def test_callable_argument():
+    class A(Transform):
+        _a: Callable = lambda: []
+
+        def x(_a):
+            return _a()
+
+    assert A().x() == []
+    assert A(a=int).x() == 0
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error')
+        with pytest.raises(UserWarning, match='Are you trying to pass a default value for an argument?'):
+            class B(Transform):
+                _a = lambda: []
+
+        with pytest.raises(UserWarning, match='Did you forget to remove the type annotation?'):
+            class C(Transform):
+                _a: int
+
+                def _a(x):
+                    pass
 
 
 def test_plain_inheritance():

@@ -35,7 +35,7 @@ class GraphCompiler:
 
         return list(self._outputs)
 
-    def compile(self, output: Union[str, Tuple[str]]):
+    def compile(self, output: Union[str, Tuple[str]]) -> Graph:
         if not isinstance(output, (str, tuple)):
             raise TypeError(f'The name must be either a string or a tuple of strings, not {type(output)}')
 
@@ -71,7 +71,7 @@ class GraphCompiler:
                 # TODO: signature
                 return identity
 
-            return Graph(self._inputs, node, self._executor).call
+            return Graph(self._inputs, node, self._executor)
 
         inputs, outputs = [], []
         for name in item:
@@ -82,8 +82,8 @@ class GraphCompiler:
 
             outputs.append(node)
 
-        product = TreeNode('tuple', (ProductEdge(len(item)), outputs), None)
-        return Graph(self._inputs | set(inputs), product, self._executor).call
+        product = TreeNode(f'({", ".join(item)})', (ProductEdge(len(item)), outputs), None)
+        return Graph(self._inputs | set(inputs), product, self._executor)
 
     def __getitem__(self, item):
         # TODO: deprecate

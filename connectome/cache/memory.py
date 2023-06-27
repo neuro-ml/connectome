@@ -11,6 +11,7 @@ class MemoryCache(Cache):
     def __init__(self, size: Union[int, None]):
         super().__init__()
         self._lock = Lock()
+        self.size = size
         if size is not None:
             self._cache = lrucache(size)
         else:
@@ -31,3 +32,6 @@ class MemoryCache(Cache):
     def clear(self):
         with self._lock:
             self._cache = {}
+
+    def __reduce__(self):
+        return self.__class__, (self.size,)
