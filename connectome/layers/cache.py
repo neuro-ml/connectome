@@ -24,6 +24,18 @@ class CacheLayer(Layer, ABC):
     def __repr__(self):
         return self.__class__.__name__
 
+    @staticmethod
+    def _detect_impure(node: TreeNode, name: str):
+        if node.is_leaf:
+            return
+
+        if isinstance(node.edge, ImpureEdge):
+            raise ValueError(f'You are trying to cache the field "{name}", '
+                             f'which has an `impure` dependency - "{node.name}"')
+
+        for parent in node.parents:
+            CacheToStorage._detect_impure(parent, name)
+
 
 class CacheToStorage(DynamicConnectLayer, CacheLayer):
     def __init__(self, names: Union[ContainerType[str], None], impure: bool = False):
@@ -57,18 +69,6 @@ class CacheToStorage(DynamicConnectLayer, CacheLayer):
             inputs, outputs, edges, IdentityContext(), persistent=None,
             virtual=AntiSet(node_to_dict(outputs)), optional=set(inputs) | set(outputs),
         )
-
-    @staticmethod
-    def _detect_impure(node: TreeNode, name: str):
-        if node.is_leaf:
-            return
-
-        if isinstance(node.edge, ImpureEdge):
-            raise ValueError(f'You are trying to cache the field "{name}", '
-                             f'which has an `impure` dependency - "{node.name}"')
-
-        for parent in node.parents:
-            CacheToStorage._detect_impure(parent, name)
 
 
 class CacheToRam(CacheToStorage):
@@ -110,8 +110,6 @@ class CacheToDisk(CacheToStorage):
         field names that will be cached
     impure
         whether to allow caching of `impure` functions
-    remote
-        remote locations that are used to fetch the cache from (if available)
     """
 
     def __init__(self, index: PathLikes, storage: HashKeyStorage, serializer: SerializersLike, names: StringsLike, *,
@@ -124,7 +122,7 @@ class CacheToDisk(CacheToStorage):
         return self.storage
 
     @classmethod
-    def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None, 
+    def simple(cls, *names, root: PathLike, serializer: Union[Serializer, Sequence[Serializer]] = None,
                labels: MaybeLabels = None):
         """
         A simple version of caching to disk with adequate default settings.

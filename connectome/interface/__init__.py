@@ -1,4 +1,3 @@
-from .blocks import GroupBy
 from .decorators import *
 from .edges import *
 from .metaclasses import Mixin, Source, Transform

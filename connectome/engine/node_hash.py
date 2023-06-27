@@ -7,6 +7,8 @@ NODE_TYPES = set()
 class NodeHash:
     type: int
 
+    __slots__ = 'type', 'value', '_hash', '_hash_target'
+
     def __init__(self, value, hash_target):
         assert self.type is not None
         assert value[0] == self.type

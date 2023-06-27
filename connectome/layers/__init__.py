@@ -6,3 +6,4 @@ from .debug import HashDigest
 from .filter import Filter
 from .join import Join, JoinMode
 from .merge import Merge
+from .group import GroupBy

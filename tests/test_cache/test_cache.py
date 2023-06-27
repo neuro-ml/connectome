@@ -1,22 +1,40 @@
 import pickle
+import pytest
 import tempfile
 import time
 from math import ceil
 from multiprocessing.context import Process
 from pathlib import Path
 from threading import Thread
-
-import pytest
-
-from connectome.cache import MemoryCache
-from connectome.engine import LeafHash
-from tarn.config import StorageConfig, init_storage
 from utils import Counter
 
-from connectome import Apply, CacheColumns, CacheToDisk, CacheToRam, Transform, optional
+from connectome import Apply, CacheToDisk, CacheToRam, optional
+from connectome import CacheColumns, Transform, Source, meta
+from connectome.cache import MemoryCache
+from connectome.engine import LeafHash
 from connectome.engine.edges import CacheEdge
+from connectome.exceptions import DependencyError
 from connectome.interface.nodes import Silent
-from connectome.serializers import JsonSerializer
+from tarn.config import StorageConfig, init_storage
+from tarn.serializers import JsonSerializer
+
+
+def test_missing_input(disk_cache_factory):
+    class A(Source):
+        @meta
+        def ids():
+            pass
+
+        def x(i):
+            pass
+
+    class B(Transform):
+        def x(x, y):
+            pass
+
+    with disk_cache_factory('x', JsonSerializer(), cls=CacheColumns) as cache:
+        with pytest.raises(DependencyError):
+            A() >> B() >> cache
 
 
 def sleeper(s):

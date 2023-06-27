@@ -15,6 +15,9 @@ __all__ = (
 class StaticHash(Edge):
     """ Computes the current hash from all the parents' hashes. """
 
+    def __init__(self, arity: int):
+        super().__init__(arity)
+
     def compute_hash(self) -> Generator[Request, Response, HashOutput]:
         inputs = yield (Command.Await, *(
             (Command.ParentHash, idx)
@@ -170,10 +173,7 @@ class CacheEdge(StaticGraph, StaticHash):
             return value
 
         value = yield Command.ParentValue, 0
-        # TODO: what to do in case of a collision:
-        #   overwrite?
-        #   add consistency check?
-        #   get the value from cache?
+        # we can have a collision here, but it's up to the cache to handle them correctly
         self.cache.set(key, value, context)
         return value
 

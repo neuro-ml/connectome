@@ -24,14 +24,21 @@ class Graph:
         self.output = output
         self.counts = counts
         self.executor = DefaultExecutor if executor is None else executor
+        self.__signature__ = signature
+        # TODO: deprecate
+        self.call = self.__call__
 
-        def caller(*args, **kwargs):
-            scope = signature.bind(*args, **kwargs)
-            hashes, cache = self._prepare_cache(scope.arguments)
-            return evaluate(output, hashes, cache, self.executor)
+    def __call__(*args, **kwargs):
+        self, *args = args
+        scope = self.__signature__.bind(*args, **kwargs)
+        hashes, cache = self._prepare_cache(scope.arguments)
+        return evaluate(self.output, hashes, cache, self.executor)
 
-        caller.__signature__ = signature
-        self.call = caller
+    def __str__(self):
+        inputs = ', '.join(x.name for x in self.inputs)
+        if len(self.inputs) != 1:
+            inputs = f'({inputs})'
+        return f'Graph({inputs} -> {self.output.name})'
 
     def _prepare_cache(self, arguments):
         # put objects into inputs if hashes are not required
