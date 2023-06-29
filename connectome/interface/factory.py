@@ -219,7 +219,7 @@ class GraphFactory:
                 # a function defined inside the body, which also has a type annotation
                 else:
                     is_argument = True
-                    if not inside_body:
+                    if inside_body:
                         warnings.warn(
                             f'The default value for the argument {name} is a function, defined inside of the '
                             f'class body. Did you forget to remove the type annotation?',
