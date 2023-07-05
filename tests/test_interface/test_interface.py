@@ -249,8 +249,11 @@ def test_callable_argument():
     with warnings.catch_warnings():
         warnings.filterwarnings('error')
         with pytest.raises(UserWarning, match='Are you trying to pass a default value for an argument?'):
+            def _a():
+                pass
+
             class B(Transform):
-                _a = lambda: []
+                _b = _a
 
         with pytest.raises(UserWarning, match='Did you forget to remove the type annotation?'):
             class C(Transform):

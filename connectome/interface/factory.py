@@ -208,9 +208,17 @@ class GraphFactory:
             is_argument = False
             if callable(value):
                 #  1. a callable argument without annotation: x = some_func
-                inside_body = getattr(value, '__qualname__', '').startswith(self.name)
+                qualname = getattr(value, '__qualname__', '')
+                # if we can't detect this better not to annoy the user
+                inside_body = None
+                if qualname.count('.') >= 1:
+                    scope, func_name = qualname.rsplit('.', 1)
+                    # lambdas are a special case. don't know what to do with them
+                    if func_name != '<lambda>':
+                        inside_body = scope.endswith(self.name)
+
                 if name not in annotations:
-                    if not inside_body:
+                    if inside_body is not None and not inside_body:
                         warnings.warn(
                             f'The parameter {name} is defined outside of the class body. Are you trying to pass '
                             f'a default value for an argument? If so, add a type annotation: "{name}: Callable = ..."',
@@ -219,7 +227,7 @@ class GraphFactory:
                 # a function defined inside the body, which also has a type annotation
                 else:
                     is_argument = True
-                    if not inside_body:
+                    if inside_body is not None and inside_body:
                         warnings.warn(
                             f'The default value for the argument {name} is a function, defined inside of the '
                             f'class body. Did you forget to remove the type annotation?',
