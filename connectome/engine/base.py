@@ -16,7 +16,7 @@ __all__ = (
 
 class Command(Enum):
     ParentHash, CurrentHash, ParentValue, Payload, Await, Call = range(6)
-    Send, Store, Item, ComputeHash, Evaluate, AwaitFuture, Tuple, Return = range(-8, 0)
+    Send, Store, Item, ComputeHash, Evaluate, Tuple, Return = range(-7, 0)
 
 
 HashOutput = Tuple[NodeHash, Any]
