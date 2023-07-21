@@ -162,6 +162,7 @@ class CacheToDisk(CacheToStorage):
 
         # TODO: this is a bit of a legacy cleanup
         for c in index, storage:
+            c = c / 'config.yml'
             with open(c) as file:
                 config = yaml.safe_load(file)
             if 'version' in config:
