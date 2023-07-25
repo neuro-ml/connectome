@@ -15,7 +15,7 @@ def test_check_ids(block_maker):
         if i in ['2', '5']:
             pipeline.image(i)
         else:
-            with pytest.raises(FieldError):
+            with pytest.raises(KeyError):
                 pipeline.image(i)
 
     hash_layer = HashDigest(['image', 'lungs', 'spacing'], 'blake2b', return_value=True)

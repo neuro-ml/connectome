@@ -1,12 +1,9 @@
 from typing import Any, Sequence
 
-from connectome.containers import EdgesBag
-
-from ..containers import BagContext
-from ..engine import Details, Graph, Node, StaticEdge, StaticGraph
-from ..engine.node_hash import CustomHash, NodeHash, NodeHashes
-from ..exceptions import FieldError
-from ..utils import AntiSet, node_to_dict
+from ..containers import EdgesBag
+from ..engine import Details, Node, StaticEdge, StaticGraph
+from ..engine.node_hash import NodeHash, NodeHashes
+from ..utils import node_to_dict
 from .base import EdgesBag, Layer
 
 
@@ -20,11 +17,10 @@ class CheckIds(Layer):
     def _connect(self, previous: EdgesBag) -> EdgesBag:
         copy = previous.freeze()
         details = Details(type(self))
-        edges, inputs, outputs = list(copy.edges), node_to_dict(copy.inputs), node_to_dict(copy.outputs)
+        edges, inputs, outputs = list(copy.edges), copy.inputs, node_to_dict(copy.outputs)
         assert len(inputs) == 1, 'Only one input is allowed'
-        key = list(inputs.keys())[0]
-        new_input = Node('id', details)
-        edges.append(CheckIdsEdge().bind([new_input, outputs['ids']], inputs[key]))
+        new_input = Node(inputs[0].name, details)
+        edges.append(CheckIdsEdge().bind([new_input, outputs['ids']], inputs[0]))
         return EdgesBag([new_input], outputs.values(), edges, copy.context,
                         persistent=copy.persistent, optional=copy.optional,
                         virtual=copy.virtual)
@@ -41,4 +37,4 @@ class CheckIdsEdge(StaticGraph, StaticEdge):
         id_, ids = inputs
         if id_ in ids:
             return id_
-        raise FieldError(f'{id_} is not in ids')
+        raise KeyError(f'{id_} is not in ids')
