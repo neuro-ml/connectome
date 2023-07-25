@@ -25,23 +25,21 @@ class CheckIds(Layer):
         copy = previous.freeze()
         details = Details(type(self))
         edges, inputs, outputs = list(copy.edges), node_to_dict(copy.inputs), node_to_dict(copy.outputs)
+        assert len(inputs) == 1, 'Only one input is allowed'
+        key = list(inputs.keys())[0]
         new_input = Node('id', details)
-        compiler = copy.compile()
-        edges.append(CheckIdsEdge(compiler.compile('ids')).bind([new_input, outputs['ids']], inputs['id']))
-        inputs['id'] = new_input
-        return EdgesBag(inputs.values(), outputs.values(), edges, copy.context,
+        edges.append(CheckIdsEdge().bind([new_input, outputs['ids']], inputs[key]))
+        return EdgesBag([new_input], outputs.values(), edges, copy.context,
                         persistent=copy.persistent, optional=copy.optional,
-                        virtual=copy.virtual & AntiSet(('ids', 'id')))
+                        virtual=copy.virtual)
 
 
 class CheckIdsEdge(StaticGraph, StaticEdge):
-    def __init__(self, graph: Graph):
+    def __init__(self):
         super().__init__(arity=2)
-        self.graph = graph
-        self._hash = self.graph.hash()
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return CustomHash('connectome.GheckIdsEdge', self._hash, *inputs)
+        return inputs[0]
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
         id_, ids = inputs
