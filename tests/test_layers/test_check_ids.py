@@ -1,7 +1,6 @@
 import pytest
 
 from connectome import Chain, Filter, HashDigest
-from connectome.exceptions import FieldError
 from connectome.layers.check_ids import CheckIds
 
 
