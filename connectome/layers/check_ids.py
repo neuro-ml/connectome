@@ -14,10 +14,6 @@ class CheckIds(Layer):
     """
     Raise FieldError if id is not in ids
     """
-
-    def __init__(self, verbose: bool = False):
-        self.verbose = verbose
-
     def __repr__(self):
         return 'CheckIds()'
 
