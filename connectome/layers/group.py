@@ -2,15 +2,17 @@ from collections import defaultdict
 
 from typing import Callable, Union, Sequence, Any
 
-from .chain import connect
-from .dynamic import DynamicConnectLayer
-from .join import to_hash_id
+
+from ..cache import MemoryCache
 from ..containers import EdgesBag
 from ..engine import (
-    Details, Node, FunctionEdge, StaticGraph, StaticHash, Graph, NodeHashes, NodeHash, CustomHash, StaticEdge
+    Details, Node, FunctionEdge, StaticGraph, StaticHash, Graph, NodeHashes, NodeHash, CustomHash, StaticEdge, CacheEdge
 )
 from ..engine import EvalGen, Command
 from ..utils import node_to_dict, extract_signature
+from .chain import connect
+from .dynamic import DynamicConnectLayer
+from .join import to_hash_id
 
 
 class GroupBy(DynamicConnectLayer):
@@ -51,11 +53,13 @@ class GroupBy(DynamicConnectLayer):
         keys = output_nodes[keys_name]
         outputs.append(changed_input)
 
-        # create a mapping: {new_id: [old_ids]}
+        # create a mapping: {new_id: [old_ids]} and store it in memory
         by_layer = self._by_layer(details)
+        raw_mapping = Node('$mapping', details)
         edges.append(GroupMapping(
             connect(main, by_layer).compile().compile('$by')
-        ).bind([keys], mapping_node))
+        ).bind(keys, raw_mapping))
+        edges.append(CacheEdge(MemoryCache(None)).bind(raw_mapping, mapping_node))
 
         compiler = main.compile()
         # evaluate each output

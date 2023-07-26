@@ -1,17 +1,15 @@
 import inspect
 from collections import defaultdict
-from concurrent.futures import Executor
 from typing import Any, Sequence
 
 from .base import Command, TreeNode, TreeNodes
-from .executor import DefaultExecutor
 from .node_hash import GraphHash, LeafHash, NodeHash
 from .utils import EvictionCache
 from .vm import execute
 
 
 class Graph:
-    def __init__(self, inputs: TreeNodes, output: TreeNode, executor: Executor = None):
+    def __init__(self, inputs: TreeNodes, output: TreeNode):
         validate_graph(inputs, output)
         # TODO: need a cumulative eviction policy
         counts = count_entries(inputs, output, multiplier=2)
@@ -23,7 +21,6 @@ class Graph:
         self.inputs = inputs
         self.output = output
         self.counts = counts
-        self.executor = DefaultExecutor if executor is None else executor
         self.__signature__ = signature
         # TODO: deprecate
         self.call = self.__call__
@@ -32,7 +29,7 @@ class Graph:
         self, *args = args
         scope = self.__signature__.bind(*args, **kwargs)
         hashes, cache = self._prepare_cache(scope.arguments)
-        return evaluate(self.output, hashes, cache, self.executor)
+        return evaluate(self.output, hashes, cache)
 
     def __str__(self):
         inputs = ', '.join(x.name for x in self.inputs)
@@ -54,22 +51,22 @@ class Graph:
         assert all(not isinstance(v, NodeHash) for v in inputs)
 
         hashes, cache = self._prepare_cache({n.name: v for n, v in zip(self.inputs, inputs)})
-        result, _ = compute_hash(self.output, hashes, cache, self.executor)
+        result, _ = compute_hash(self.output, hashes, cache)
         return result, (hashes, cache)
 
     def get_value(self, hashes, cache) -> Any:
-        return evaluate(self.output, hashes, cache, self.executor)
+        return evaluate(self.output, hashes, cache)
 
     def hash(self) -> GraphHash:
         return GraphHash(hash_graph(self.inputs, self.output))
 
 
-def evaluate(node: TreeNode, hashes: EvictionCache, cache: EvictionCache, executor: Executor):
-    return execute(Command.Evaluate, node, hashes, cache, executor)
+def evaluate(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
+    return execute(Command.Evaluate, node, hashes, cache)
 
 
-def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache, executor: Executor):
-    return execute(Command.ComputeHash, node, hashes, cache, executor)
+def compute_hash(node: TreeNode, hashes: EvictionCache, cache: EvictionCache):
+    return execute(Command.ComputeHash, node, hashes, cache)
 
 
 def validate_graph(inputs: TreeNodes, output: TreeNode):

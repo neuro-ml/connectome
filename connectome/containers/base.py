@@ -64,7 +64,6 @@ class EdgesBag:
         self.persistent: NameSet = persistent
         self.optional: NodeSet = optional
         self.context = context
-        self.backend = None
 
     def freeze(self, parent: Union[Details, None] = None) -> 'EdgesBag':
         """
@@ -93,7 +92,7 @@ class EdgesBag:
 
     def compile(self) -> GraphCompiler:
         return GraphCompiler(
-            self.inputs, self.outputs, self.edges, self.virtual, self.optional, self.backend
+            self.inputs, self.outputs, self.edges, self.virtual, self.optional
         )
 
     def loopback(self, func: Callable, inputs: StringsLike, output: StringsLike) -> 'EdgesBag':

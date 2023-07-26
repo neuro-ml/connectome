@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Container as ContainerType, Sequence, Union
 
 import numpy as np
+import yaml
+
 from tarn import DiskDict, HashKeyStorage, PickleKeyStorage
 from tarn.config import StorageConfig, init_storage
 from tarn.interface import MaybeLabels
@@ -157,6 +159,16 @@ class CacheToDisk(CacheToStorage):
                 NumpySerializer({np.bool_: 1, np.int_: 1}),
                 PickleSerializer(),
             )
+
+        # TODO: this is a bit of a legacy cleanup
+        for c in index, storage:
+            c = c / 'config.yml'
+            with open(c) as file:
+                config = yaml.safe_load(file)
+            if 'version' in config:
+                config.pop('version')
+                with open(c, 'w') as file:
+                    yaml.safe_dump(config, file)
 
         return cls(index, HashKeyStorage(DiskDict(storage)), serializer, names, labels=labels)
 

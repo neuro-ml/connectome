@@ -1,34 +1,21 @@
-from concurrent.futures import Executor
+from collections import deque
 
 from .base import Command
-from .executor import AsyncLoop, Frame
 
 
 # TODO: replace cache by a thunk tree
-def execute(cmd, node, hashes, cache, executor: Executor):
-    root = Frame([node], [(Command.Return,), (cmd,)])
-    loop = AsyncLoop(root)
-    push, pop, peek = loop.push, loop.pop, loop.peek
-    push_command, pop_command = loop.push_command, loop.pop_command
-    next_frame, enqueue_frame = loop.next_frame, loop.enqueue_frame
-    dispose_frame = loop.dispose_frame
+def execute(cmd, node, hashes, cache):
+    stack, commands = deque([node]), deque([(Command.Return,), (cmd,)])
+    push, pop, peek = stack.append, stack.pop, lambda: stack[-1]
+    push_command, pop_command = commands.append, commands.pop
 
     while True:
-        assert not loop.frame.ready
         cmd, *args = pop_command()
 
         # return
         if cmd == Command.Return:
-            assert not args
-            assert len(loop.frame.stack) == 1, len(loop.frame.stack)
-            value = pop()
-            if loop.frame is root:
-                loop.clear()
-                return value
-
-            loop.frame.value = value
-            loop.frame.ready = True
-            dispose_frame()
+            assert len(stack) == 1, len(stack)
+            return pop()
 
         # communicate with edges
         elif cmd == Command.Send:
@@ -56,18 +43,8 @@ def execute(cmd, node, hashes, cache, executor: Executor):
             assert not args
             node = pop()
             if node in hashes:
-                value = hashes[node]
-                if value is _CACHE_SENTINEL:
-                    # restore state
-                    push_command((cmd, *args))
-                    push(node)
-                    # switch context
-                    next_frame()
-
-                else:
-                    push(value)
+                push(hashes[node])
             else:
-                hashes[node] = _CACHE_SENTINEL
                 push_command((Command.Store, hashes, node))
                 push_command((Command.Send, node, node.edge.compute_hash()))
                 push(None)
@@ -76,20 +53,9 @@ def execute(cmd, node, hashes, cache, executor: Executor):
         elif cmd == Command.Evaluate:
             assert not args
             node = pop()
-
             if node in cache:
-                value = cache[node]
-                if value is _CACHE_SENTINEL:
-                    # restore state
-                    push_command((cmd, *args))
-                    push(node)
-                    # switch context
-                    next_frame()
-
-                else:
-                    push(value)
+                push(cache[node])
             else:
-                cache[node] = _CACHE_SENTINEL
                 push_command((Command.Store, cache, node))
                 push_command((Command.Send, node, node.edge.evaluate()))
                 push(None)
@@ -122,24 +88,17 @@ def execute(cmd, node, hashes, cache, executor: Executor):
 
         elif cmd == Command.Await:
             node = pop()
-            push_command((Command.Tuple, len(args)))
-            for arg in args:
-                local = Frame([node], [(Command.Return,), arg])
-                push_command((Command.AwaitFuture, local))
-                enqueue_frame(local)
+            push_command((Command.Tuple, node, len(args), list(args)))
 
         elif cmd == Command.Call:
             pop()  # pop the node
             func, pos, kw = args
-            push_command((Command.AwaitFuture, executor.submit(func, *pos, **kw)))
-            next_frame()
+            push(func(*pos, **kw))
 
         # utils
         elif cmd == Command.Store:
             storage, key = args
-            sentinel = storage[key]
-            assert sentinel is _CACHE_SENTINEL, sentinel
-
+            assert key not in storage
             storage[key] = peek()
 
         elif cmd == Command.Item:
@@ -147,19 +106,14 @@ def execute(cmd, node, hashes, cache, executor: Executor):
             push(pop()[key])
 
         elif cmd == Command.Tuple:
-            n, = args
-            push(tuple(pop() for _ in range(n)))
-
-        elif cmd == Command.AwaitFuture:
-            child, = args
-            if child.done():
-                push(child.result())
+            node, n, requests = args
+            if not requests:
+                push(tuple(pop() for _ in range(n)))
             else:
-                push_command((cmd, *args))
-                next_frame()
+                request = requests.pop()
+                push_command((Command.Tuple, node, n, requests))
+                push_command(request)
+                push(node)
 
         else:
             raise RuntimeError('Unknown command', cmd)  # pragma: no cover
-
-
-_CACHE_SENTINEL = object()

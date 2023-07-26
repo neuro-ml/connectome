@@ -1,4 +1,3 @@
-from concurrent.futures import Executor
 from typing import Tuple, Union
 
 from ..exceptions import DependencyError, FieldError
@@ -9,8 +8,7 @@ from .graph import Graph
 
 
 class GraphCompiler:
-    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: Nodes,
-                 executor: Executor):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: Nodes):
         check_for_duplicates(inputs)
         check_for_duplicates(outputs)
         self._mapping = TreeNode.from_edges(edges)
@@ -24,7 +22,6 @@ class GraphCompiler:
         # some optional nodes might be unreachable
         self._optionals = {self._mapping[x] for x in optionals if x in self._mapping}
         self._virtuals = virtuals
-        self._executor = executor
 
         self._cache = {}
         self._dependencies = self._outputs = None
@@ -71,7 +68,7 @@ class GraphCompiler:
                 # TODO: signature
                 return identity
 
-            return Graph(self._inputs, node, self._executor)
+            return Graph(self._inputs, node)
 
         inputs, outputs = [], []
         for name in item:
@@ -83,7 +80,7 @@ class GraphCompiler:
             outputs.append(node)
 
         product = TreeNode(f'({", ".join(item)})', (ProductEdge(len(item)), outputs), None)
-        return Graph(self._inputs | set(inputs), product, self._executor)
+        return Graph(self._inputs | set(inputs), product)
 
     def __getitem__(self, item):
         # TODO: deprecate
