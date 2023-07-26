@@ -1,7 +1,6 @@
 import pytest
 
-from connectome import Chain, Filter, HashDigest
-from connectome.layers.check_ids import CheckIds
+from connectome import Chain, CheckIds, Filter, HashDigest
 
 
 def test_check_ids(block_maker):
