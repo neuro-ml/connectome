@@ -117,7 +117,8 @@ class CacheToDisk(CacheToStorage):
                  impure: bool = False, labels: MaybeLabels = None):
         super().__init__(names=names, impure=impure)
         names, serializer = _normalize_disk_arguments(names, serializer)
-        self.storage = DiskCache(PickleKeyStorage(index, storage, serializer, algorithm=storage.algorithm), labels=labels)
+        self.storage = DiskCache(PickleKeyStorage(index, storage, serializer, algorithm=storage.algorithm),
+                                 labels=labels)
 
     def _get_storage(self) -> Cache:
         return self.storage

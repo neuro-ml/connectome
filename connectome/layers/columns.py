@@ -53,7 +53,8 @@ class CacheColumns(DynamicConnectLayer, CacheLayer):
         self.shard_size = shard_size
         self.impure = impure
         self.verbose = verbose
-        self.disk = DiskCache(PickleKeyStorage(index, storage, serializer), labels=labels)
+        self.disk = DiskCache(PickleKeyStorage(index, storage, serializer, algorithm=storage.algorithm), 
+                              labels=labels)
         self.ram = MemoryCache(None)
 
     def _prepare_container(self, previous: EdgesBag) -> EdgesBag:
