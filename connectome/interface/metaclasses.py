@@ -14,6 +14,14 @@ class APIMeta(type):
     def __prepare__(mcs, *args, **kwargs):
         return MultiDict()
 
+    def __getattr__(self, item):
+        # we need this behaviour mostly to support pickling of functions defined inside the class
+        try:
+            # TODO: need to unpack special decorators here
+            return self.__original__scope__[item]
+        except KeyError:
+            raise AttributeError(item) from None
+
     def __new__(mcs, class_name, bases, namespace, **flags):
         if '__factory' in flags:
             factory = flags.pop('__factory')
@@ -46,6 +54,8 @@ class APIMeta(type):
             add_from_mixins(namespace, bases)
             scope = factory.make_scope(class_name, namespace)
 
+        # TODO: need a standardized set of magic fields
+        scope['__original__scope__'] = namespace
         return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 
