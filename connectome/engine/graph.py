@@ -22,8 +22,6 @@ class Graph:
         self.output = output
         self.counts = counts
         self.__signature__ = signature
-        # TODO: deprecate
-        self.call = self.__call__
 
     def __call__(*args, **kwargs):
         self, *args = args
