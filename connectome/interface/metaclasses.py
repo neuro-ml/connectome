@@ -3,6 +3,7 @@ from typing import Callable, Collection, Dict, Iterable, Tuple, Type, Union
 
 from ..layers import CallableLayer, Layer
 from ..utils import MultiDict
+from .decorators import RuntimeAnnotation
 from .factory import GraphFactory, SourceFactory, TransformFactory, add_from_mixins, add_quals, items_to_container
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,16 @@ class APIMeta(type):
     @classmethod
     def __prepare__(mcs, *args, **kwargs):
         return MultiDict()
+
+    def __getattr__(self, item):
+        # we need this behaviour mostly to support pickling of functions defined inside the class
+        try:
+            value = self.__original__scope__[item]
+            while isinstance(value, RuntimeAnnotation):
+                value = value.__func__
+            return value
+        except KeyError:
+            raise AttributeError(item) from None
 
     def __new__(mcs, class_name, bases, namespace, **flags):
         if '__factory' in flags:
@@ -46,6 +57,8 @@ class APIMeta(type):
             add_from_mixins(namespace, bases)
             scope = factory.make_scope(class_name, namespace)
 
+        # TODO: need a standardized set of magic fields
+        scope['__original__scope__'] = namespace
         return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 

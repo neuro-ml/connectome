@@ -1,4 +1,3 @@
-import warnings
 from typing import Any, Callable, Sequence, Tuple
 
 NODE_TYPES = set()
@@ -75,46 +74,3 @@ class CustomHash(NodeHash):
             (self.type, marker, *(h.value for h in children)),
             (self.type, marker, *children),
         )
-
-
-# TODO: deprecated
-class CompoundBase(NodeHash):
-    type = None
-
-    def __init__(self, *children: NodeHash):
-        warnings.warn('This interface is deprecated', DeprecationWarning)
-        warnings.warn('This interface is deprecated', UserWarning)
-        super().__init__(
-            (self.type, *(h.value for h in children)),
-            (self.type, *children),
-        )
-
-
-class TupleHash(ApplyHash):
-    type = -1
-
-    def __init__(self, *children: NodeHash):
-        warnings.warn('This interface is deprecated. Use ApplyHash instead', DeprecationWarning)
-        warnings.warn('This interface is deprecated. Use ApplyHash instead', UserWarning)
-        super().__init__(tuple, *children)
-
-
-class FilterHash(ApplyHash):
-    type = -2
-
-    def __init__(self, graph: GraphHash, values: NodeHash):
-        warnings.warn('This interface is deprecated. Use ApplyHash instead', DeprecationWarning)
-        warnings.warn('This interface is deprecated. Use ApplyHash instead', UserWarning)
-        super().__init__(filter, graph, values)
-
-
-class MergeHash(CustomHash):
-    type = -3
-
-    def __init__(self, *children: NodeHash):
-        warnings.warn('This interface is deprecated. Use CustomHash instead', DeprecationWarning)
-        warnings.warn('This interface is deprecated. Use CustomHash instead', UserWarning)
-        super().__init__('connectome.SwitchEdge', *children)
-
-
-PrecomputeHash = NodeHash

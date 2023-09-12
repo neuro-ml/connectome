@@ -58,13 +58,6 @@ OVERRIDABLE_MAGIC = SILENT_MAGIC | {DOC_MAGIC}
 BUILTIN_DECORATORS = staticmethod, classmethod, property
 
 
-class FactoryLayer(CallableLayer):
-    def __init__(self, container: EdgesBag, properties: Iterable[str], special_methods: Iterable[str]):
-        warnings.warn('This class is deprecated', DeprecationWarning)
-        warnings.warn('This class is deprecated', UserWarning)
-        super().__init__(container, properties)
-
-
 class GraphFactory:
     layer_cls: Type[Layer] = CallableLayer
 

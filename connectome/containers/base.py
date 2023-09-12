@@ -1,5 +1,4 @@
 import logging
-import warnings
 from operator import itemgetter
 from typing import Callable, Optional, Union
 
@@ -11,44 +10,15 @@ from ..exceptions import GraphError
 from ..utils import NameSet, StringsLike, check_for_duplicates, node_to_dict
 from .context import BagContext, ChainContext, Context, NoContext, update_map
 
-__all__ = 'Container', 'EdgesBag'
+__all__ = 'EdgesBag',
 
 logger = logging.getLogger(__name__)
 
 
-class Container:
-    def __init__(self):
-        warnings.warn(
-            'The container interface is deprecated and will be merged with `EdgesBag` soon',
-            UserWarning, stacklevel=2
-        )
-        warnings.warn(
-            'The container interface is deprecated and will be merged with `EdgesBag` soon',
-            DeprecationWarning, stacklevel=2
-        )
-
-    def wrap(self, container: 'EdgesBag') -> 'EdgesBag':
-        raise NotImplementedError
-
-
 class EdgesBag:
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
-                 virtual_nodes: Optional[NameSet] = None, virtual: Optional[NameSet] = None,
-                 persistent_nodes: Optional[NameSet] = None, persistent: Optional[NameSet] = None,
-                 optional_nodes: Optional[NodeSet] = None, optional: Optional[NodeSet] = None):
-        if virtual_nodes is not None:
-            assert virtual is None
-            warnings.warn('The "virtual_nodes" argument is deprecated. Use `virtual` instead', stacklevel=2)
-            virtual = virtual_nodes
-        if optional_nodes is not None:
-            assert optional is None
-            warnings.warn('The "optional_nodes" argument is deprecated. Use `optional` instead', stacklevel=2)
-            optional = optional_nodes
-        if persistent_nodes is not None:
-            assert persistent is None
-            warnings.warn('The "persistent_nodes" argument is deprecated. Use `persistent` instead', stacklevel=2)
-            persistent = persistent_nodes
-
+                 virtual: Optional[NameSet] = None, persistent: Optional[NameSet] = None,
+                 optional: Optional[NodeSet] = None):
         if virtual is None:
             virtual = set()
         if persistent is None:
@@ -102,22 +72,6 @@ class EdgesBag:
             state.inputs, outputs, list(state.edges) + list(new_edges), None,
             virtual=None, persistent=None, optional=state.optional | new_optionals,
         )
-
-    # TODO: deprecated
-    @property
-    def persistent_nodes(self):
-        warnings.warn('This attribute is deprecated. Use `persistent` instead', stacklevel=2)
-        return self.persistent
-
-    @property
-    def optional_nodes(self):
-        warnings.warn('This attribute is deprecated. Use `optional` instead', stacklevel=2)
-        return self.optional
-
-    @property
-    def virtual_nodes(self):
-        warnings.warn('This attribute is deprecated. Use `virtual` instead', stacklevel=2)
-        return self.virtual
 
 
 def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: NameSet, optionals: NodeSet,
