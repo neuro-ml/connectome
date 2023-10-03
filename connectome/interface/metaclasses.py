@@ -1,6 +1,7 @@
 import logging
 from typing import Callable, Collection, Dict, Iterable, Tuple, Type, Union
 
+from .edges import DecoratorMixin
 from ..layers import CallableLayer, Layer
 from ..utils import MultiDict
 from .decorators import RuntimeAnnotation
@@ -21,6 +22,8 @@ class APIMeta(type):
             value = self.__original__scope__[item]
             while isinstance(value, RuntimeAnnotation):
                 value = value.__func__
+            while isinstance(value, DecoratorMixin):
+                value = value.unwrap()
             return value
         except KeyError:
             raise AttributeError(item) from None

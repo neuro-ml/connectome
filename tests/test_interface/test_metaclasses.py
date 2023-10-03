@@ -2,7 +2,7 @@ import pickle
 
 import pytest
 
-from connectome import Mixin, Source, Transform, meta
+from connectome import Mixin, Source, Transform, meta, positional, optional, inverse
 
 
 def test_subclasses():
@@ -53,7 +53,19 @@ class B(Transform):
     def ids():
         return '123'
 
+    @positional
     def x(x):
+        return x
+
+    @optional
+    def opt(x):
+        return x
+
+    @inverse
+    def inv(x):
+        return x
+
+    def z(x):
         return x
 
     def _t(x):
@@ -70,5 +82,7 @@ def test_pickleable():
 
     for f in a.x, a.y, a._compile(dir(a)), b._compile(dir(b)):
         pickled = pickle.dumps(f)
+        expected = f(0)
         g = pickle.loads(pickled)
-        assert f(0) == g(0)
+        value = g(0)
+        assert value == expected
