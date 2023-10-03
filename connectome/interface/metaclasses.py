@@ -17,6 +17,10 @@ class APIMeta(type):
         return MultiDict()
 
     def __getattr__(self, item):
+        # protection from recursion
+        if item == '__original__scope__':
+            raise AttributeError(item)
+
         # we need this behaviour mostly to support pickling of functions defined inside the class
         try:
             value = self.__original__scope__[item]
