@@ -1,7 +1,7 @@
 import pytest
 
-from connectome.containers import ReversibleContainer
 from connectome.engine import BoundEdge, FunctionEdge, Node
+from connectome.layers.reversible import ReversibleContainer
 from connectome.utils import extract_signature
 
 
@@ -65,7 +65,7 @@ class LayerMaker:
         return ReversibleContainer(
             list(inputs.values()), list(outputs.values()), edges,
             list(backward_inputs.values()), list(backward_outputs.values()),
-            optional_inputs=optional_inputs, optional_outputs=optional_outputs,
+            # optional_inputs=optional_inputs, optional_outputs=optional_outputs,
             forward_virtual=(), backward_virtual=(),
         )
 

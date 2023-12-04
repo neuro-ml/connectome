@@ -3,11 +3,11 @@ import logging
 import warnings
 from typing import Any, Callable, Dict, Iterable, Type
 
-from ..containers import EdgesBag, ReversibleContainer
+from ..layer import Layer
 from ..containers.reversible import normalize_inherit
 from ..engine import ConstantEdge, Details, IdentityEdge
 from ..exceptions import FieldError, GraphError
-from ..layers import CallableLayer, Layer
+# from ..layers import CallableLayer, Layer
 from ..utils import AntiSet, MultiDict
 from .decorators import Meta, Optional, RuntimeAnnotation
 from .edges import EdgeFactory, Function
@@ -59,7 +59,7 @@ BUILTIN_DECORATORS = staticmethod, classmethod, property
 
 
 class GraphFactory:
-    layer_cls: Type[Layer] = CallableLayer
+    layer_cls: Type[Layer]
 
     def __init__(self, layer: str, scope: MultiDict):
         self.name = layer
@@ -105,8 +105,8 @@ class GraphFactory:
         for x in [self.parameters, self.inputs, self.outputs, self.backward_inputs, self.backward_outputs]:
             x.freeze()
 
-    def _prepare_layer_arguments(self, container: EdgesBag, properties: Iterable[str]):
-        return container, properties
+    def prepare_layer_arguments(self, arguments: dict):
+        raise NotImplementedError
 
     @classmethod
     def make_scope(cls, layer: str, namespace: MultiDict) -> dict:
@@ -123,7 +123,7 @@ class GraphFactory:
             arguments = signature.bind_partial(*args, **kwargs)
             arguments.apply_defaults()
             factory.layer_cls.__init__(
-                self, *factory._prepare_layer_arguments(factory.build(arguments.arguments), factory.property_names)
+                self, *factory.prepare_layer_arguments(arguments.arguments)
             )
 
         __init__.__signature__ = signature
@@ -327,96 +327,8 @@ class GraphFactory:
             for name, value in self.defaults.items()
         ])
 
-    def build(self, arguments: dict) -> EdgesBag:
-        diff = list(set(self.arguments) - set(arguments))
-        if diff:
-            raise TypeError(f'Missing required arguments: {diff}.')
 
-        logger.info(
-            'Compiling layer. Inputs: %s, Outputs: %s, BackwardInputs: %s, BackwardOutputs: %s',
-            list(self.inputs), list(self.outputs), list(self.backward_inputs), list(self.backward_outputs),
-        )
-        return ReversibleContainer(
-            list(self.inputs.values()), list(self.outputs.values()),
-            self.edges + list(self._get_constant_edges(arguments)),
-            list(self.backward_inputs.values()), list(self.backward_outputs.values()),
-            optional_outputs=self.optional_names, forward_virtual=self.forward_inherit,
-            backward_virtual=self.backward_inherit, persistent=self.persistent_names,
-        )
-
-
-class SourceFactory(GraphFactory):
-    @staticmethod
-    def validate_before_mixins(namespace: MultiDict):
-        duplicates = {name for name, values in namespace.groups() if len(values) > 1}
-        if duplicates:
-            raise TypeError(f'Duplicated methods found: {duplicates}')
-
-    def _before_collect(self):
-        self._key_name = 'id'
-        if self._key_name in self.scope:
-            raise FieldError(f'Cannot override the key attribute ({self._key_name})')
-
-        self.ID = self.inputs[self._key_name]
-        self.inputs.freeze()
-        self.edges.append(IdentityEdge().bind(self.ID, self.outputs[self._key_name]))
-        self.persistent_names.add(self._key_name)
-
-    def _after_collect(self):
-        self.persistent_names.update(self.property_names)
-
-    def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
-        ids = {x for x in inputs if isinstance(x, Input)}
-        if not ids:
-            return inputs
-        if len(ids) > 1:
-            raise FieldError(f'Trying to use multiple arguments as keys: {tuple(sorted(x.name for x in ids))}')
-        i, = ids
-        return [x if x != i else Input(self._key_name) for x in inputs]
-
-
-class TransformFactory(GraphFactory):
-    def __init__(self, layer: str, scope: MultiDict):
-        self._exclude = None
-        super().__init__(layer, scope)
-
-    def _before_collect(self):
-        self.magic_dispatch['__inherit__'] = self._process_inherit
-        self.magic_dispatch['__exclude__'] = self._process_exclude
-
-    def _after_collect(self):
-        if self.forward_inherit and self._exclude:
-            raise ValueError('Can specify either "__inherit__" or "__exclude__" but not both')
-        if self._exclude:
-            self.forward_inherit = AntiSet(self._exclude)
-
-        forward, valid = normalize_inherit(self.forward_inherit, self.outputs)
-        if not valid:
-            raise TypeError(f'"__inherit__" can be either True, a string, or a sequence of strings, but got {forward}')
-
-        backward, valid = normalize_inherit(self.forward_inherit, self.backward_outputs)
-        assert valid
-
-        self.forward_inherit = forward
-        self.backward_inherit = backward
-
-    def _validate_inputs(self, inputs: NodeTypes) -> NodeTypes:
-        return inputs
-
-    def _process_inherit(self, value):
-        # save this value for final step
-        self.forward_inherit = value
-
-    def _process_exclude(self, value):
-        if isinstance(value, str):
-            value = value,
-        value = tuple(value)
-        if not all(isinstance(x, str) for x in value):
-            raise TypeError('"__exclude__" must be either a string or a sequence of strings')
-        self._exclude = value
-
-
-def items_to_container(items, layer_type, factory_cls: Type[GraphFactory], **scope):
+def items_to_container(items, layer_type: Type, factory_cls: Type[GraphFactory], **scope):
     if isinstance(items, dict):
         items = items.items()
 
@@ -434,4 +346,4 @@ def items_to_container(items, layer_type, factory_cls: Type[GraphFactory], **sco
     factory = factory_cls(layer_type.__name__, local)
     if factory.special_methods:
         raise TypeError(f"This constructor doesn't accept special methods: {tuple(factory.special_methods)}")
-    return factory.build({}), factory.property_names
+    return factory.prepare_layer_arguments({})

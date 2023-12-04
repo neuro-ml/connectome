@@ -4,8 +4,7 @@ from typing import Callable
 
 import pytest
 
-from connectome import Chain, Merge, Output, Source, Transform, meta, positional
-from connectome.interface.metaclasses import SourceBase, TransformBase
+from connectome import Chain, Merge, Output, Source, Transform, meta, positional, SourceBase, TransformBase
 
 
 def test_single_with_params():

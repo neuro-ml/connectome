@@ -4,40 +4,40 @@ from typing import Iterable, Tuple, Union
 from ..engine import BoundEdges, Nodes, TreeNode
 from ..engine.compiler import find_dependencies
 from ..exceptions import GraphError
+from ..layer import EdgeContainer, CallableLayer
 from ..utils import AntiSet, NameSet, check_for_duplicates, node_to_dict
-from .base import EdgesBag, normalize_bag
-from .context import BagContext
+from ..containers.base import EdgesBag, normalize_bag
+from ..containers.context import BagContext
 
 
-# class ReversibleContainer(EdgesBag):
-#     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes,
-#                  backward_outputs: Nodes, forward_virtual: Union[NameSet, Iterable[str]],
-#                  backward_virtual: Union[NameSet, Iterable[str]],
-#                  persistent: NameSet = None):
-#         forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
-#         assert valid
-#         backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(backward_outputs))
-#         assert valid
-#
-#         # if optional_inputs is None:
-#         #     optional_inputs = set()
-#         # if optional_outputs is None:
-#         #     optional_outputs = set()
-#         if persistent is None:
-#             persistent = set()
-#
-#         inputs, outputs, edges, forward_virtual = normalize_bag(
-#             inputs, outputs, edges, forward_virtual, set(), persistent
-#         )
-#         # optional = detect_optionals(
-#         #     optional_inputs, optional_outputs, inputs, outputs, backward_inputs, backward_outputs, edges
-#         # )
-#         check_for_duplicates(inputs)
-#         super().__init__(
-#             inputs, outputs, edges,
-#             BagContext(backward_inputs, backward_outputs, backward_virtual),
-#             virtual=forward_virtual, persistent=persistent,
-#         )
+class ReversibleContainer(EdgeContainer):
+    def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, backward_inputs: Nodes,
+                 backward_outputs: Nodes, forward_virtual: Union[NameSet, Iterable[str]],
+                 backward_virtual: Union[NameSet, Iterable[str]]):
+        forward_virtual, valid = normalize_inherit(forward_virtual, node_to_dict(outputs))
+        assert valid
+        backward_virtual, valid = normalize_inherit(backward_virtual, node_to_dict(backward_outputs))
+        assert valid
+
+        # if optional_inputs is None:
+        #     optional_inputs = set()
+        # if optional_outputs is None:
+        #     optional_outputs = set()
+        # if persistent is None:
+        #     persistent = set()
+
+        inputs, outputs, edges, forward_virtual = normalize_bag(
+            inputs, outputs, edges, forward_virtual, set(), set()
+        )
+        # optional = detect_optionals(
+        #     optional_inputs, optional_outputs, inputs, outputs, backward_inputs, backward_outputs, edges
+        # )
+        check_for_duplicates(inputs)
+        super().__init__(
+            inputs, outputs, edges,
+            BagContext(backward_inputs, backward_outputs, backward_virtual),
+            virtual=forward_virtual,
+        )
 
 
 def normalize_inherit(value, outputs) -> Tuple[NameSet, bool]:

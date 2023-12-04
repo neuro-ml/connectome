@@ -6,9 +6,8 @@ from .edges import DecoratorMixin
 from ..layer import Layer
 from ..utils import MultiDict
 from .decorators import RuntimeAnnotation
-from .factory import GraphFactory, SourceFactory, TransformFactory, add_from_mixins, add_quals, items_to_container
+from .factory import GraphFactory, add_from_mixins, add_quals, items_to_container
 
-__all__ = 'Mixin', 'Source', 'Transform'
 logger = logging.getLogger(__name__)
 BASES: Dict[Type[Layer], GraphFactory] = {}
 
@@ -71,60 +70,8 @@ class APIMeta(type):
         return super().__new__(mcs, class_name, (main,), scope, **flags)
 
 
-class Source(CallableLayer, metaclass=APIMeta, __factory=SourceFactory):
-    """
-    Base class for all sources.
-    """
-
-    def __init__(self, *args, **kwargs):  # noqa
-        raise RuntimeError("\"Source\" can't be directly initialized. You must subclass it first.")
 
 
-class SourceBase(CallableLayer):
-    def __init__(self, items: Union[Iterable[Tuple[str, Callable]], Dict[str, Callable]]):
-        super().__init__(*items_to_container(items, type(self), SourceFactory))
-
-
-class Transform(CallableLayer, metaclass=APIMeta, __factory=TransformFactory):
-    """
-    Base class for all transforms.
-
-    Can also be used as an inplace factory for transforms.
-
-    Examples
-    --------
-    # class-based transforms
-    >>> from imops import zoom
-    >>>
-    >>> class Zoom(Transform):
-    ...     def image(image):
-    ...         return zoom(image, scale_factor=2)
-    # inplace transforms
-    >>> Transform(image=lambda image: zoom(image, scale_factor=2))
-    """
-    __inherit__: Union[str, Collection[str], bool] = ()
-    __exclude__: Union[str, Collection[str]] = ()
-
-    def __init__(*args, __inherit__: Union[str, Collection[str], bool] = (),
-                 __exclude__: Union[str, Collection[str]] = (), **kwargs: Callable):
-        assert args
-        if len(args) > 1:
-            raise TypeError('This constructor accepts only keyword arguments.')
-        self, = args
-        super(Transform, self).__init__(*items_to_container(
-            kwargs, type(self), TransformFactory, __inherit__=__inherit__, __exclude__=__exclude__
-        ))
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(self._methods.fields())})"
-
-
-class TransformBase(CallableLayer):
-    def __init__(self, items: Union[Iterable[Tuple[str, Callable]], Dict[str, Callable]],
-                 inherit: Union[str, Collection[str], bool] = (), exclude: Union[str, Collection[str]] = ()):
-        super().__init__(*items_to_container(
-            items, type(self), TransformFactory, __inherit__=inherit, __exclude__=exclude
-        ))
 
 
 class Mixin(metaclass=APIMeta, __factory=None):

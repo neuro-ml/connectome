@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import Callable, Optional
 
 from connectome.containers import Context, NoContext, ChainContext
@@ -9,12 +8,22 @@ from connectome.containers.context import update_map
 # from connectome.containers import EdgesBag
 from connectome.engine import Nodes, BoundEdges, FunctionEdge, GraphCompiler, IdentityEdge
 from connectome.engine.base import Edges, Node, NodeSet, TreeNode
+from connectome.exceptions import FieldError, DependencyError
 from connectome.utils import StringsLike, NameSet, node_to_dict
 
 Slice = tuple[Nodes, Nodes, BoundEdges, Context]
 
 
-class Layer(ABC):
+class Layer:
+    def _connect(self, previous: Layer) -> Layer:
+        return Link(previous, self)
+
+    def _slice(self, names) -> Slice:
+        raise NotImplementedError
+
+
+class CallableLayer(Layer):
+
     def _compile(self, names):
         _names = names
         if isinstance(names, str):
@@ -25,26 +34,59 @@ class Layer(ABC):
         # TODO: remove this class
         return GraphCompiler(inputs, outputs, edges, set(), []).compile(names)
 
-    def _loopback(self, func: Callable, inputs: StringsLike, outputs: StringsLike) -> Layer:
+    def _loopback(self, func: Callable, inputs: StringsLike, outputs: StringsLike) -> CallableLayer:
         # current layer
         inps, outs, edges, context = self._slice(inputs)
         # the function is a new layer
-        bag = function_to_bag(func, inputs, outputs)
+        f_inputs, f_outputs, f_edges = function_to_bag(func, inputs, outputs)
         # use the context to add edges
-        final_outs, new_edges, _ = context.reverse(bag.outputs)
+        final_outs, new_edges, _ = context.reverse(f_outputs)
         # combine all the edges
-        edges = [*edges, *bag.edges, *new_edges, *build_bridge(outs, bag.inputs)]
+        edges = [*edges, *f_edges, *new_edges, *build_bridge(outs, f_inputs)]
         return EdgeContainer(inps, final_outs, edges, None)
 
-    def _connect(self, previous: Layer) -> Layer:
-        return Link(previous, self)
+    def __rshift__(self, layer: Layer) -> Link:
+        return layer._connect(self)
 
-    @abstractmethod
-    def _slice(self, names) -> Slice:
-        pass
+    def __getattr__(self, name):
+        try:
+            method = self._compile(name)
+        except FieldError as e:
+            raise AttributeError(name) from e
+
+        if name in self._properties:
+            return method()
+        return method
+
+    # def __call__(self, *args, **kwargs) -> 'Instance':
+    #     return Instance(self, args, kwargs)
+
+    # def __dir__(self):
+    #     return self._methods.fields()
+
+    def _wrap(self, func: Callable, inputs: StringsLike, outputs: StringsLike = None,
+              final: StringsLike = None) -> Callable:
+        return self._decorate(inputs, outputs, final)(func)
+
+    def _decorate(self, inputs: StringsLike, outputs: StringsLike = None, final: StringsLike = None) -> Callable:
+        if outputs is None:
+            outputs = inputs
+        if final is None:
+            final = outputs
+        if not isinstance(final, str):
+            final = tuple(final)
+        if isinstance(inputs, str):
+            inputs = [inputs]
+
+        def decorator(func: Callable) -> Callable:
+            loopback = self._loopback(func, inputs, outputs)
+            # logger.info('Loopback compiled: %s', loopback.fields())
+            return loopback._compile(final)
+
+        return decorator
 
 
-class Link(Layer):
+class Link(CallableLayer):
     def __init__(self, left: Layer, right: Layer):
         self._left = left
         self._right = right
@@ -82,7 +124,7 @@ def freeze(inputs_, outputs_, edges_, context) -> Slice:
     )
 
 
-class EdgeContainer(Layer):
+class EdgeContainer(CallableLayer):
     def __init__(self, inputs: Nodes, outputs: Nodes, edges: BoundEdges, context: Optional[Context], *,
                  virtual: Optional[NameSet] = None, persistent: Optional[NameSet] = None,
                  optional: Optional[NodeSet] = None):
@@ -99,6 +141,8 @@ class EdgeContainer(Layer):
         self._outputs = node_to_dict(outputs)
         self._edges = edges
         self._context = context
+        self._virtual = virtual
+        # TODO: cache output -> inputs
         self._mapping = TreeNode.from_edges(self._edges)
         self._reverse = dict(zip(self._mapping.values(), self._mapping))
 
@@ -116,31 +160,27 @@ class EdgeContainer(Layer):
                 for parent in node.parents:
                     visit(parent)
 
-        inputs, outputs = set(), []
+        inputs, outputs, edges = set(), [], [*self._edges]
         for name in names:
-            # TODO: virtuals
-            output = self._outputs[name]
-            outputs.append(output)
-            visit(self._mapping[output])
+            if name in self._outputs:
+                output = self._outputs[name]
+                outputs.append(output)
+                visit(self._mapping[output])
+            elif name not in self._virtual:
+                # TODO
+                raise DependencyError
+            else:
+                inp, out = Node(name), Node(name)
+                inputs.add(inp)
+                outputs.append(out)
+                edges.append(IdentityEdge().bind(inp, out))
 
-        for inp in inputs:
-            assert inp in self._inputs
+        # TODO:
+        # for inp in inputs:
+        #     assert inp in self._inputs
 
         # TODO: make copies
-        return inputs, outputs, self._edges, self._context
-
-
-class Chain(Layer):
-    def __init__(self, *layers: Layer):
-        head, *tail = layers
-        for layer in tail:
-            head = layer._connect(head)
-
-        self._connected = head
-        self._layers = layers
-
-    def _slice(self, names) -> Slice:
-        return self._connected._slice(names)
+        return inputs, outputs, edges, self._context
 
 
 class Album(Layer):

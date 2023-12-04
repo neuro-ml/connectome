@@ -1,12 +1,12 @@
 from typing import Callable
 
-from ..containers import ReversibleContainer
+from .reversible import ReversibleContainer
 from ..engine import Details, FunctionEdge, Node
 from ..utils import AntiSet
 from .base import CallableLayer
 
 
-class Apply(CallableLayer):
+class Apply(ReversibleContainer):
     """
     A layer that applies separate functions to each of the specified names.
 
@@ -37,6 +37,7 @@ class Apply(CallableLayer):
             outputs.append(out)
             edges.append(FunctionEdge(func, arity=1).bind(inp, out))
 
-        super().__init__(ReversibleContainer(
+        super().__init__(
             inputs, outputs, edges, forward_virtual=AntiSet(transform), backward_virtual=AntiSet(),
-        ), ())
+            backward_inputs=set(), backward_outputs=set(),
+        )

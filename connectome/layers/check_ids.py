@@ -1,16 +1,20 @@
 from typing import Any, Sequence
 
+from ..layer import Layer
 from ..containers import EdgesBag
 from ..engine import Details, Node, StaticEdge, StaticGraph
 from ..engine.node_hash import NodeHash, NodeHashes
 from ..utils import node_to_dict
-from .base import EdgesBag, Layer
+
+
+# from .base import EdgesBag, Layer
 
 
 class CheckIds(Layer):
     """
     Raise FieldError if id is not in ids
     """
+
     def __repr__(self):
         return 'CheckIds()'
 

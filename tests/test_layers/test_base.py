@@ -1,5 +1,6 @@
+from connectome import Chain
 from connectome.engine import FunctionEdge
-from connectome.layer import EdgeContainer, Chain, Node
+from connectome.layer import EdgeContainer, Node
 
 
 def test_basic_chain():

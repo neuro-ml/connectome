@@ -135,7 +135,7 @@ def normalize_bag(inputs: Nodes, outputs: Nodes, edges: BoundEdges, virtuals: Na
     return tuple(inputs.values()), tuple(outputs.values()), tuple(edges), virtuals
 
 
-def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) -> EdgesBag:
+def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike):
     # the function is the parent of the nodes
     parent = Details(getattr(func, '__name__', str(func)))
 
@@ -165,10 +165,7 @@ def function_to_bag(func: Callable, inputs: StringsLike, output: StringsLike) ->
             edges.append(FunctionEdge(itemgetter(idx), 1).bind(aux, out))
             outputs.append(out)
 
-    return EdgesBag(
-        inputs, outputs, edges, BagContext((), (), set(node_to_dict(outputs))),
-        virtual=None, persistent=None, optional=None,
-    )
+    return inputs, outputs, edges
 
 
 def detect_cycles(adjacency):
@@ -194,6 +191,9 @@ def detect_cycles(adjacency):
         visit(n)
 
     return cycles
+
+
+EdgesBag = object
 
 
 def connect_bags(left: EdgesBag, right: EdgesBag, freeze: bool = True) -> EdgesBag:

@@ -1,26 +1,32 @@
-from typing import Callable, Generator, Any
+from typing import Generator, Any
+from typing import Union, Collection, Callable, Iterable
 
 from .base import Layer
 from .chain import connect
+from .transform import TransformFactory
 from ..cache import MemoryCache
-from ..containers import EdgesBag
+# from ..containers import EdgesBag
 from ..engine import (
     CustomHash, NodeHashes, NodeHash, Response, Request, Command, StaticGraph, Graph,
-    StaticHash, IdentityEdge, FunctionEdge, HashBarrier, Node, CacheEdge, Details, TreeNode
+    StaticHash, FunctionEdge, HashBarrier, Node, CacheEdge, Details, TreeNode
 )
+from ..engine import IdentityEdge
 from ..exceptions import DependencyError
+from ..interface.metaclasses import APIMeta
 from ..utils import extract_signature, AntiSet, node_to_dict
+
+EdgesBag = object
 
 
 class SplitBase(Layer):
-    def __init__(self, split: Callable, transform: EdgesBag):
+    def __init__(self, split: Callable, transform):
         self._transform = transform
         self._split = split
         self._split_names, _ = extract_signature(split)
         self._part_name = '__part__'
         self._key, self._keys = 'id', 'ids'
 
-    def _make_graph(self, container: EdgesBag, details):
+    def _make_graph(self, container, details):
         edges = list(container.edges)
         outputs_mapping = node_to_dict(container.outputs)
         missing = set(self._split_names) - set(outputs_mapping)
@@ -90,6 +96,54 @@ class SplitBase(Layer):
             ),
             freeze=False,
         )
+
+
+class SplitFactory(TransformFactory):
+    _part_name = '__part__'
+    _split_name = '__split__'
+    layer_cls = SplitBase
+
+    def __init__(self, layer: str, scope):
+        self._split: Callable = None
+        super().__init__(layer, scope)
+
+    def _prepare_layer_arguments(self, container: EdgesBag, properties: Iterable[str]):
+        assert not properties, properties
+        return self._split, container
+
+    def _before_collect(self):
+        super()._before_collect()
+        self.edges.append(IdentityEdge().bind(self.inputs[self._part_name], self.parameters[self._part_name]))
+        self.magic_dispatch[self._split_name] = self._handle_split
+
+    def _handle_split(self, value):
+        assert self._split is None, self._split
+        self._split = value
+
+    def _after_collect(self):
+        super()._after_collect()
+        assert self._split is not None
+        assert not self.special_methods, self.special_methods
+
+
+# TODO: Examples
+class Split(SplitBase, metaclass=APIMeta, __factory=SplitFactory):
+    """
+    Split a dataset entries into several parts.
+
+    This layer requires a `__split__` magic method, which takes an entry id, and returns a list of parts -
+    (part_id, part_context) pairs, "part_id" will become the part's id, and "part_context" is accessible in other
+    methods as part-specific useful info.
+    """
+
+    __inherit__: Union[str, Collection[str], bool] = ()
+    __exclude__: Union[str, Collection[str]] = ()
+
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def __split__(*args, **kwargs):
+        raise NotImplementedError
 
 
 class SplitMapping(StaticGraph, StaticHash):
