@@ -2,11 +2,13 @@ import logging
 from typing import Callable, Collection, Dict, Iterable, Tuple, Type, Union
 
 from .edges import DecoratorMixin
-from ..layers import CallableLayer, Layer
+# from ..layers import CallableLayer, Layer
+from ..layer import Layer
 from ..utils import MultiDict
 from .decorators import RuntimeAnnotation
 from .factory import GraphFactory, SourceFactory, TransformFactory, add_from_mixins, add_quals, items_to_container
 
+__all__ = 'Mixin', 'Source', 'Transform'
 logger = logging.getLogger(__name__)
 BASES: Dict[Type[Layer], GraphFactory] = {}
 
