@@ -2,16 +2,18 @@ from typing import Callable, Iterable, Sequence, Tuple
 
 from tqdm.auto import tqdm
 
+from .. import Function
 from ..containers import BagContext, EdgesBag
 from ..engine import Details, FunctionEdge, Graph, Node, StaticEdge, StaticGraph, TreeNode
 from ..engine.node_hash import ApplyHash
 from ..exceptions import DependencyError
 from ..utils import AntiSet, extract_signature, node_to_dict
+from .transform import TransformBase
 # from .base import EdgesBag
 from .dynamic import DynamicConnectLayer
 
 
-class Filter(DynamicConnectLayer):
+class Filter(TransformBase):
     """
     Filters the `keys` of the current pipeline given a `predicate`.
 
@@ -29,6 +31,14 @@ class Filter(DynamicConnectLayer):
         self.predicate = predicate
         self.verbose = verbose
         assert self._keys not in self._names
+
+        super().__init__([
+            (keys, Function(lambda _keys, _layer: tuple(filter(_layer, _keys)), keys, )),
+        ], inherit=True)
+
+    def ids(self):
+
+
 
     @classmethod
     def drop(cls, ids: Iterable[str], verbose: bool = False):

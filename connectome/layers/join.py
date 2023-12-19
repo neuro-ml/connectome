@@ -2,6 +2,7 @@ import hashlib
 import itertools
 from collections import defaultdict
 from enum import Enum
+from functools import cached_property
 from typing import Any, Callable, Generator, Sequence, Union
 
 from jboc import composed
@@ -41,6 +42,119 @@ class Join(CallableLayer):
             left._container, right._container, to_seq(on), to_key,
             cache=cache, verbose=verbose, how=how,
         ), ['ids'])
+
+
+class Join2:
+    def __init__(self, left: CallableLayer, right: CallableLayer, on: StringsLike, *, verbose: bool = False,
+                 to_key: Callable = _maybe_to_hash_id, cache: CacheEdge = None,
+                 how: Union[JoinMode, str] = JoinMode.inner):
+        x = (
+            ('_left', left),
+            ('_right', right),
+            # TODO: cache
+            ('_raw_mapping', Function(
+                _raw_mapping,
+                Compiled('_left', on), Get('_left', 'ids'),
+                Compiled('_right', on), Get('_right', 'ids'),
+                Const(to_key), Const(verbose),
+            )),
+            *(
+                (name, Edge2(SwitchBranch(), ))
+            )
+
+        )
+
+    def ids_hash(self):
+        mp = mapping(self._left, self._right)
+        return Hash('mapping', self._left._compile('ids').hash(), self._right._compile('ids').hash())
+
+    def ids(self):
+        mp = mapping(self._left, self._right)
+        return list(mp)
+
+    def hash(self, i, names):
+        mp = mapping(self._left, self._right)
+        left, right = compile(left, right, names)
+        if i in mp:
+            return left.hash(mp[i])
+        elif i in mp2:
+            return right.hash(mp[i])
+
+        raise ValueError
+
+    def val(self, i, names):
+        mp = mapping(self._left, self._right)
+        left, right = compile(left, right, names)
+        if i in mp:
+            return left(mp[i])
+        elif i in mp2:
+            return right(mp[i])
+
+        raise ValueError
+
+    def _slice(self, names):
+        r"""
+             left_id  -> left_layer
+           /                        \
+        id                           switch -> value
+           \                        /
+             right_id -> right_layer
+        """
+
+        left = self._left._slice(names)
+        right = self._right._slice(names)
+
+        JoinMapping(self._left._compile(self._on), self._right._compile(self._on), self._to_key, self._verbose)
+
+
+@field.comptime
+def __getfield__(self, name):
+    return Argument['id'], Input[self._left, name], Input[self._left, name], Parameter['_mapping']
+
+
+@__getfield__.hash
+@lazy(0, 1)
+def __getfield__(left_value, right_value, key, mapping):
+    inner, left_mapping, right_mapping = mapping
+    if key in inner or key in left_mapping:
+        return (yield Hash(left_value)), 0
+    if key in right_mapping:
+        return (yield Hash(right_value)), 1
+    raise KeyError(f'The key {key} was not present during the join operation')
+
+
+@__getfield__.call
+@lazy(0, 1)
+def __getfield__(left_value, right_value, key, mapping):
+    inner, left_mapping, right_mapping = mapping
+    if key in inner or key in left_mapping:
+        return (yield left_value)
+    if key in right_mapping:
+        return (yield right_value)
+
+
+def _raw_mapping(left, left_keys, right, right_keys, to_key, verbose):
+    precomputed_left, precomputed_right = defaultdict(list), defaultdict(list)
+    reverse_left, reverse_right = {}, {}
+
+    # TODO: optimize these loops?
+    for i in tqdm(left_keys, desc='Computing left join keys', disable=not verbose):
+        key = reverse_func(to_key, left(i), reverse_left)
+        precomputed_left[key].append(i)
+
+    for i in tqdm(right_keys, desc='Computing right join keys', disable=not verbose):
+        key = reverse_func(to_key, right(i), reverse_right)
+        precomputed_right[key].append(i)
+
+    left, right = set(precomputed_left), set(precomputed_right)
+    common = left & right
+
+    mapping = {}
+    for key in common:
+        for i, j in itertools.product(precomputed_left[key], precomputed_right[key]):
+            mapping[key] = i, j
+
+    return mapping, slice_dict(precomputed_left, left - common), slice_dict(precomputed_right, right - common)
 
 
 class JoinContainer(EdgesBag):

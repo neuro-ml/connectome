@@ -110,7 +110,7 @@ class Function(FunctionBase, DecoratorMixin):
             if isinstance(arg, str):
                 arg = Default(arg)
             if not isinstance(arg, NodeType):
-                raise ValueError(arg)
+                raise TypeError(arg)
             if isinstance(arg, AsOutput):
                 arg = Default(name)
 
