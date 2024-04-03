@@ -1,5 +1,5 @@
 import inspect
-from typing import Optional, Collection, Any, Iterable, Sequence
+from typing import Callable, Optional, Collection, Any, Iterable, Sequence
 
 from .edges import EdgeFactory, TypedEdge
 from .metaclasses import TransformBase
@@ -13,10 +13,10 @@ Names = Collection[str]
 
 class External(CallableLayer):
     def __init__(self, obj: Any, *, fields: Optional[Names] = None, properties: Optional[Names] = None,
-                 inputs: Names, inherit: Names = (), marker: Any = None):
+                 inputs: Names, inherit: Names = (), marker: Callable = None):
         cls = type(obj)
         if marker is None:
-            marker = cls
+            marker = lambda *args: cls
 
         if fields is None or properties is None:
             props, methods = [], []
@@ -41,9 +41,9 @@ class External(CallableLayer):
         items = []
         for name in fields:
             if name in methods:
-                value = SimpleHash(inputs, (marker, name), getattr(obj, name))
+                value = SimpleHash(inputs, getattr(obj, name), marker_getter(marker, name))
             else:
-                value = SimpleHash((), (marker, name), getter(obj, name))
+                value = SimpleHash((), getter(obj, name), marker_getter(marker, name))
 
             items.append((name, value))
 
@@ -62,34 +62,38 @@ class External(CallableLayer):
 
 class ExternalBase(External):
     def __init__(self, *, fields: Optional[Names] = None, properties: Optional[Names] = None,
-                 inputs: Optional[Names], inherit: Names = (), marker: Any = None):
+                 inputs: Optional[Names], inherit: Names = (), marker: Callable = None):
         super().__init__(self, fields=fields, properties=properties, inputs=inputs, inherit=inherit, marker=marker)
 
 
 class SimpleHash(EdgeFactory):
-    def __init__(self, inputs, obj, func):
-        self.obj = obj
+    def __init__(self, inputs, func, marker):
+        self.marker = marker
         self.func = func
         self.inputs = inputs
 
     def build(self, name: str) -> Iterable[TypedEdge]:
         yield TypedEdge(
-            SimpleHashEdge(len(self.inputs), self.func, self.obj), list(map(Default, self.inputs)), Default(name)
+            SimpleHashEdge(len(self.inputs), self.func, self.marker), list(map(Default, self.inputs)), Default(name)
         )
 
 
 class SimpleHashEdge(StaticGraph, StaticEdge):
-    def __init__(self, arity: int, func, marker):
+    def __init__(self, arity: int, get_value, get_hash):
         super().__init__(arity)
-        self.func = func
-        self.marker = marker
+        self.get_value = get_value
+        self.get_hash = get_hash
 
     def _make_hash(self, inputs: NodeHashes) -> NodeHash:
-        return CustomHash('connectome.External', LeafHash(self.marker), *inputs)
+        return CustomHash('connectome.External', LeafHash(self.get_hash(*inputs)), *inputs)
 
     def _evaluate(self, inputs: Sequence[Any]) -> Any:
-        return self.func(*inputs)
+        return self.get_value(*inputs)
 
 
 def getter(obj, name):
     return lambda: getattr(obj, name)
+
+
+def marker_getter(func, name):
+    return lambda *args, **kwargs: func(name, *args, **kwargs)
