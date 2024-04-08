@@ -1,6 +1,7 @@
 import logging
 from typing import Callable, Collection, Dict, Iterable, Tuple, Type, Union
 
+from .edges import DecoratorMixin
 from ..layers import CallableLayer, Layer
 from ..utils import MultiDict
 from .decorators import RuntimeAnnotation
@@ -16,11 +17,17 @@ class APIMeta(type):
         return MultiDict()
 
     def __getattr__(self, item):
+        # protection from recursion
+        if item == '__original__scope__':
+            raise AttributeError(item)
+
         # we need this behaviour mostly to support pickling of functions defined inside the class
         try:
             value = self.__original__scope__[item]
             while isinstance(value, RuntimeAnnotation):
                 value = value.__func__
+            while isinstance(value, DecoratorMixin):
+                value = value.unwrap()
             return value
         except KeyError:
             raise AttributeError(item) from None

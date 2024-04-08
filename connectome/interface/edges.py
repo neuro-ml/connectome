@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 from abc import ABC, abstractmethod
 from typing import Callable, Iterable, NamedTuple
@@ -9,7 +11,7 @@ from .nodes import *
 from .utils import replace_annotation
 
 __all__ = (
-    'TypedEdge', 'EdgeFactory',
+    'TypedEdge', 'EdgeFactory', 'DecoratorMixin',
     'Function', 'FunctionWrapper', 'FunctionBase',
     'Inverse', 'inverse', 'Impure', 'impure', 'Positional', 'positional'
 )
@@ -25,6 +27,17 @@ class EdgeFactory(ABC):
     @abstractmethod
     def build(self, name: str) -> Iterable[TypedEdge]:
         """ Returns an iterable of edges that represent the factory's logic """
+
+
+class DecoratorMixin(ABC):
+    @classmethod
+    @abstractmethod
+    def decorate(cls, func: Union[Callable, EdgeFactory]) -> EdgeFactory:
+        pass
+
+    @abstractmethod
+    def unwrap(self) -> Union[Callable, EdgeFactory]:
+        pass
 
 
 class FunctionBase(EdgeFactory, ABC):
@@ -69,7 +82,7 @@ class FunctionBase(EdgeFactory, ABC):
         return args
 
 
-class Function(FunctionBase):
+class Function(FunctionBase, DecoratorMixin):
     func: Callable
     args: tuple
     kwargs: dict
@@ -114,8 +127,11 @@ class Function(FunctionBase):
             raise ValueError(f'The decorator of type {type(func)} must be at the top')
         return cls(func, *cls.extract_arguments(func))
 
+    def unwrap(self) -> Union[Callable, EdgeFactory]:
+        return self.func
 
-class FunctionWrapper(FunctionBase, ABC):
+
+class FunctionWrapper(FunctionBase, DecoratorMixin, ABC):
     function: FunctionBase
 
     def __init__(*args, **kwargs):
@@ -131,10 +147,13 @@ class FunctionWrapper(FunctionBase, ABC):
         self.function = func
 
     @classmethod
-    def decorate(cls, instance: Union[Callable, EdgeFactory]) -> 'FunctionWrapper':
+    def decorate(cls, instance: Union[Callable, EdgeFactory]) -> FunctionWrapper:
         if not isinstance(instance, EdgeFactory):
             instance = Function.decorate(instance)
         return cls(instance)
+
+    def unwrap(self) -> Union[Callable, EdgeFactory]:
+        return self.function
 
     def build(self, name: str) -> Iterable[TypedEdge]:
         edge, = self.function.build(name)
@@ -185,7 +204,7 @@ class Positional(FunctionWrapper):
             )
 
     @classmethod
-    def decorate(cls, instance: Callable) -> 'FunctionWrapper':
+    def decorate(cls, instance: Callable) -> FunctionWrapper:
         cls._not_a_function(instance)
         return cls(instance, *cls.extract_arguments(instance))
 

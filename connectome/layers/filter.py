@@ -1,4 +1,4 @@
-from typing import Any, Callable, Iterable, Sequence
+from typing import Callable, Iterable, Sequence, Tuple
 
 from tqdm.auto import tqdm
 
@@ -92,7 +92,7 @@ class FilterEdge(StaticGraph, StaticEdge):
         keys, = hashes
         return ApplyHash(filter, self._hash, keys)
 
-    def _evaluate(self, inputs: Sequence[Any]) -> Any:
+    def _evaluate(self, inputs: Sequence) -> Tuple:
         keys, = inputs
         return tuple(filter(self.graph, tqdm(
             keys, desc='Filtering', disable=not self.verbose,
