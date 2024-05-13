@@ -53,9 +53,6 @@ class External(CallableLayer):
         container.virtual = set(inherit)
         super().__init__(container, properties)
 
-    def __dir__(self):
-        return dir(self._obj)
-
     def __getattr__(self, name):
         return getattr(self._obj, name)
 
