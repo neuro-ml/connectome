@@ -48,7 +48,7 @@ class External(CallableLayer):
             items.append((name, value))
 
         self._obj = obj
-        container = TransformBase(items)._container
+        container = TransformBase(items, inherit=inherit)._container
         container.persistent = properties
         container.virtual = set(inherit)
         super().__init__(container, properties)
