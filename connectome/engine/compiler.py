@@ -51,7 +51,8 @@ class GraphCompiler:
                 return self._outputs[out]
             # or it's virtual
             if out in self._virtuals:
-                return
+                # in which case it could be an input as well
+                return name_to_input.get(out)
             # or it was optional
             if out in self._all_outputs:
                 missing = self._dependencies[self._all_outputs[out]] - self._inputs
@@ -62,6 +63,7 @@ class GraphCompiler:
             # or it wasn't defined at all
             raise FieldError(f'The field "{out}" is not defined')
 
+        name_to_input = {node.name: node for node in self._inputs}
         if isinstance(item, str):
             node = get_node(item)
             if node is None:

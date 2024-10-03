@@ -1,6 +1,7 @@
 import pytest
 
 from connectome import CacheToRam
+from connectome.engine import GraphCompiler, IdentityEdge, Node
 from connectome.layers.chain import connect
 
 
@@ -146,3 +147,16 @@ def test_optional(first_simple, layer_maker):
 
     layer = connect(first, second)
     assert layer.compile()['first_out'](4, 3) == 84
+
+
+def test_virtual():
+    compiler = GraphCompiler([], [], [], {'x'}, [])
+    f = compiler.compile('x')
+    assert f(1) == 1
+
+    x, y = Node('x'), Node('y')
+    compiler = GraphCompiler([x], [y], [IdentityEdge().bind(x, y)], {'x'}, [])
+    f = compiler.compile('x')
+    assert f(1) == 1
+    f = compiler.compile(('x', 'y'))
+    assert f(1) == (1, 1)
