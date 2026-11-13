@@ -45,11 +45,11 @@ def add_from_mixins(namespace, mixins):
                 namespace[name] = value
         for name in local_annotations:
             annotations[name] = local_annotations[name]
-        class_scopes.update(mixin.__class_scopes__)
+        class_scopes.update(local[SCOPES_MAGIC])
 
     if ANN_MAGIC not in namespace:
         namespace[ANN_MAGIC] = annotations
-    return class_scopes
+    namespace[SCOPES_MAGIC] = class_scopes
 
 
 def is_detectable(value):
@@ -58,7 +58,8 @@ def is_detectable(value):
 
 DOC_MAGIC = '__doc__'
 ANN_MAGIC = '__annotations__'
-SILENT_MAGIC = {'__module__', '__qualname__', ANN_MAGIC}
+SCOPES_MAGIC = '__class_scopes__'
+SILENT_MAGIC = {'__module__', '__qualname__', ANN_MAGIC, SCOPES_MAGIC}
 OVERRIDABLE_MAGIC = SILENT_MAGIC | {DOC_MAGIC}
 BUILTIN_DECORATORS = staticmethod, classmethod, property
 
@@ -66,12 +67,12 @@ BUILTIN_DECORATORS = staticmethod, classmethod, property
 class GraphFactory:
     layer_cls: Type[Layer] = CallableLayer
 
-    def __init__(self, layer: str, scope: MultiDict, class_scopes: set = None):
+    def __init__(self, layer: str, scope: MultiDict):
         self.name = layer
         details = Details(layer)
         backward_details = Details(f'{layer}(backward)')
         self.scope = scope
-        self.class_scopes = class_scopes or set()
+        self.class_scopes = scope.get(SCOPES_MAGIC, [set()])[0]
         self.edges = []
         # layer inputs
         self.inputs = NodeStorage(details)
@@ -115,8 +116,8 @@ class GraphFactory:
         return container, properties
 
     @classmethod
-    def make_scope(cls, layer: str, namespace: MultiDict, class_scopes: set = None) -> dict:
-        factory = cls(layer, namespace, class_scopes)
+    def make_scope(cls, layer: str, namespace: MultiDict) -> dict:
+        factory = cls(layer, namespace)
         signature = factory.get_init_signature()
         allow_positional = len(signature.parameters)
 
@@ -214,7 +215,12 @@ class GraphFactory:
                     scope, func_name = qualname.rsplit('.', 1)
                     # lambdas are a special case. don't know what to do with them
                     if func_name != '<lambda>':
-                        inside_body = scope.endswith(self.name)
+                        if self.class_scopes:
+                            inside_body = (getattr(value, '__module__', None), scope) == (
+                                self.scope.get('__module__', [None])[0], self.scope.get('__qualname__', [None])[0],
+                            )
+                        else:
+                            inside_body = scope.endswith(self.name)
 
                 if name not in annotations:
                     if self.class_scopes and inside_body is not None:
@@ -385,9 +391,9 @@ class SourceFactory(GraphFactory):
 
 
 class TransformFactory(GraphFactory):
-    def __init__(self, layer: str, scope: MultiDict, class_scopes: set = None):
+    def __init__(self, layer: str, scope: MultiDict):
         self._exclude = None
-        super().__init__(layer, scope, class_scopes)
+        super().__init__(layer, scope)
 
     def _before_collect(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit

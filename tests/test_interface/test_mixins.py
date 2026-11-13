@@ -74,10 +74,8 @@ def test_transform_mixins(nested):
         warnings.simplefilter('error')
 
         class B(Transform, mixin):
-            _size_copy = SizeMixin._size
-
-            def double_size(_size_copy):
-                return 2 * _size_copy
+            def double_size(_size):
+                return 2 * _size
 
             def text(text):
                 return text
@@ -88,6 +86,22 @@ def test_transform_mixins(nested):
     assert b.delta(text='abc', i='d') == 2
 
 
+def test_mixin_method_alias():
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+
+        class A(Transform, SizeMixin):
+            _size_copy = SizeMixin._size
+
+            def double_size(_size_copy):
+                return 2 * _size_copy
+
+            def text(text):
+                return text
+
+    assert A().double_size('abc') == 6
+
+
 def test_external_callable_warning():
     class A(Mixin):
         _size = SizeMixin._size
@@ -95,7 +109,7 @@ def test_external_callable_warning():
         def size(_size):
             return _size
 
-    with pytest.warns(UserWarning, match='Are you trying to pass a default value for an argument?'):
+    with pytest.warns(UserWarning, match='Are you trying to pass a default value for an argument'):
         class B(Transform, A):
             pass
 
@@ -103,19 +117,20 @@ def test_external_callable_warning():
 
 
 def test_callable_mixin_default():
+    class BaseSize(Mixin):
+        def _size(i):
+            return len(i)
+
     with warnings.catch_warnings():
         warnings.simplefilter('error')
 
-        class A(Transform, SizeMixin):
-            _measure: Callable = SizeMixin._size
+        class Size(Transform, BaseSize):
+            _measure: Callable = BaseSize._size
 
             def size(i, _measure):
                 return _measure(i)
 
-            def text(text):
-                return text
-
-    assert A().size('abc') == 3
+    assert Size().size('abc') == 3
 
 
 def test_overwrite():
