@@ -56,13 +56,13 @@ class APIMeta(type):
         logger.info('Compiling the layer "%s" of type %s', class_name, base_name)
 
         if main == Mixin:
-            add_from_mixins(namespace, bases)
-            scope = add_quals({'__methods__': namespace}, namespace)
+            origins = add_from_mixins(namespace, bases)
+            scope = add_quals({'__methods__': namespace, '__origins__': origins}, namespace)
 
         else:
             factory.validate_before_mixins(namespace)
-            add_from_mixins(namespace, bases)
-            scope = factory.make_scope(class_name, namespace)
+            origins = add_from_mixins(namespace, bases)
+            scope = factory.make_scope(class_name, namespace, origins)
 
         # TODO: need a standardized set of magic fields
         scope['__original__scope__'] = namespace

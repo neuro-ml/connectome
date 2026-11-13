@@ -26,6 +26,10 @@ def add_from_mixins(namespace, mixins):
     # 2. the __annotations__
     # TODO: make annotations a MultiDict
     annotations, = namespace.get(ANN_MAGIC, [{}])
+    origins = {}
+    if '__module__' in namespace and '__qualname__' in namespace:
+        origin = namespace['__module__'], namespace['__qualname__']
+        origins = {name: origin for name in namespace if is_private(name) and not name.startswith('__')}
 
     for mixin in mixins:
         # update without overwriting
@@ -42,9 +46,11 @@ def add_from_mixins(namespace, mixins):
                 namespace[name] = value
         for name in local_annotations:
             annotations[name] = local_annotations[name]
+        origins.update(mixin.__origins__)
 
     if ANN_MAGIC not in namespace:
         namespace[ANN_MAGIC] = annotations
+    return origins
 
 
 def is_detectable(value):
@@ -61,11 +67,12 @@ BUILTIN_DECORATORS = staticmethod, classmethod, property
 class GraphFactory:
     layer_cls: Type[Layer] = CallableLayer
 
-    def __init__(self, layer: str, scope: MultiDict):
+    def __init__(self, layer: str, scope: MultiDict, origins: dict = None):
         self.name = layer
         details = Details(layer)
         backward_details = Details(f'{layer}(backward)')
         self.scope = scope
+        self.origins = origins or {}
         self.edges = []
         # layer inputs
         self.inputs = NodeStorage(details)
@@ -109,8 +116,8 @@ class GraphFactory:
         return container, properties
 
     @classmethod
-    def make_scope(cls, layer: str, namespace: MultiDict) -> dict:
-        factory = cls(layer, namespace)
+    def make_scope(cls, layer: str, namespace: MultiDict, origins: dict = None) -> dict:
+        factory = cls(layer, namespace, origins)
         signature = factory.get_init_signature()
         allow_positional = len(signature.parameters)
 
@@ -208,7 +215,11 @@ class GraphFactory:
                     scope, func_name = qualname.rsplit('.', 1)
                     # lambdas are a special case. don't know what to do with them
                     if func_name != '<lambda>':
-                        inside_body = scope.endswith(self.name)
+                        if name in self.origins:
+                            # inherited fields keep the scope where they were originally declared
+                            inside_body = (getattr(value, '__module__', None), scope) == self.origins[name]
+                        else:
+                            inside_body = scope.endswith(self.name)
 
                 if name not in annotations:
                     if inside_body is not None and not inside_body:
@@ -376,9 +387,9 @@ class SourceFactory(GraphFactory):
 
 
 class TransformFactory(GraphFactory):
-    def __init__(self, layer: str, scope: MultiDict):
+    def __init__(self, layer: str, scope: MultiDict, origins: dict = None):
         self._exclude = None
-        super().__init__(layer, scope)
+        super().__init__(layer, scope, origins)
 
     def _before_collect(self):
         self.magic_dispatch['__inherit__'] = self._process_inherit

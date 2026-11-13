@@ -1,3 +1,5 @@
+import warnings
+
 import pytest
 
 from connectome import Mixin, Output, Source, Transform, inverse, meta
@@ -61,18 +63,40 @@ def test_source_mixins():
         assert three.positive(i)
 
 
-def test_transform_mixins():
-    class B(Transform, SizeMixin):
-        def double_size(_size):
-            return 2 * _size
+@pytest.mark.parametrize('nested', [False, True])
+def test_transform_mixins(nested):
+    class A(Mixin, SizeMixin):
+        pass
 
-        def text(text):
-            return text
+    mixin = A if nested else SizeMixin
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+
+        class B(Transform, mixin):
+            def double_size(_size):
+                return 2 * _size
+
+            def text(text):
+                return text
 
     b = B()
     assert set(dir(b)) == {'delta', 'double_size', 'text'}
     assert b.double_size('123') == 6
     assert b.delta(text='abc', i='d') == 2
+
+
+def test_external_callable_warning():
+    class A(Mixin):
+        _size = SizeMixin._size
+
+        def size(_size):
+            return _size
+
+    with pytest.warns(UserWarning, match='Are you trying to pass a default value for an argument?'):
+        class B(Transform, A):
+            pass
+
+    assert B().size('abc') == 3
 
 
 def test_overwrite():
