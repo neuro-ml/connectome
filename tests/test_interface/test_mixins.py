@@ -1,4 +1,5 @@
 import warnings
+from typing import Callable
 
 import pytest
 
@@ -73,8 +74,10 @@ def test_transform_mixins(nested):
         warnings.simplefilter('error')
 
         class B(Transform, mixin):
-            def double_size(_size):
-                return 2 * _size
+            _size_copy = SizeMixin._size
+
+            def double_size(_size_copy):
+                return 2 * _size_copy
 
             def text(text):
                 return text
@@ -97,6 +100,22 @@ def test_external_callable_warning():
             pass
 
     assert B().size('abc') == 3
+
+
+def test_callable_mixin_default():
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+
+        class A(Transform, SizeMixin):
+            _measure: Callable = SizeMixin._size
+
+            def size(i, _measure):
+                return _measure(i)
+
+            def text(text):
+                return text
+
+    assert A().size('abc') == 3
 
 
 def test_overwrite():

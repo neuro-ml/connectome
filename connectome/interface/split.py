@@ -12,9 +12,9 @@ class SplitFactory(TransformFactory):
     _split_name = '__split__'
     layer_cls = SplitBase
 
-    def __init__(self, layer: str, scope, origins: dict = None):
+    def __init__(self, layer: str, scope, class_scopes: set = None):
         self._split: Callable = None
-        super().__init__(layer, scope, origins)
+        super().__init__(layer, scope, class_scopes)
 
     def _prepare_layer_arguments(self, container: EdgesBag, properties: Iterable[str]):
         assert not properties, properties
