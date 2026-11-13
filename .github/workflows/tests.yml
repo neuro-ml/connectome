@@ -7,7 +7,10 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         python-version: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
@@ -33,9 +36,9 @@ jobs:
           - /tmp:/tmp
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -79,15 +82,16 @@ jobs:
           sed -i -e "s|$(echo $MODULE_PARENT/ | tr "/" .)||g" reports/coverage-${{ matrix.python-version }}.xml
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: reports-${{ matrix.python-version }}
           path: reports/*-${{ matrix.python-version }}.xml
         if: ${{ always() }}
 
       - name: Upload coverage results
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v7
         with:
+          use_oidc: true
           fail_ci_if_error: true
           files: reports/coverage-${{ matrix.python-version }}.xml
           verbose: true

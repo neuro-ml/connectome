@@ -26,6 +26,9 @@ def add_from_mixins(namespace, mixins):
     # 2. the __annotations__
     # TODO: make annotations a MultiDict
     annotations, = namespace.get(ANN_MAGIC, [{}])
+    class_scopes = set()
+    if '__module__' in namespace and '__qualname__' in namespace:
+        class_scopes.add((namespace['__module__'], namespace['__qualname__']))
 
     for mixin in mixins:
         # update without overwriting
@@ -42,9 +45,11 @@ def add_from_mixins(namespace, mixins):
                 namespace[name] = value
         for name in local_annotations:
             annotations[name] = local_annotations[name]
+        class_scopes.update(local[SCOPES_MAGIC])
 
     if ANN_MAGIC not in namespace:
         namespace[ANN_MAGIC] = annotations
+    namespace[SCOPES_MAGIC] = class_scopes
 
 
 def is_detectable(value):
@@ -53,7 +58,8 @@ def is_detectable(value):
 
 DOC_MAGIC = '__doc__'
 ANN_MAGIC = '__annotations__'
-SILENT_MAGIC = {'__module__', '__qualname__', ANN_MAGIC}
+SCOPES_MAGIC = '__class_scopes__'
+SILENT_MAGIC = {'__module__', '__qualname__', ANN_MAGIC, SCOPES_MAGIC}
 OVERRIDABLE_MAGIC = SILENT_MAGIC | {DOC_MAGIC}
 BUILTIN_DECORATORS = staticmethod, classmethod, property
 
@@ -66,6 +72,10 @@ class GraphFactory:
         details = Details(layer)
         backward_details = Details(f'{layer}(backward)')
         self.scope = scope
+        self.class_scopes = scope.get(SCOPES_MAGIC, [set()])[0]
+        self.own_scope = {
+            (scope.get('__module__', [None])[0], scope.get('__qualname__', [None])[0]),
+        }
         self.edges = []
         # layer inputs
         self.inputs = NodeStorage(details)
@@ -208,7 +218,13 @@ class GraphFactory:
                     scope, func_name = qualname.rsplit('.', 1)
                     # lambdas are a special case. don't know what to do with them
                     if func_name != '<lambda>':
-                        inside_body = scope.endswith(self.name)
+                        if self.class_scopes:
+                            origin = getattr(value, '__module__', None), scope
+                            # annotated fields only count the layer's own body; otherwise mixins count too
+                            scopes = self.class_scopes if name not in annotations else self.own_scope
+                            inside_body = origin in scopes
+                        else:
+                            inside_body = scope.endswith(self.name)
 
                 if name not in annotations:
                     if inside_body is not None and not inside_body:

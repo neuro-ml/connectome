@@ -1,3 +1,6 @@
+import warnings
+from typing import Callable
+
 import pytest
 
 from connectome import Mixin, Output, Source, Transform, inverse, meta
@@ -61,18 +64,73 @@ def test_source_mixins():
         assert three.positive(i)
 
 
-def test_transform_mixins():
-    class B(Transform, SizeMixin):
-        def double_size(_size):
-            return 2 * _size
+@pytest.mark.parametrize('nested', [False, True])
+def test_transform_mixins(nested):
+    class A(Mixin, SizeMixin):
+        pass
 
-        def text(text):
-            return text
+    mixin = A if nested else SizeMixin
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+
+        class B(Transform, mixin):
+            def double_size(_size):
+                return 2 * _size
+
+            def text(text):
+                return text
 
     b = B()
     assert set(dir(b)) == {'delta', 'double_size', 'text'}
     assert b.double_size('123') == 6
     assert b.delta(text='abc', i='d') == 2
+
+
+def test_mixin_method_alias():
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+
+        class A(Transform, SizeMixin):
+            _size_copy = SizeMixin._size
+
+            def double_size(_size_copy):
+                return 2 * _size_copy
+
+            def text(text):
+                return text
+
+    assert A().double_size('abc') == 6
+
+
+def test_external_callable_warning():
+    class A(Mixin):
+        _size = SizeMixin._size
+
+        def size(_size):
+            return _size
+
+    with pytest.warns(UserWarning, match='Are you trying to pass a default value for an argument'):
+        class B(Transform, A):
+            pass
+
+    assert B().size('abc') == 3
+
+
+def test_callable_mixin_default():
+    class BaseSize(Mixin):
+        def _size(i):
+            return len(i)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+
+        class Size(Transform, BaseSize):
+            _measure: Callable = BaseSize._size
+
+            def size(i, _measure):
+                return _measure(i)
+
+    assert Size().size('abc') == 3
 
 
 def test_overwrite():
