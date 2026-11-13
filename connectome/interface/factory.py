@@ -73,6 +73,9 @@ class GraphFactory:
         backward_details = Details(f'{layer}(backward)')
         self.scope = scope
         self.class_scopes = scope.get(SCOPES_MAGIC, [set()])[0]
+        self.own_scope = {
+            (scope.get('__module__', [None])[0], scope.get('__qualname__', [None])[0]),
+        }
         self.edges = []
         # layer inputs
         self.inputs = NodeStorage(details)
@@ -216,16 +219,14 @@ class GraphFactory:
                     # lambdas are a special case. don't know what to do with them
                     if func_name != '<lambda>':
                         if self.class_scopes:
-                            inside_body = (getattr(value, '__module__', None), scope) == (
-                                self.scope.get('__module__', [None])[0], self.scope.get('__qualname__', [None])[0],
-                            )
+                            origin = getattr(value, '__module__', None), scope
+                            # annotated fields only count the layer's own body; otherwise mixins count too
+                            scopes = self.class_scopes if name not in annotations else self.own_scope
+                            inside_body = origin in scopes
                         else:
                             inside_body = scope.endswith(self.name)
 
                 if name not in annotations:
-                    if self.class_scopes and inside_body is not None:
-                        # unannotated methods may also come from the layer's mixins
-                        inside_body = (getattr(value, '__module__', None), scope) in self.class_scopes
                     if inside_body is not None and not inside_body:
                         warnings.warn(
                             f'The parameter {name} is defined outside of the class body. Are you trying to pass '
